@@ -1,0 +1,327 @@
+.layout {
+  display: flex;
+  min-height: 100vh;
+  background: var(--background);
+}
+
+.mainWrapper {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  margin-left: 0; /* Default for mobile */
+  transition: margin-left 0.3s ease;
+}
+
+.content {
+  padding: 2rem;
+  flex: 1;
+}
+
+.overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(4px);
+  z-index: 950;
+  display: none;
+}
+
+@media (min-width: 769px) {
+  .mainWrapper {
+    margin-left: 260px; /* Sidebar width */
+  }
+
+  .mainWrapperCollapsed {
+    margin-left: 80px;
+  }
+  
+  /* When sidebar is collapsed, we need to adjust this. 
+     This is tricky with CSS modules if the state is in React.
+     We might need a dynamic style or a class on the wrapper.
+  */
+}
+
+@media (max-width: 768px) {
+  .overlay {
+    display: block;
+  }
+}
+
+/* Stats Grid */
+.statsGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 1.5rem;
+  margin-bottom: 2rem;
+}
+
+.statCard {
+  background: var(--card-bg);
+  padding: 1.5rem;
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+  border: 1px solid var(--border);
+  position: relative;
+  overflow: hidden;
+}
+
+.statInfo {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.statName {
+  font-size: 0.875rem;
+  color: var(--secondary);
+  font-weight: 500;
+}
+
+.statValue {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: var(--foreground);
+}
+
+.statTrend {
+  position: absolute;
+  top: 1.5rem;
+  right: 1.5rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.statProgress {
+  height: 4px;
+  width: 100%;
+  background: var(--input-bg);
+  border-radius: 2px;
+  margin-top: 1rem;
+}
+
+.statProgressBar {
+  height: 100%;
+  border-radius: 2px;
+}
+
+/* Main Grid */
+.mainGrid {
+  display: grid;
+  grid-template-columns: 2fr 1fr;
+  gap: 1.5rem;
+}
+
+@media (max-width: 1024px) {
+  .mainGrid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.chartSection, .activitySection {
+  background: var(--card-bg);
+  padding: 1.5rem;
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+  border: 1px solid var(--border);
+}
+
+.sectionHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 1.5rem;
+}
+
+.sectionHeader h2 {
+  font-size: 1.125rem;
+  font-weight: 600;
+}
+
+.select {
+  padding: 0.5rem;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: var(--input-bg);
+  font-size: 0.875rem;
+  outline: none;
+}
+
+.placeholderChart {
+  height: 250px;
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  padding: 0 1rem;
+  gap: 1rem;
+}
+
+.chartBar {
+  flex: 1;
+  background: var(--primary);
+  border-radius: 4px 4px 0 0;
+  transition: height 0.5s ease;
+  opacity: 0.8;
+}
+
+.chartBar:hover {
+  opacity: 1;
+}
+
+.activityList {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.activityItem {
+  display: flex;
+  gap: 1rem;
+  padding-bottom: 1rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.activityItem:last-child {
+  border-bottom: none;
+}
+
+.activityIcon {
+  width: 32px;
+  height: 32px;
+  background: var(--input-bg);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--primary);
+  flex-shrink: 0;
+}
+
+.activityContent span {
+  font-size: 0.75rem;
+  color: var(--secondary);
+}
+
+/* New Clean Dashboard Styles */
+.welcomeHeader {
+  margin-bottom: 2.5rem;
+}
+
+.welcomeHeader h1 {
+  font-size: 2rem;
+  font-weight: 800;
+  color: var(--foreground);
+  margin-bottom: 0.5rem;
+}
+
+.welcomeHeader p {
+  color: var(--secondary);
+  font-size: 1.125rem;
+}
+
+.moduleCard {
+  background: var(--card-bg);
+  padding: 1.5rem;
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  gap: 1.5rem;
+  transition: all 0.2s ease;
+  cursor: pointer;
+  position: relative;
+}
+
+.moduleCard:hover {
+  transform: translateY(-4px);
+  border-color: var(--primary);
+  box-shadow: var(--shadow-lg);
+}
+
+.moduleIcon {
+  font-size: 2rem;
+  width: 50px;
+  height: 50px;
+  background: var(--input-bg);
+  border-radius: var(--radius-md);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.moduleInfo h3 {
+  font-size: 1rem;
+  font-weight: 700;
+  margin-bottom: 0.25rem;
+}
+
+.moduleInfo p {
+  font-size: 0.8125rem;
+  color: var(--secondary);
+  line-height: 1.4;
+}
+
+.moduleArrow {
+  margin-left: auto;
+  font-size: 1.25rem;
+  color: var(--secondary);
+  transition: color 0.2s;
+}
+
+.moduleCard:hover .moduleArrow {
+  color: var(--primary);
+}
+
+.systemStatus {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+.statusItem {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding-bottom: 0.75rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.statusLabel {
+  font-size: 0.875rem;
+  color: var(--secondary);
+}
+
+.statusValue {
+  font-weight: 700;
+  font-size: 0.875rem;
+}
+
+.guideList {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+.guideItem {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.guideItem span {
+  width: 24px;
+  height: 24px;
+  background: var(--primary);
+  color: white;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.75rem;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.guideItem p {
+  font-size: 0.875rem;
+  color: var(--foreground);
+}
