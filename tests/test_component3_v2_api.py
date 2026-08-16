@@ -76,6 +76,117 @@ class Component3V2ApiTests(unittest.TestCase):
         self.assertEqual(result["daily_production"]["output_gap"], -31)
         self.assertEqual(result["daily_production"]["gap_pct"], -7.21)
 
+    def test_prediction_returns_complete_management_output(self):
+        response = self.client.post("/api/component3/predict", json=self.payload())
+        self.assertEqual(response.status_code, 200, response.get_json())
+        result = response.get_json()
+
+        expected_sections = {
+            "order_summary",
+            "daily_production",
+            "risk_detection",
+            "alert_system",
+            "scheduling",
+            "order_progress",
+            "production_summary",
+            "action",
+            "planning_output",
+        }
+        self.assertTrue(expected_sections.issubset(result))
+        self.assertIn(
+            result["risk_detection"]["risk_type"],
+            component3.RISK_TYPE_MAP,
+        )
+        self.assertIn(
+            result["risk_detection"]["order_risk_level"],
+            {"Low", "Medium", "High", "Critical"},
+        )
+        self.assertGreaterEqual(result["risk_detection"]["risk_confidence"], 0)
+        self.assertLessEqual(result["risk_detection"]["risk_confidence"], 1)
+        self.assertGreaterEqual(
+            result["risk_detection"]["order_risk_probability"], 0
+        )
+        self.assertLessEqual(
+            result["risk_detection"]["order_risk_probability"], 1
+        )
+
+    def test_invalid_json_is_rejected(self):
+        response = self.client.post(
+            "/api/component3/predict",
+            data="not-json",
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(
+            response.get_json()["error"],
+            "Request body must be valid JSON",
+        )
+
+    def test_missing_required_field_is_rejected(self):
+        payload = self.payload()
+        del payload["full_order_qty"]
+        response = self.client.post("/api/component3/predict", json=payload)
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("full_order_qty", response.get_json()["error"])
+
+    def test_invalid_numeric_value_is_rejected(self):
+        payload = self.payload()
+        payload["plant_daily_output"] = "not-a-number"
+        response = self.client.post("/api/component3/predict", json=payload)
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("Invalid field value", response.get_json()["error"])
+
+    def test_invalid_date_is_rejected(self):
+        payload = self.payload()
+        payload["production_date"] = "02-07-2024"
+        response = self.client.post("/api/component3/predict", json=payload)
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("Invalid field value", response.get_json()["error"])
+
+    def test_positive_quantities_are_required(self):
+        for field in ("daily_commitment", "full_order_qty", "total_working_days"):
+            with self.subTest(field=field):
+                payload = self.payload()
+                payload[field] = 0
+                response = self.client.post("/api/component3/predict", json=payload)
+                self.assertEqual(response.status_code, 400)
+                self.assertIn(f"{field} must be > 0", response.get_json()["error"])
+
+    def test_working_day_must_be_inside_order_schedule(self):
+        for working_day in (0, 109):
+            with self.subTest(working_day=working_day):
+                payload = self.payload()
+                payload["working_day_no"] = working_day
+                response = self.client.post("/api/component3/predict", json=payload)
+                self.assertEqual(response.status_code, 400)
+                self.assertIn("working_day_no", response.get_json()["error"])
+
+    def test_negative_operational_values_are_rejected(self):
+        fields = (
+            "plant_daily_output",
+            "daily_damage_qty",
+            "max_daily_damage_qty",
+            "machine_breakdown_count",
+            "worker_shortage_count",
+            "cumulative_completed_qty",
+            "cutting_days",
+            "sewing_days",
+        )
+        for field in fields:
+            with self.subTest(field=field):
+                payload = self.payload()
+                payload[field] = -1
+                response = self.client.post("/api/component3/predict", json=payload)
+                self.assertEqual(response.status_code, 400)
+                self.assertIn(field, response.get_json()["error"])
+
+    def test_unsupported_model_version_returns_service_unavailable(self):
+        os.environ["COMPONENT3_MODEL_VERSION"] = "v99"
+        component3._models.clear()
+        response = self.client.post("/api/component3/predict", json=self.payload())
+        self.assertEqual(response.status_code, 503)
+        self.assertIn("Unsupported COMPONENT3_MODEL_VERSION", response.get_json()["error"])
+
 
 if __name__ == "__main__":
     unittest.main()

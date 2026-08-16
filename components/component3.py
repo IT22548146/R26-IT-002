@@ -509,6 +509,20 @@ def predict():
         return jsonify({"error": "daily_commitment must be > 0"}), 400
     if data["full_order_qty"] <= 0:
         return jsonify({"error": "full_order_qty must be > 0"}), 400
+    if data["total_working_days"] <= 0:
+        return jsonify({"error": "total_working_days must be > 0"}), 400
+
+    non_negative_fields = [
+        "plant_daily_output", "daily_damage_qty", "max_daily_damage_qty",
+        "machine_breakdown_count", "worker_shortage_count",
+        "cumulative_completed_qty", "cutting_days", "sewing_days",
+    ]
+    negative_fields = [field for field in non_negative_fields if data[field] < 0]
+    if negative_fields:
+        return jsonify({
+            "error": f"Fields must be >= 0: {negative_fields}"
+        }), 400
+
     if not (1 <= data["working_day_no"] <= data["total_working_days"]):
         return jsonify({"error": "working_day_no must be between 1 and total_working_days"}), 400
 
