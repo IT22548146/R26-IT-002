@@ -16,6 +16,27 @@ bun dev
 
 Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
 
+## Component 3 monitoring
+
+The Emergency Situation Detection & Management screen is available at
+[http://localhost:3000/dashboard/monitoring](http://localhost:3000/dashboard/monitoring).
+
+Copy the example environment file before starting the frontend:
+
+```bash
+cp .env.example .env.local
+```
+
+The default configuration expects the Component 3 Flask API at
+`http://127.0.0.1:5001/api/component3`. Start that API from the repository root:
+
+```bash
+COMPONENT3_MODEL_VERSION=v2 python3 main.py
+```
+
+Set `NEXT_PUBLIC_COMPONENT3_API_URL` in `.env.local` when the backend uses a
+different host, port, or deployment URL.
+
 You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
 
 This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.

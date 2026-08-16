@@ -139,11 +139,46 @@ def _load_models():
 
 # ── Severity & helpers ────────────────────────────────────────────
 
-def _get_severity(gap_pct: float) -> str:
-    if gap_pct <= 0:          return "No Risk"
-    elif gap_pct <= GAP_MINOR_MAX:    return "Minor"
-    elif gap_pct <= GAP_MODERATE_MAX: return "Moderate"
-    return "Critical"
+def _get_severity(
+    gap_pct: float,
+    risk_type: str,
+    machine_breakdown_count: int = 0,
+    worker_shortage_count: int = 0,
+    damage_exceeded: bool = False,
+) -> str:
+    """Combine the output gap and detected incident into one alert severity."""
+    if risk_type == "No Issue":
+        return "No Risk"
+
+    if gap_pct <= 0:
+        severity = "Minor"
+    elif gap_pct <= GAP_MINOR_MAX:
+        severity = "Minor"
+    elif gap_pct <= GAP_MODERATE_MAX:
+        severity = "Moderate"
+    else:
+        severity = "Critical"
+
+    ranks = {"No Risk": 0, "Minor": 1, "Moderate": 2, "Critical": 3}
+
+    def at_least(minimum: str) -> None:
+        nonlocal severity
+        if ranks[minimum] > ranks[severity]:
+            severity = minimum
+
+    if risk_type == "Quality Issue" or damage_exceeded:
+        at_least("Moderate")
+    if risk_type in {"Machine Breakdown", "Machine Breakdown Issue"}:
+        at_least("Critical" if machine_breakdown_count >= 2 else "Moderate")
+    if risk_type == "Worker Issue":
+        if worker_shortage_count >= 10:
+            at_least("Critical")
+        elif worker_shortage_count >= 5:
+            at_least("Moderate")
+        else:
+            at_least("Minor")
+
+    return severity
 
 
 def _get_alert_colour(severity: str) -> str:
@@ -316,7 +351,13 @@ def _build_response(data: dict, models: dict) -> dict:
 
     # ── Rule-based outputs ────────────────────────────────────
     output_gap_val  = daily_commitment - plant_daily_output
-    severity        = _get_severity(gap_pct)
+    severity        = _get_severity(
+        gap_pct,
+        risk_type,
+        machine_breakdown_count=machine_breakdown,
+        worker_shortage_count=worker_shortage,
+        damage_exceeded=ctx["damage_exceeded"],
+    )
     alert_colour    = _get_alert_colour(severity)
     recommendation  = RECOMMENDATIONS.get(risk_type, RECOMMENDATIONS["Commitment Too Low"])
     action_required = ACTION_MAP.get(risk_type, "Continue current production plan")

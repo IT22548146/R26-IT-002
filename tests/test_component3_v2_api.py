@@ -187,6 +187,38 @@ class Component3V2ApiTests(unittest.TestCase):
         self.assertEqual(response.status_code, 503)
         self.assertIn("Unsupported COMPONENT3_MODEL_VERSION", response.get_json()["error"])
 
+    def test_incident_types_receive_operational_severity(self):
+        cases = (
+            ({"gap_pct": -1, "risk_type": "No Issue"}, "No Risk"),
+            (
+                {
+                    "gap_pct": -1,
+                    "risk_type": "Quality Issue",
+                    "damage_exceeded": True,
+                },
+                "Moderate",
+            ),
+            (
+                {
+                    "gap_pct": 3,
+                    "risk_type": "Machine Breakdown Issue",
+                    "machine_breakdown_count": 2,
+                },
+                "Critical",
+            ),
+            (
+                {
+                    "gap_pct": 2,
+                    "risk_type": "Worker Issue",
+                    "worker_shortage_count": 6,
+                },
+                "Moderate",
+            ),
+        )
+        for inputs, expected in cases:
+            with self.subTest(risk_type=inputs["risk_type"]):
+                self.assertEqual(component3._get_severity(**inputs), expected)
+
 
 if __name__ == "__main__":
     unittest.main()
