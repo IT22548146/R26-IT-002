@@ -41,6 +41,10 @@ from datetime import datetime, timedelta
 from flask import Blueprint, request, jsonify
 
 from components.component3_features import FEATURES, build_feature_row
+from components.component3_recovery import (
+    build_recovery_plan,
+    normalize_recovery_parameters,
+)
 
 component3_bp = Blueprint("component3", __name__)
 
@@ -370,6 +374,13 @@ def _build_response(data: dict, models: dict) -> dict:
     schedule_order_risk = ctx["order_risk_level"]
     final_order_risk = _combine_order_risk(order_risk, schedule_order_risk)
 
+    # The models detect the risk; the deterministic engine calculates a
+    # deadline-aware operational response using only declared capacity limits.
+    recovery_plan = build_recovery_plan(
+        data,
+        detected_risk_type=risk_type,
+    )
+
     # ── Scheduling fields ─────────────────────────────────────
     output_gap_f      = float(row["Output_Gap"].iloc[0])
     days_remaining_f  = int(row["Days_Remaining"].iloc[0])
@@ -488,6 +499,8 @@ def _build_response(data: dict, models: dict) -> dict:
             "next_step":             "Monitor Next Production Day",
             "store_for_ml_training": True,
         },
+
+        "recovery_plan": recovery_plan,
     }
 
 
@@ -552,6 +565,10 @@ def predict():
         return jsonify({"error": "full_order_qty must be > 0"}), 400
     if data["total_working_days"] <= 0:
         return jsonify({"error": "total_working_days must be > 0"}), 400
+    if data["cumulative_completed_qty"] > data["full_order_qty"]:
+        return jsonify({
+            "error": "cumulative_completed_qty cannot exceed full_order_qty"
+        }), 400
 
     non_negative_fields = [
         "plant_daily_output", "daily_damage_qty", "max_daily_damage_qty",
@@ -566,6 +583,15 @@ def predict():
 
     if not (1 <= data["working_day_no"] <= data["total_working_days"]):
         return jsonify({"error": "working_day_no must be between 1 and total_working_days"}), 400
+
+    try:
+        data["recovery_parameters"] = normalize_recovery_parameters(
+            data.get("recovery_parameters"),
+            worker_shortage_count=data["worker_shortage_count"],
+            machine_breakdown_count=data["machine_breakdown_count"],
+        )
+    except ValueError as e:
+        return jsonify({"error": f"Invalid field value: {e}"}), 400
 
     try:
         models = _load_models()

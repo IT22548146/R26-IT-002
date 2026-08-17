@@ -18,6 +18,9 @@ The backend is organized into four specialized components, each accessible via i
 ### 3. Emergency Situation Detection (`/api/component3`)
 - **Bottleneck Identification**: Real-time detection of production stalls.
 - **Risk Mitigation**: Proactive alerts for potential supply chain or production failures.
+- **Recovery Planning**: Calculates deadline-aware overtime, worker, machine,
+  backup-line, and escalation options. See
+  [`COMPONENT3_RECOVERY_ENGINE.md`](COMPONENT3_RECOVERY_ENGINE.md).
 
 ### 4. Production Analysis & Resource Optimization (`/api/component4`)
 - **Efficiency Analytics**: Detailed insights into production performance.

@@ -91,6 +91,7 @@ class Component3V2ApiTests(unittest.TestCase):
             "production_summary",
             "action",
             "planning_output",
+            "recovery_plan",
         }
         self.assertTrue(expected_sections.issubset(result))
         self.assertIn(
@@ -109,6 +110,31 @@ class Component3V2ApiTests(unittest.TestCase):
         self.assertLessEqual(
             result["risk_detection"]["order_risk_probability"], 1
         )
+
+    def test_recovery_parameters_return_an_exact_worker_plan(self):
+        payload = self.payload()
+        payload["recovery_parameters"] = {
+            "planned_worker_count": 50,
+            "max_additional_workers": 3,
+        }
+        response = self.client.post("/api/component3/predict", json=payload)
+        self.assertEqual(response.status_code, 200, response.get_json())
+
+        plan = response.get_json()["recovery_plan"]
+        self.assertEqual(plan["engine_version"], "v1-rules")
+        self.assertIn("Worker Shortage", plan["triggered_by"])
+        self.assertEqual(plan["recommended_option"]["option_id"], "add_workers")
+        self.assertGreater(plan["recommended_option"]["additional_workers"], 0)
+        self.assertTrue(
+            plan["recommended_option"]["feasible_before_deadline"]
+        )
+
+    def test_invalid_recovery_parameters_return_bad_request(self):
+        payload = self.payload()
+        payload["recovery_parameters"] = {"planned_worker_count": 2}
+        response = self.client.post("/api/component3/predict", json=payload)
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("planned_worker_count", response.get_json()["error"])
 
     def test_invalid_json_is_rejected(self):
         response = self.client.post(
@@ -160,6 +186,13 @@ class Component3V2ApiTests(unittest.TestCase):
                 response = self.client.post("/api/component3/predict", json=payload)
                 self.assertEqual(response.status_code, 400)
                 self.assertIn("working_day_no", response.get_json()["error"])
+
+    def test_completed_quantity_cannot_exceed_order_quantity(self):
+        payload = self.payload()
+        payload["cumulative_completed_qty"] = payload["full_order_qty"] + 1
+        response = self.client.post("/api/component3/predict", json=payload)
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("cumulative_completed_qty", response.get_json()["error"])
 
     def test_negative_operational_values_are_rejected(self):
         fields = (
