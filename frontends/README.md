@@ -21,6 +21,17 @@ Open [http://localhost:3000](http://localhost:3000) with your browser to see the
 The Emergency Situation Detection & Management screen is available at
 [http://localhost:3000/dashboard/monitoring](http://localhost:3000/dashboard/monitoring).
 
+The screen contains both parts of Component 3:
+
+- daily production and emergency-risk inputs;
+- recovery-capacity inputs for workers, overtime, machines, repair time and a
+  backup line;
+- the recommended deadline-feasible action with its new completion date;
+- expandable alternative recovery plans and calculation assumptions.
+
+The recovery-capacity values in the demo presets are examples. Replace them
+with the actual limits of the selected plant before using a recommendation.
+
 Copy the example environment file before starting the frontend:
 
 ```bash

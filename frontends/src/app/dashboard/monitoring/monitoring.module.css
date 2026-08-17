@@ -278,6 +278,47 @@
   font-size: 0.68rem;
 }
 
+.recoveryFieldset {
+  margin-top: 1.5rem;
+  padding: 1rem;
+  border: 1px solid rgba(99, 102, 241, 0.2);
+  border-radius: 12px;
+  background: rgba(99, 102, 241, 0.035);
+}
+
+.recoveryFieldset legend {
+  width: auto;
+  margin: 0;
+  padding: 0 0.55rem;
+  color: var(--primary);
+  border: 0;
+}
+
+.recoveryInputNote {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.55rem;
+  margin: 0.35rem 0 1rem;
+  padding: 0.7rem;
+  color: var(--secondary);
+  border-radius: 9px;
+  background: var(--card-bg);
+  font-size: 0.68rem;
+  line-height: 1.45;
+}
+
+.recoveryInputNote > span {
+  display: grid;
+  flex: 0 0 auto;
+  width: 22px;
+  height: 22px;
+  place-items: center;
+  color: var(--primary);
+  border-radius: 7px;
+  background: rgba(99, 102, 241, 0.1);
+  font-weight: 800;
+}
+
 .submitButton {
   display: flex;
   width: 100%;
@@ -606,6 +647,289 @@
   font-size: 0.9rem;
 }
 
+.recoveryPanel {
+  padding: 1.1rem;
+  border: 1px solid var(--border);
+  border-left-width: 4px;
+  border-radius: 12px;
+  background: var(--card-bg);
+}
+
+.recoverySafe {
+  border-left-color: #10b981;
+}
+
+.recoveryWarning {
+  border-left-color: #f59e0b;
+}
+
+.recoveryCritical {
+  border-left-color: #ef4444;
+}
+
+.recoveryHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 0.9rem;
+}
+
+.recoveryHeader h3 {
+  font-size: 1rem;
+}
+
+.recoveryHeader .sectionKicker {
+  color: var(--primary);
+  font-size: 0.6rem;
+}
+
+.recoveryStatus {
+  flex: 0 0 auto;
+  padding: 0.38rem 0.58rem;
+  color: var(--foreground);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--input-bg);
+  font-size: 0.62rem;
+  font-weight: 700;
+}
+
+.recoverySummaryGrid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+
+.recoverySummaryGrid > div {
+  min-width: 0;
+  padding: 0.72rem;
+  border-right: 1px solid var(--border);
+  background: var(--input-bg);
+}
+
+.recoverySummaryGrid > div:last-child {
+  border-right: 0;
+}
+
+.recoverySummaryGrid span,
+.recoverySummaryGrid strong {
+  display: block;
+}
+
+.recoverySummaryGrid span {
+  margin-bottom: 0.2rem;
+  color: var(--secondary);
+  font-size: 0.6rem;
+}
+
+.recoverySummaryGrid strong {
+  overflow-wrap: anywhere;
+  font-size: 0.82rem;
+}
+
+.triggerRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin: 0.85rem 0;
+  font-size: 0.64rem;
+}
+
+.triggerRow > span {
+  color: var(--secondary);
+}
+
+.triggerRow > div {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 0.35rem;
+}
+
+.triggerRow strong {
+  padding: 0.3rem 0.48rem;
+  color: #c2410c;
+  border: 1px solid rgba(249, 115, 22, 0.24);
+  border-radius: 999px;
+  background: rgba(249, 115, 22, 0.08);
+  font-weight: 700;
+}
+
+.missingDataNotice,
+.completedNotice {
+  margin-bottom: 0.85rem;
+  padding: 0.75rem;
+  border-radius: 9px;
+  font-size: 0.66rem;
+  line-height: 1.45;
+}
+
+.missingDataNotice {
+  display: flex;
+  flex-direction: column;
+  gap: 0.16rem;
+  color: #a16207;
+  border: 1px solid rgba(234, 179, 8, 0.28);
+  background: rgba(234, 179, 8, 0.08);
+}
+
+.completedNotice {
+  color: #047857;
+  border: 1px solid rgba(16, 185, 129, 0.25);
+  background: rgba(16, 185, 129, 0.08);
+}
+
+.recoveryOption {
+  padding: 0.9rem;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--input-bg);
+}
+
+.recommendedOption {
+  border-color: rgba(99, 102, 241, 0.35);
+  background:
+    linear-gradient(rgba(99, 102, 241, 0.055), rgba(99, 102, 241, 0.055)),
+    var(--card-bg);
+  box-shadow: 0 8px 24px rgba(99, 102, 241, 0.08);
+}
+
+.optionHeading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.8rem;
+  margin-bottom: 0.45rem;
+}
+
+.optionHeading h4 {
+  font-size: 0.86rem;
+}
+
+.recommendedLabel {
+  display: block;
+  margin-bottom: 0.18rem;
+  color: var(--primary);
+  font-size: 0.56rem;
+  font-weight: 800;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+}
+
+.feasibilityBadge {
+  flex: 0 0 auto;
+  padding: 0.28rem 0.44rem;
+  border-radius: 999px;
+  font-size: 0.56rem;
+  font-weight: 700;
+}
+
+.feasibleBadge {
+  color: #047857;
+  background: rgba(16, 185, 129, 0.12);
+}
+
+.infeasibleBadge {
+  color: #b91c1c;
+  background: rgba(239, 68, 68, 0.11);
+}
+
+.recoveryOption > p {
+  color: var(--secondary);
+  font-size: 0.68rem;
+  line-height: 1.5;
+}
+
+.resourceMetrics {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(105px, 1fr));
+  gap: 0.5rem;
+  margin-top: 0.75rem;
+}
+
+.resourceMetrics > div {
+  padding: 0.55rem;
+  border: 1px solid rgba(99, 102, 241, 0.14);
+  border-radius: 8px;
+  background: var(--card-bg);
+}
+
+.resourceMetrics span,
+.resourceMetrics strong {
+  display: block;
+}
+
+.resourceMetrics span {
+  margin-bottom: 0.15rem;
+  color: var(--secondary);
+  font-size: 0.56rem;
+}
+
+.resourceMetrics strong {
+  font-size: 0.76rem;
+}
+
+.optionForecast {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0 1rem;
+  margin-top: 0.75rem;
+  padding-top: 0.6rem;
+  border-top: 1px solid var(--border);
+}
+
+.optionForecast > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.65rem;
+  padding: 0.27rem 0;
+  font-size: 0.61rem;
+}
+
+.optionForecast dt {
+  color: var(--secondary);
+}
+
+.optionForecast dd {
+  font-weight: 700;
+  text-align: right;
+}
+
+.alternatives,
+.assumptions {
+  margin-top: 0.75rem;
+  border-top: 1px solid var(--border);
+}
+
+.alternatives summary,
+.assumptions summary {
+  padding: 0.7rem 0 0;
+  color: var(--primary);
+  font-size: 0.66rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.alternativeList {
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+  margin-top: 0.7rem;
+}
+
+.assumptions ul {
+  display: grid;
+  gap: 0.35rem;
+  margin: 0.65rem 0 0 1rem;
+  color: var(--secondary);
+  font-size: 0.62rem;
+  line-height: 1.4;
+}
+
 .statDanger strong,
 .dangerText {
   color: var(--error);
@@ -798,8 +1122,30 @@
   .formGrid,
   .confidenceGrid,
   .detailGrid,
-  .statsGrid {
+  .statsGrid,
+  .recoverySummaryGrid,
+  .optionForecast {
     grid-template-columns: 1fr;
+  }
+
+  .recoverySummaryGrid > div {
+    border-right: 0;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .recoverySummaryGrid > div:last-child {
+    border-bottom: 0;
+  }
+
+  .recoveryHeader,
+  .optionHeading,
+  .triggerRow {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .triggerRow > div {
+    justify-content: flex-start;
   }
 
   .assessmentGrid {

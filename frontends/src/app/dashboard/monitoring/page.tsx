@@ -28,6 +28,52 @@ interface MonitoringFormData {
   cumulative_completed_qty: NumericValue;
 }
 
+interface RecoveryFormData {
+  planned_worker_count: NumericValue;
+  planned_machine_count: NumericValue;
+  normal_shift_hours: NumericValue;
+  max_overtime_hours_per_day: NumericValue;
+  max_additional_workers: NumericValue;
+  available_backup_machines: NumericValue;
+  backup_line_daily_capacity: NumericValue;
+  expected_machine_repair_hours: NumericValue;
+}
+
+interface RecoveryOption {
+  option_id: string;
+  title: string;
+  feasible_before_deadline: boolean;
+  rationale: string;
+  daily_capacity?: number;
+  daily_capacity_gain?: number;
+  required_overtime_hours_per_day?: number;
+  additional_workers?: number;
+  repaired_machines?: number;
+  expected_machine_repair_hours?: number;
+  backup_machines?: number;
+  backup_line_daily_capacity_used?: number;
+  required_working_days?: number | null;
+  projected_completion_date?: string | null;
+  deadline_margin_working_days?: number | null;
+  external_daily_capacity_required?: number | null;
+}
+
+interface RecoveryPlan {
+  engine_version: string;
+  status: 'completed' | 'deadline_passed' | 'on_track' | 'recovery_required';
+  triggered_by: string[];
+  remaining_quantity: number;
+  available_working_days: number;
+  required_daily_rate: number | null;
+  current_daily_capacity: number;
+  daily_recovery_gap: number | null;
+  missing_parameters: string[];
+  recommended_option: RecoveryOption | null;
+  alternatives: RecoveryOption[];
+  manual_escalation_required: boolean;
+  assumptions: string[];
+}
+
 interface MonitoringResponse {
   status: string;
   model_version: string;
@@ -115,6 +161,7 @@ interface MonitoringResponse {
     next_step: string;
     store_for_ml_training: boolean;
   };
+  recovery_plan: RecoveryPlan;
 }
 
 interface FieldDefinition {
@@ -122,7 +169,16 @@ interface FieldDefinition {
   label: string;
   type?: 'text' | 'number' | 'date';
   min?: number;
+  step?: number;
   helper?: string;
+}
+
+interface RecoveryFieldDefinition {
+  name: keyof RecoveryFormData;
+  label: string;
+  min: number;
+  step?: number;
+  helper: string;
 }
 
 const API_BASE_URL = (
@@ -153,6 +209,17 @@ const INITIAL_FORM: MonitoringFormData = {
   cumulative_completed_qty: 770,
 };
 
+const INITIAL_RECOVERY_FORM: RecoveryFormData = {
+  planned_worker_count: 50,
+  planned_machine_count: 40,
+  normal_shift_hours: 8,
+  max_overtime_hours_per_day: 2,
+  max_additional_workers: 5,
+  available_backup_machines: 2,
+  backup_line_daily_capacity: 150,
+  expected_machine_repair_hours: 4,
+};
+
 const BULK_1_ORDER = {
   bulk_order_id: 'BULK0001',
   style_id: 'AH2495',
@@ -172,11 +239,13 @@ const SCENARIOS: Array<{
   label: string;
   description: string;
   values: MonitoringFormData;
+  recoveryValues: RecoveryFormData;
 }> = [
   {
     label: 'Healthy line',
     description: 'Output is above commitment with stable resources.',
     values: INITIAL_FORM,
+    recoveryValues: INITIAL_RECOVERY_FORM,
   },
   {
     label: 'Worker pressure',
@@ -184,14 +253,19 @@ const SCENARIOS: Array<{
     values: {
       ...INITIAL_FORM,
       ...BULK_1_ORDER,
-      production_date: '2024-07-03',
-      working_day_no: 3,
-      plant_daily_output: 412,
-      daily_damage_qty: 12,
+      production_date: '2024-07-02',
+      working_day_no: 2,
+      plant_daily_output: 407,
+      daily_damage_qty: 10,
       max_daily_damage_qty: 13,
       machine_breakdown_count: 0,
-      worker_shortage_count: 2,
-      cumulative_completed_qty: 1_257,
+      worker_shortage_count: 3,
+      cumulative_completed_qty: 845,
+    },
+    recoveryValues: {
+      ...INITIAL_RECOVERY_FORM,
+      planned_worker_count: 50,
+      max_additional_workers: 3,
     },
   },
   {
@@ -209,6 +283,12 @@ const SCENARIOS: Array<{
       worker_shortage_count: 0,
       cumulative_completed_qty: 9_722,
     },
+    recoveryValues: {
+      ...INITIAL_RECOVERY_FORM,
+      planned_machine_count: 40,
+      available_backup_machines: 2,
+      expected_machine_repair_hours: 4,
+    },
   },
   {
     label: 'Quality pressure',
@@ -225,6 +305,7 @@ const SCENARIOS: Array<{
       worker_shortage_count: 0,
       cumulative_completed_qty: 20_825,
     },
+    recoveryValues: INITIAL_RECOVERY_FORM,
   },
   {
     label: 'Critical delay',
@@ -240,6 +321,11 @@ const SCENARIOS: Array<{
       machine_breakdown_count: 0,
       worker_shortage_count: 0,
       cumulative_completed_qty: 1_605,
+    },
+    recoveryValues: {
+      ...INITIAL_RECOVERY_FORM,
+      max_overtime_hours_per_day: 3,
+      backup_line_daily_capacity: 200,
     },
   },
 ];
@@ -273,10 +359,70 @@ const TIMELINE_FIELDS: FieldDefinition[] = [
   { name: 'buyer_required_date', label: 'Buyer required date', type: 'date' },
 ];
 
+const RECOVERY_FIELDS: RecoveryFieldDefinition[] = [
+  {
+    name: 'planned_worker_count',
+    label: 'Planned workers',
+    min: 1,
+    helper: 'Normal worker count allocated to this line.',
+  },
+  {
+    name: 'max_additional_workers',
+    label: 'Workers available to add',
+    min: 0,
+    helper: 'Maximum operators that can be reassigned.',
+  },
+  {
+    name: 'planned_machine_count',
+    label: 'Planned machines',
+    min: 1,
+    helper: 'Normal number of machines for this line.',
+  },
+  {
+    name: 'available_backup_machines',
+    label: 'Backup machines available',
+    min: 0,
+    helper: 'Ready machines that can be activated.',
+  },
+  {
+    name: 'normal_shift_hours',
+    label: 'Normal shift hours',
+    min: 0.25,
+    step: 0.25,
+    helper: 'Hours in the standard production shift.',
+  },
+  {
+    name: 'max_overtime_hours_per_day',
+    label: 'Maximum OT hours/day',
+    min: 0,
+    step: 0.25,
+    helper: 'Daily overtime limit approved by the plant.',
+  },
+  {
+    name: 'backup_line_daily_capacity',
+    label: 'Backup line capacity/day',
+    min: 0,
+    step: 1,
+    helper: 'Pieces another line can accept per day.',
+  },
+  {
+    name: 'expected_machine_repair_hours',
+    label: 'Expected repair hours',
+    min: 0,
+    step: 0.25,
+    helper: 'Estimated time to restore failed machines.',
+  },
+];
+
 const NUMBER_FORMATTER = new Intl.NumberFormat('en-US');
 
 function formatNumber(value: number) {
   return NUMBER_FORMATTER.format(value);
+}
+
+function formatCapacity(value: number | null | undefined) {
+  if (value === null || value === undefined) return 'Not available';
+  return NUMBER_FORMATTER.format(Number(value.toFixed(2)));
 }
 
 function clampPercentage(value: number) {
@@ -291,8 +437,143 @@ function riskTone(level: string) {
   return styles.safe;
 }
 
+function recoveryStatusLabel(status: RecoveryPlan['status']) {
+  const labels: Record<RecoveryPlan['status'], string> = {
+    completed: 'Order completed',
+    deadline_passed: 'Deadline passed',
+    on_track: 'Current plan is feasible',
+    recovery_required: 'Recovery required',
+  };
+  return labels[status];
+}
+
+function RecoveryOptionCard({
+  option,
+  recommended = false,
+}: {
+  option: RecoveryOption;
+  recommended?: boolean;
+}) {
+  const resourceMetrics = [
+    option.additional_workers
+      ? { label: 'Add workers', value: String(option.additional_workers) }
+      : null,
+    option.required_overtime_hours_per_day
+      ? {
+          label: 'OT hours / day',
+          value: formatCapacity(option.required_overtime_hours_per_day),
+        }
+      : null,
+    option.repaired_machines
+      ? { label: 'Repair machines', value: String(option.repaired_machines) }
+      : null,
+    option.repaired_machines && option.expected_machine_repair_hours !== undefined
+      ? {
+          label: 'Expected repair time',
+          value: `${formatCapacity(option.expected_machine_repair_hours)} hr`,
+        }
+      : null,
+    option.backup_machines
+      ? { label: 'Backup machines', value: String(option.backup_machines) }
+      : null,
+    option.backup_line_daily_capacity_used
+      ? {
+          label: 'Backup line / day',
+          value: formatCapacity(option.backup_line_daily_capacity_used),
+        }
+      : null,
+    option.external_daily_capacity_required !== undefined &&
+    option.external_daily_capacity_required !== null
+      ? {
+          label: 'External capacity / day',
+          value: formatCapacity(option.external_daily_capacity_required),
+        }
+      : null,
+  ].filter((metric): metric is { label: string; value: string } => metric !== null);
+
+  return (
+    <article
+      className={`${styles.recoveryOption} ${
+        recommended ? styles.recommendedOption : ''
+      }`}
+    >
+      <div className={styles.optionHeading}>
+        <div>
+          {recommended && <span className={styles.recommendedLabel}>Recommended</span>}
+          <h4>{option.title}</h4>
+        </div>
+        <span
+          className={`${styles.feasibilityBadge} ${
+            option.feasible_before_deadline
+              ? styles.feasibleBadge
+              : styles.infeasibleBadge
+          }`}
+        >
+          {option.feasible_before_deadline ? 'Deadline feasible' : 'Not sufficient'}
+        </span>
+      </div>
+
+      <p>{option.rationale}</p>
+
+      {resourceMetrics.length > 0 && (
+        <div className={styles.resourceMetrics}>
+          {resourceMetrics.map((metric) => (
+            <div key={metric.label}>
+              <span>{metric.label}</span>
+              <strong>{metric.value}</strong>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {(option.daily_capacity !== undefined || option.projected_completion_date) && (
+        <dl className={styles.optionForecast}>
+          {option.daily_capacity !== undefined && (
+            <div>
+              <dt>Recovered daily capacity</dt>
+              <dd>{formatCapacity(option.daily_capacity)} pieces</dd>
+            </div>
+          )}
+          {option.daily_capacity_gain !== undefined && (
+            <div>
+              <dt>Daily capacity gain</dt>
+              <dd>+{formatCapacity(option.daily_capacity_gain)} pieces</dd>
+            </div>
+          )}
+          {option.required_working_days !== undefined &&
+            option.required_working_days !== null && (
+              <div>
+                <dt>Working days required</dt>
+                <dd>{option.required_working_days}</dd>
+              </div>
+            )}
+          {option.projected_completion_date && (
+            <div>
+              <dt>New completion date</dt>
+              <dd>{option.projected_completion_date}</dd>
+            </div>
+          )}
+          {option.deadline_margin_working_days !== undefined &&
+            option.deadline_margin_working_days !== null && (
+              <div>
+                <dt>Deadline margin</dt>
+                <dd>
+                  {option.deadline_margin_working_days >= 0 ? '+' : ''}
+                  {option.deadline_margin_working_days} working day(s)
+                </dd>
+              </div>
+            )}
+        </dl>
+      )}
+    </article>
+  );
+}
+
 export default function MonitoringPage() {
   const [formData, setFormData] = useState<MonitoringFormData>(INITIAL_FORM);
+  const [recoveryData, setRecoveryData] = useState<RecoveryFormData>(
+    INITIAL_RECOVERY_FORM,
+  );
   const [result, setResult] = useState<MonitoringResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -305,22 +586,57 @@ export default function MonitoringPage() {
     setFormData((previous) => ({ ...previous, [field]: nextValue }));
   };
 
-  const selectScenario = (values: MonitoringFormData) => {
-    setFormData(values);
+  const handleRecoveryChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const { name, value } = event.currentTarget;
+    const field = name as keyof RecoveryFormData;
+    setRecoveryData((previous) => ({
+      ...previous,
+      [field]: value === '' ? '' : Number(value),
+    }));
+  };
+
+  const selectScenario = (scenario: (typeof SCENARIOS)[number]) => {
+    setFormData({ ...scenario.values });
+    setRecoveryData({ ...scenario.recoveryValues });
     setResult(null);
     setError('');
   };
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    setLoading(true);
     setError('');
+
+    if (
+      recoveryData.planned_worker_count !== '' &&
+      formData.worker_shortage_count !== '' &&
+      recoveryData.planned_worker_count < formData.worker_shortage_count
+    ) {
+      setError('Planned workers cannot be less than the reported worker shortage.');
+      return;
+    }
+    if (
+      recoveryData.planned_machine_count !== '' &&
+      formData.machine_breakdown_count !== '' &&
+      recoveryData.planned_machine_count < formData.machine_breakdown_count
+    ) {
+      setError('Planned machines cannot be less than the reported breakdown count.');
+      return;
+    }
+
+    setLoading(true);
+
+    const recoveryParameters = Object.fromEntries(
+      Object.entries(recoveryData).filter(([, value]) => value !== ''),
+    );
 
     try {
       const response = await fetch(`${API_BASE_URL}/predict`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(formData),
+        body: JSON.stringify({
+          ...formData,
+          recovery_parameters: recoveryParameters,
+        }),
       });
       const payload: unknown = await response.json();
 
@@ -356,10 +672,29 @@ export default function MonitoringPage() {
           type={field.type ?? 'text'}
           value={formData[field.name]}
           min={field.min}
+          step={field.step}
           onChange={handleChange}
           required
         />
         {field.helper && <span className={styles.fieldHelper}>{field.helper}</span>}
+      </div>
+    ));
+
+  const renderRecoveryFields = (fields: RecoveryFieldDefinition[]) =>
+    fields.map((field) => (
+      <div className={styles.formGroup} key={field.name}>
+        <label htmlFor={field.name}>{field.label}</label>
+        <input
+          id={field.name}
+          name={field.name}
+          type="number"
+          value={recoveryData[field.name]}
+          min={field.min}
+          step={field.step ?? 1}
+          onChange={handleRecoveryChange}
+          placeholder="Optional"
+        />
+        <span className={styles.fieldHelper}>{field.helper}</span>
       </div>
     ));
 
@@ -403,7 +738,7 @@ export default function MonitoringPage() {
             <button
               className={styles.scenarioButton}
               key={scenario.label}
-              onClick={() => selectScenario(scenario.values)}
+              onClick={() => selectScenario(scenario)}
               type="button"
             >
               <strong>{scenario.label}</strong>
@@ -441,6 +776,18 @@ export default function MonitoringPage() {
               <div className={styles.formGrid}>{renderFields(TIMELINE_FIELDS)}</div>
             </fieldset>
 
+            <fieldset className={`${styles.fieldset} ${styles.recoveryFieldset}`}>
+              <legend>Emergency recovery capacity</legend>
+              <div className={styles.recoveryInputNote}>
+                <span aria-hidden="true">↗</span>
+                <p>
+                  Enter actual plant limits. These values calculate executable
+                  recovery options and are not used to retrain the ML models.
+                </p>
+              </div>
+              <div className={styles.formGrid}>{renderRecoveryFields(RECOVERY_FIELDS)}</div>
+            </fieldset>
+
             <button className={styles.submitButton} disabled={loading} type="submit">
               {loading ? (
                 <>
@@ -449,7 +796,7 @@ export default function MonitoringPage() {
                 </>
               ) : (
                 <>
-                  Analyse emergency risk
+                  Analyse risk &amp; build recovery plan
                   <span aria-hidden="true">→</span>
                 </>
               )}
@@ -590,6 +937,109 @@ export default function MonitoringPage() {
                 </article>
               </div>
 
+              <section
+                className={`${styles.recoveryPanel} ${
+                  result.recovery_plan.manual_escalation_required
+                    ? styles.recoveryCritical
+                    : result.recovery_plan.status === 'on_track' ||
+                        result.recovery_plan.status === 'completed'
+                      ? styles.recoverySafe
+                      : styles.recoveryWarning
+                }`}
+                aria-labelledby="recovery-plan-title"
+              >
+                <div className={styles.recoveryHeader}>
+                  <div>
+                    <span className={styles.sectionKicker}>
+                      Recovery engine · {result.recovery_plan.engine_version}
+                    </span>
+                    <h3 id="recovery-plan-title">Emergency recovery plan</h3>
+                  </div>
+                  <span className={styles.recoveryStatus}>
+                    {recoveryStatusLabel(result.recovery_plan.status)}
+                  </span>
+                </div>
+
+                <div className={styles.recoverySummaryGrid}>
+                  <div>
+                    <span>Working days available</span>
+                    <strong>{result.recovery_plan.available_working_days}</strong>
+                  </div>
+                  <div>
+                    <span>Required daily rate</span>
+                    <strong>
+                      {formatCapacity(result.recovery_plan.required_daily_rate)}
+                    </strong>
+                  </div>
+                  <div>
+                    <span>Current daily capacity</span>
+                    <strong>
+                      {formatCapacity(result.recovery_plan.current_daily_capacity)}
+                    </strong>
+                  </div>
+                  <div>
+                    <span>Daily recovery gap</span>
+                    <strong>
+                      {formatCapacity(result.recovery_plan.daily_recovery_gap)}
+                    </strong>
+                  </div>
+                </div>
+
+                <div className={styles.triggerRow}>
+                  <span>Planning triggers</span>
+                  <div>
+                    {(result.recovery_plan.triggered_by.length
+                      ? result.recovery_plan.triggered_by
+                      : ['No active incident']).map((trigger) => (
+                      <strong key={trigger}>{trigger}</strong>
+                    ))}
+                  </div>
+                </div>
+
+                {result.recovery_plan.missing_parameters.length > 0 && (
+                  <div className={styles.missingDataNotice} role="status">
+                    <strong>More plant data will improve this plan</strong>
+                    <span>
+                      Add: {result.recovery_plan.missing_parameters.join(', ')}
+                    </span>
+                  </div>
+                )}
+
+                {result.recovery_plan.recommended_option ? (
+                  <RecoveryOptionCard
+                    option={result.recovery_plan.recommended_option}
+                    recommended
+                  />
+                ) : (
+                  <div className={styles.completedNotice}>
+                    No recovery action is required because the order is complete.
+                  </div>
+                )}
+
+                {result.recovery_plan.alternatives.length > 0 && (
+                  <details className={styles.alternatives}>
+                    <summary>
+                      Compare {result.recovery_plan.alternatives.length} alternative
+                      plan{result.recovery_plan.alternatives.length === 1 ? '' : 's'}
+                    </summary>
+                    <div className={styles.alternativeList}>
+                      {result.recovery_plan.alternatives.map((option) => (
+                        <RecoveryOptionCard key={option.option_id} option={option} />
+                      ))}
+                    </div>
+                  </details>
+                )}
+
+                <details className={styles.assumptions}>
+                  <summary>Calculation assumptions</summary>
+                  <ul>
+                    {result.recovery_plan.assumptions.map((assumption) => (
+                      <li key={assumption}>{assumption}</li>
+                    ))}
+                  </ul>
+                </details>
+              </section>
+
               <div className={styles.detailGrid}>
                 <article className={styles.detailCard}>
                   <div className={styles.detailTitle}>
@@ -640,8 +1090,10 @@ export default function MonitoringPage() {
 
               <article className={styles.actionCard}>
                 <div className={styles.actionTopline}>
-                  <span>Recovery action plan</span>
-                  {result.action.escalation_needed && <strong>Escalation required</strong>}
+                  <span>Initial incident guidance</span>
+                  {result.action.escalation_needed && (
+                    <strong>Risk escalation required</strong>
+                  )}
                 </div>
                 <h3>{result.action.action_required}</h3>
                 <p>{result.action.recommendation}</p>
