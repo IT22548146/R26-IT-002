@@ -1,0 +1,199 @@
+{
+  "report_version": "component3-early-warning-step5a-v1",
+  "step_5a": {
+    "dataset_preparation_completed": true,
+    "general_early_warning_training_ready": false,
+    "status": "not_ready",
+    "reason": "The three-day general target has no usable negative class on currently stable rows.",
+    "model_training_started": false
+  },
+  "source_dataset": {
+    "workbook": "component3_final_preprossed dataset.xlsx",
+    "worksheet_count": 11,
+    "source_rows": 598,
+    "generated_or_augmented_rows_excluded": 0,
+    "historical_rows_used": 598,
+    "bulk_orders": 11,
+    "styles": 11,
+    "duplicate_order_date_rows": 0,
+    "cumulative_output_mismatch_rows": 0,
+    "cumulative_over_order_rows": 0
+  },
+  "sequence_quality": {
+    "working_day_sequence_violations": 0,
+    "non_increasing_date_transitions": 0
+  },
+  "preparation": {
+    "horizon_production_days": 3,
+    "all_rows": 598,
+    "current_stable_rows": 193,
+    "current_emergency_rows_excluded": 405,
+    "stable_rows_without_full_horizon_excluded": 19,
+    "eligible_stable_rows": 174,
+    "complete_horizon_rows_if_current_emergencies_were_included": 565
+  },
+  "label_readiness": {
+    "Emergency_Within_1_Day": {
+      "positive_rows": 170,
+      "negative_rows": 4,
+      "positive_rate": 0.977,
+      "positive_orders": 11,
+      "negative_orders": 1,
+      "minimum_rows_per_class_required": 20,
+      "minimum_orders_per_class_required": 3,
+      "row_balance_sufficient": false,
+      "group_coverage_sufficient": false,
+      "ready_for_grouped_modeling": false
+    },
+    "Emergency_Within_3_Days": {
+      "positive_rows": 174,
+      "negative_rows": 0,
+      "positive_rate": 1.0,
+      "positive_orders": 11,
+      "negative_orders": 0,
+      "minimum_rows_per_class_required": 20,
+      "minimum_orders_per_class_required": 3,
+      "row_balance_sufficient": false,
+      "group_coverage_sufficient": false,
+      "ready_for_grouped_modeling": false
+    },
+    "Worker_Shortage_Within_3_Days": {
+      "positive_rows": 165,
+      "negative_rows": 9,
+      "positive_rate": 0.9483,
+      "positive_orders": 11,
+      "negative_orders": 1,
+      "minimum_rows_per_class_required": 20,
+      "minimum_orders_per_class_required": 3,
+      "row_balance_sufficient": false,
+      "group_coverage_sufficient": false,
+      "ready_for_grouped_modeling": false
+    },
+    "Machine_Breakdown_Within_3_Days": {
+      "positive_rows": 47,
+      "negative_rows": 127,
+      "positive_rate": 0.2701,
+      "positive_orders": 11,
+      "negative_orders": 11,
+      "minimum_rows_per_class_required": 20,
+      "minimum_orders_per_class_required": 3,
+      "row_balance_sufficient": true,
+      "group_coverage_sufficient": true,
+      "ready_for_grouped_modeling": true
+    },
+    "Quality_Limit_Within_3_Days": {
+      "positive_rows": 134,
+      "negative_rows": 40,
+      "positive_rate": 0.7701,
+      "positive_orders": 11,
+      "negative_orders": 11,
+      "minimum_rows_per_class_required": 20,
+      "minimum_orders_per_class_required": 3,
+      "row_balance_sufficient": true,
+      "group_coverage_sufficient": true,
+      "ready_for_grouped_modeling": true
+    },
+    "Output_Schedule_Risk_Within_3_Days": {
+      "positive_rows": 25,
+      "negative_rows": 149,
+      "positive_rate": 0.1437,
+      "positive_orders": 10,
+      "negative_orders": 11,
+      "minimum_rows_per_class_required": 20,
+      "minimum_orders_per_class_required": 3,
+      "row_balance_sufficient": true,
+      "group_coverage_sufficient": true,
+      "ready_for_grouped_modeling": true
+    }
+  },
+  "future_type_readiness": {
+    "class_rows": {
+      "Working Hours Issue": 89,
+      "Worker Issue": 76,
+      "Machine Breakdown Issue": 5,
+      "Minor Delay": 4
+    },
+    "class_orders": {
+      "Machine Breakdown Issue": 1,
+      "Minor Delay": 1,
+      "Worker Issue": 11,
+      "Working Hours Issue": 10
+    },
+    "insufficient_classes": [
+      "Machine Breakdown Issue",
+      "Minor Delay"
+    ],
+    "ready_for_grouped_multiclass_modeling": false
+  },
+  "leakage_controls": {
+    "current_emergency_rows_excluded": true,
+    "future_window_stays_inside_bulk_order": true,
+    "complete_three_day_horizon_required": true,
+    "group_for_future_validation": "Bulk_Order_ID",
+    "model_feature_count": 30,
+    "model_features": [
+      "Daily_Commitment",
+      "Plant_Daily_Output",
+      "Output_Gap",
+      "Gap_Pct",
+      "Daily_Damage_Qty",
+      "Max_Daily_Damage_Qty",
+      "Damage_Ratio",
+      "Working_Day_No",
+      "Total_Working_Days",
+      "Days_Remaining",
+      "Day_Progress_Pct",
+      "Output_vs_Commit_Ratio",
+      "Remaining_Qty",
+      "Full_Order_Qty",
+      "Required_Daily_Rate",
+      "Commitment_Gap_Rate",
+      "Cumulative_Completed_Qty",
+      "Is_Cutting_Phase",
+      "Is_Sewing_Phase",
+      "History_Days_Available",
+      "Previous_Day_Output",
+      "Output_Change_From_Previous",
+      "Trailing_3D_Avg_Output",
+      "Trailing_3D_Output_Std",
+      "Trailing_3D_Avg_Gap_Pct",
+      "Trailing_3D_Emergency_Days",
+      "Trailing_3D_Worker_Shortage_Days",
+      "Trailing_3D_Machine_Breakdown_Days",
+      "Trailing_3D_Quality_Limit_Days",
+      "Days_Since_Last_Emergency"
+    ],
+    "excluded_from_model_features": [
+      "Bulk_Order_ID",
+      "Style_ID",
+      "Buyer_Name",
+      "Allocated_Bulk_Plant",
+      "Production_Date",
+      "Buyer_Required_Date",
+      "Risk_Status",
+      "Risk_Type",
+      "System_Recommendation",
+      "Order_Risk_Level",
+      "Style_Completion_Date",
+      "Emergency_Within_1_Day",
+      "Emergency_Within_3_Days",
+      "First_Emergency_Type_Within_3_Days",
+      "First_Emergency_Lead_Days",
+      "Worker_Shortage_Within_3_Days",
+      "Machine_Breakdown_Within_3_Days",
+      "Quality_Limit_Within_3_Days",
+      "Output_Schedule_Risk_Within_3_Days"
+    ]
+  },
+  "supported_research_subtype_targets": [
+    "Machine_Breakdown_Within_3_Days",
+    "Quality_Limit_Within_3_Days",
+    "Output_Schedule_Risk_Within_3_Days"
+  ],
+  "required_next_data": [
+    "More stable production days followed by at least three stable days",
+    "More negative examples distributed across several independent bulk orders",
+    "Machine, worker, quality, and output-risk outcomes from additional orders"
+  ],
+  "decision": "Do not train or report a general three-day emergency model from the current dataset. Continue collecting real stable and incident sequences."
+}

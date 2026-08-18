@@ -28,6 +28,9 @@ The backend is organized into four specialized components, each accessible via i
   production day and reports calibration evidence without assuming an action
   was applied. See
   [`COMPONENT3_HISTORICAL_VALIDATION.md`](COMPONENT3_HISTORICAL_VALIDATION.md).
+- **Early-Warning Readiness**: Builds leakage-safe future labels from currently
+  stable production days and checks whether grouped model training is valid.
+  See [`COMPONENT3_EARLY_WARNING_STEP5A.md`](COMPONENT3_EARLY_WARNING_STEP5A.md).
 
 ### 4. Production Analysis & Resource Optimization (`/api/component4`)
 - **Efficiency Analytics**: Detailed insights into production performance.
