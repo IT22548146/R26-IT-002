@@ -21,6 +21,9 @@ The backend is organized into four specialized components, each accessible via i
 - **Recovery Planning**: Calculates deadline-aware overtime, worker, machine,
   backup-line, and escalation options. See
   [`COMPONENT3_RECOVERY_ENGINE.md`](COMPONENT3_RECOVERY_ENGINE.md).
+- **Recovery Tracking**: Stores approval, execution, actual output,
+  effectiveness and the incident audit timeline. See
+  [`COMPONENT3_TRACKING_API.md`](COMPONENT3_TRACKING_API.md).
 
 ### 4. Production Analysis & Resource Optimization (`/api/component4`)
 - **Efficiency Analytics**: Detailed insights into production performance.

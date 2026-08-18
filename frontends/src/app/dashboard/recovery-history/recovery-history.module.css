@@ -1,0 +1,734 @@
+.container {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+  animation: fadeIn 0.4s ease-out;
+}
+
+.hero {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 2rem;
+  padding: 1.8rem;
+  color: #f8fafc;
+  border-radius: var(--radius-xl);
+  background:
+    radial-gradient(circle at 82% 0%, rgba(45, 212, 191, 0.24), transparent 30%),
+    linear-gradient(130deg, #0f172a, #172554 58%, #164e63);
+  box-shadow: var(--shadow-md);
+}
+
+.hero span {
+  display: block;
+  margin-bottom: 0.42rem;
+  color: #67e8f9;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.hero h1 {
+  margin-bottom: 0.4rem;
+  font-size: clamp(1.55rem, 3vw, 2.2rem);
+}
+
+.hero p {
+  max-width: 680px;
+  color: #cbd5e1;
+  font-size: 0.84rem;
+  line-height: 1.55;
+}
+
+.hero a {
+  flex: 0 0 auto;
+  padding: 0.62rem 0.8rem;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 9px;
+  background: rgba(15, 23, 42, 0.35);
+  font-size: 0.7rem;
+  font-weight: 700;
+}
+
+.summaryGrid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.8rem;
+}
+
+.summaryGrid article {
+  padding: 1rem;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--card-bg);
+  box-shadow: var(--shadow-sm);
+}
+
+.summaryGrid span,
+.summaryGrid strong {
+  display: block;
+}
+
+.summaryGrid span {
+  margin-bottom: 0.25rem;
+  color: var(--secondary);
+  font-size: 0.68rem;
+}
+
+.summaryGrid strong {
+  font-size: 1.35rem;
+}
+
+.filterCard {
+  display: grid;
+  grid-template-columns: minmax(180px, 1fr) minmax(170px, 0.7fr) auto;
+  align-items: end;
+  gap: 0.8rem;
+  padding: 1rem;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--card-bg);
+}
+
+.filterCard label,
+.workflowHeading label,
+.workflowForm label,
+.outcomeForm label {
+  color: var(--secondary);
+  font-size: 0.66rem;
+  font-weight: 600;
+}
+
+.filterCard input,
+.filterCard select,
+.workflowHeading input,
+.workflowForm select,
+.workflowForm textarea,
+.outcomeForm input,
+.outcomeForm textarea {
+  display: block;
+  width: 100%;
+  min-height: 40px;
+  margin-top: 0.3rem;
+  padding: 0.58rem 0.68rem;
+  color: var(--foreground);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  outline: none;
+  background: var(--input-bg);
+  font: inherit;
+  font-size: 0.72rem;
+}
+
+.filterCard input:focus,
+.filterCard select:focus,
+.workflowHeading input:focus,
+.workflowForm select:focus,
+.workflowForm textarea:focus,
+.outcomeForm input:focus,
+.outcomeForm textarea:focus {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
+}
+
+.filterCard button,
+.workflowForm button,
+.workflowAction button,
+.outcomeForm button,
+.completeAction button {
+  min-height: 40px;
+  padding: 0.58rem 0.8rem;
+  color: #fff;
+  border-radius: 8px;
+  background: var(--primary);
+  font-size: 0.68rem;
+  font-weight: 700;
+}
+
+.filterCard button:disabled,
+.workflowForm button:disabled,
+.workflowAction button:disabled,
+.outcomeForm button:disabled,
+.completeAction button:disabled {
+  cursor: wait;
+  opacity: 0.58;
+}
+
+.error,
+.success {
+  padding: 0.75rem 0.9rem;
+  border: 1px solid;
+  border-radius: 9px;
+  font-size: 0.7rem;
+}
+
+.error {
+  color: #b91c1c;
+  border-color: rgba(239, 68, 68, 0.25);
+  background: rgba(239, 68, 68, 0.08);
+}
+
+.success {
+  color: #047857;
+  border-color: rgba(16, 185, 129, 0.25);
+  background: rgba(16, 185, 129, 0.08);
+}
+
+.workspace {
+  display: grid;
+  grid-template-columns: minmax(290px, 0.72fr) minmax(520px, 1.28fr);
+  align-items: start;
+  gap: 1rem;
+}
+
+.incidentList,
+.detailPanel {
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--card-bg);
+  box-shadow: var(--shadow-sm);
+}
+
+.incidentList {
+  overflow: hidden;
+}
+
+.sectionHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 1rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.sectionHeader span,
+.sectionHeader h2,
+.sectionHeader h3 {
+  display: block;
+}
+
+.sectionHeader span {
+  margin-bottom: 0.15rem;
+  color: var(--secondary);
+  font-size: 0.6rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.sectionHeader h2,
+.sectionHeader h3 {
+  font-size: 0.9rem;
+}
+
+.incidentCards {
+  display: flex;
+  max-height: 880px;
+  flex-direction: column;
+  gap: 0.6rem;
+  overflow-y: auto;
+  padding: 0.75rem;
+}
+
+.incidentCard {
+  width: 100%;
+  padding: 0.85rem;
+  color: var(--foreground);
+  text-align: left;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--input-bg);
+  transition: transform 0.18s ease, border-color 0.18s ease;
+}
+
+.incidentCard:hover,
+.incidentCard:focus-visible,
+.selectedCard {
+  transform: translateY(-1px);
+  border-color: var(--primary);
+  outline: none;
+}
+
+.selectedCard {
+  background:
+    linear-gradient(rgba(99, 102, 241, 0.06), rgba(99, 102, 241, 0.06)),
+    var(--card-bg);
+}
+
+.incidentCard > div:first-child,
+.detailHeader,
+.outcomeCards article header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.6rem;
+}
+
+.incidentCard > div:first-child > strong {
+  font-size: 0.78rem;
+}
+
+.incidentCard h3 {
+  margin: 0.55rem 0 0.18rem;
+  font-size: 0.8rem;
+}
+
+.incidentCard p {
+  overflow: hidden;
+  color: var(--secondary);
+  font-size: 0.62rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.incidentCard dl {
+  display: grid;
+  gap: 0.27rem;
+  margin-top: 0.65rem;
+  padding-top: 0.55rem;
+  border-top: 1px solid var(--border);
+}
+
+.incidentCard dl div,
+.outcomeCards dl div {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.7rem;
+  font-size: 0.59rem;
+}
+
+.incidentCard dt,
+.outcomeCards dt {
+  color: var(--secondary);
+}
+
+.incidentCard dd,
+.outcomeCards dd {
+  overflow-wrap: anywhere;
+  font-weight: 700;
+  text-align: right;
+}
+
+.status {
+  display: inline-flex;
+  flex: 0 0 auto;
+  padding: 0.27rem 0.44rem;
+  border-radius: 999px;
+  font-size: 0.56rem;
+  font-weight: 800;
+}
+
+.statusPending {
+  color: #a16207;
+  background: rgba(234, 179, 8, 0.12);
+}
+
+.statusApproved {
+  color: #4338ca;
+  background: rgba(99, 102, 241, 0.12);
+}
+
+.statusInProgress {
+  color: #0369a1;
+  background: rgba(14, 165, 233, 0.12);
+}
+
+.statusCompleted {
+  color: #047857;
+  background: rgba(16, 185, 129, 0.12);
+}
+
+.emptyState,
+.detailEmpty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  color: var(--secondary);
+  text-align: center;
+}
+
+.emptyState {
+  min-height: 260px;
+  gap: 0.3rem;
+  font-size: 0.7rem;
+}
+
+.emptyState strong {
+  color: var(--foreground);
+}
+
+.detailPanel {
+  min-height: 720px;
+}
+
+.detailEmpty {
+  min-height: 720px;
+  padding: 2rem;
+}
+
+.detailEmpty h2 {
+  margin: 1rem 0 0.3rem;
+  color: var(--foreground);
+  font-size: 1rem;
+}
+
+.detailEmpty p {
+  font-size: 0.7rem;
+}
+
+.detailIcon {
+  display: grid;
+  width: 72px;
+  height: 72px;
+  place-items: center;
+  color: var(--primary);
+  border: 1px solid rgba(99, 102, 241, 0.24);
+  border-radius: 50%;
+  background: rgba(99, 102, 241, 0.08);
+  font-size: 1.3rem;
+}
+
+.detailContent {
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+  padding: 1rem;
+}
+
+.detailHeader {
+  padding-bottom: 0.85rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.detailHeader > div > span {
+  display: block;
+  max-width: 400px;
+  overflow: hidden;
+  margin-bottom: 0.2rem;
+  color: var(--secondary);
+  font-family: monospace;
+  font-size: 0.56rem;
+  text-overflow: ellipsis;
+}
+
+.detailHeader h2 {
+  font-size: 1rem;
+}
+
+.detailHeader p {
+  margin-top: 0.18rem;
+  color: var(--secondary);
+  font-size: 0.64rem;
+}
+
+.planMetrics {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+
+.planMetrics div {
+  min-width: 0;
+  padding: 0.7rem;
+  border-right: 1px solid var(--border);
+  background: var(--input-bg);
+}
+
+.planMetrics div:last-child {
+  border-right: 0;
+}
+
+.planMetrics span,
+.planMetrics strong {
+  display: block;
+}
+
+.planMetrics span {
+  margin-bottom: 0.2rem;
+  color: var(--secondary);
+  font-size: 0.56rem;
+}
+
+.planMetrics strong {
+  overflow-wrap: anywhere;
+  font-size: 0.78rem;
+}
+
+.selectedPlan {
+  padding: 0.85rem;
+  color: #e0e7ff;
+  border-radius: 10px;
+  background: linear-gradient(135deg, #312e81, #1e3a8a);
+}
+
+.selectedPlan > span {
+  display: block;
+  margin-bottom: 0.3rem;
+  color: #a5b4fc;
+  font-size: 0.56rem;
+  font-weight: 800;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+}
+
+.selectedPlan h3 {
+  margin-bottom: 0.25rem;
+  color: #fff;
+  font-size: 0.88rem;
+}
+
+.selectedPlan p {
+  color: #c7d2fe;
+  font-size: 0.63rem;
+  line-height: 1.45;
+}
+
+.workflowCard,
+.outcomesSection,
+.timelineSection {
+  padding: 0.9rem;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--card-bg);
+}
+
+.workflowHeading {
+  display: grid;
+  grid-template-columns: 1fr minmax(180px, 0.7fr);
+  align-items: end;
+  gap: 1rem;
+  margin-bottom: 0.85rem;
+}
+
+.workflowHeading > div span {
+  display: block;
+  margin-bottom: 0.12rem;
+  color: var(--secondary);
+  font-size: 0.56rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.workflowHeading h3 {
+  font-size: 0.86rem;
+}
+
+.workflowForm {
+  display: grid;
+  gap: 0.65rem;
+}
+
+.workflowForm textarea,
+.outcomeForm textarea {
+  resize: vertical;
+}
+
+.workflowForm button,
+.outcomeForm button {
+  justify-self: start;
+}
+
+.workflowAction,
+.completeAction {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.75rem;
+  border-radius: 8px;
+  background: var(--input-bg);
+}
+
+.workflowAction p,
+.completeAction span {
+  color: var(--secondary);
+  font-size: 0.65rem;
+}
+
+.outcomeForm {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.65rem;
+}
+
+.outcomeForm .fullField {
+  grid-column: 1 / -1;
+}
+
+.completeAction {
+  margin-top: 0.75rem;
+  border: 1px solid rgba(16, 185, 129, 0.2);
+  background: rgba(16, 185, 129, 0.06);
+}
+
+.completeAction button {
+  background: #059669;
+}
+
+.completedBanner {
+  padding: 0.75rem;
+  color: #047857;
+  border: 1px solid rgba(16, 185, 129, 0.22);
+  border-radius: 8px;
+  background: rgba(16, 185, 129, 0.08);
+  font-size: 0.67rem;
+}
+
+.outcomesSection .sectionHeader,
+.timelineSection .sectionHeader {
+  margin-bottom: 0.7rem;
+  padding: 0 0 0.65rem;
+}
+
+.noData {
+  padding: 0.8rem;
+  color: var(--secondary);
+  border-radius: 8px;
+  background: var(--input-bg);
+  font-size: 0.65rem;
+  text-align: center;
+}
+
+.outcomeCards {
+  display: grid;
+  gap: 0.6rem;
+}
+
+.outcomeCards article {
+  padding: 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--input-bg);
+}
+
+.outcomeCards article header {
+  margin-bottom: 0.55rem;
+  font-size: 0.65rem;
+}
+
+.outcomeCards article header span {
+  color: #047857;
+  font-weight: 700;
+}
+
+.outcomeCards dl {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.3rem 1rem;
+}
+
+.outcomeCards article p {
+  margin-top: 0.55rem;
+  padding-top: 0.5rem;
+  color: var(--secondary);
+  border-top: 1px solid var(--border);
+  font-size: 0.59rem;
+}
+
+.timelineSection ol {
+  display: grid;
+  gap: 0.65rem;
+  list-style: none;
+}
+
+.timelineSection li {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.6rem;
+}
+
+.timelineSection i {
+  width: 9px;
+  height: 9px;
+  margin-top: 0.2rem;
+  border: 2px solid var(--card-bg);
+  border-radius: 50%;
+  background: var(--primary);
+  box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.18);
+}
+
+.timelineSection strong,
+.timelineSection span {
+  display: block;
+}
+
+.timelineSection strong {
+  font-size: 0.65rem;
+}
+
+.timelineSection span {
+  margin-top: 0.12rem;
+  color: var(--secondary);
+  font-size: 0.57rem;
+}
+
+@media (max-width: 1240px) {
+  .workspace {
+    grid-template-columns: 1fr;
+  }
+
+  .incidentCards {
+    max-height: 420px;
+  }
+}
+
+@media (max-width: 760px) {
+  .hero,
+  .workflowAction,
+  .completeAction {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .summaryGrid,
+  .planMetrics,
+  .outcomeForm,
+  .outcomeCards dl {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .filterCard,
+  .workflowHeading {
+    grid-template-columns: 1fr;
+  }
+
+  .planMetrics div:nth-child(2) {
+    border-right: 0;
+  }
+
+  .planMetrics div:nth-child(-n + 2) {
+    border-bottom: 1px solid var(--border);
+  }
+}
+
+@media (max-width: 480px) {
+  .summaryGrid,
+  .planMetrics,
+  .outcomeForm,
+  .outcomeCards dl {
+    grid-template-columns: 1fr;
+  }
+
+  .planMetrics div {
+    border-right: 0;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .planMetrics div:last-child {
+    border-bottom: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .container,
+  .incidentCard {
+    animation: none;
+    transition: none;
+  }
+}

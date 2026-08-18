@@ -38,12 +38,18 @@ import math
 import os
 import joblib
 from datetime import datetime, timedelta
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, current_app, request, jsonify
 
 from components.component3_features import FEATURES, build_feature_row
 from components.component3_recovery import (
     build_recovery_plan,
     normalize_recovery_parameters,
+)
+from components.component3_tracking import (
+    Component3TrackingStore,
+    TrackingConflictError,
+    TrackingNotFoundError,
+    normalize_status,
 )
 
 component3_bp = Blueprint("component3", __name__)
@@ -101,6 +107,23 @@ ACTION_MAP = {
 }
 
 FEATS = FEATURES
+
+PREDICTION_REQUIRED_FIELDS = [
+    "bulk_order_id", "style_id", "buyer_name", "allocated_bulk_plant",
+    "plant_location", "full_order_qty", "bulk_order_approved_date",
+    "buyer_required_date", "total_working_days", "cutting_days",
+    "sewing_days", "daily_commitment", "production_date", "working_day_no",
+    "plant_daily_output", "daily_damage_qty", "max_daily_damage_qty",
+    "machine_breakdown_count", "worker_shortage_count",
+    "cumulative_completed_qty",
+]
+
+PREDICTION_INTEGER_FIELDS = [
+    "full_order_qty", "daily_commitment", "plant_daily_output",
+    "daily_damage_qty", "max_daily_damage_qty", "machine_breakdown_count",
+    "worker_shortage_count", "cumulative_completed_qty",
+    "working_day_no", "total_working_days", "cutting_days", "sewing_days",
+]
 
 # ── Lazy model loader ─────────────────────────────────────────────
 _models = {}
@@ -504,6 +527,134 @@ def _build_response(data: dict, models: dict) -> dict:
     }
 
 
+# ── Request validation & tracking helpers ─────────────────────────
+
+def _validate_prediction_payload(raw_data: object) -> dict:
+    if not isinstance(raw_data, dict) or not raw_data:
+        raise ValueError("Request body must be valid JSON")
+
+    data = dict(raw_data)
+    missing = [field for field in PREDICTION_REQUIRED_FIELDS if field not in data]
+    if missing:
+        raise ValueError(f"Missing required fields: {missing}")
+
+    try:
+        for field in PREDICTION_INTEGER_FIELDS:
+            data[field] = int(data[field])
+        datetime.strptime(data["production_date"], "%Y-%m-%d")
+        datetime.strptime(data["buyer_required_date"], "%Y-%m-%d")
+        datetime.strptime(data["bulk_order_approved_date"], "%Y-%m-%d")
+    except (ValueError, TypeError) as error:
+        raise ValueError(f"Invalid field value: {error}") from error
+
+    if data["daily_commitment"] <= 0:
+        raise ValueError("daily_commitment must be > 0")
+    if data["full_order_qty"] <= 0:
+        raise ValueError("full_order_qty must be > 0")
+    if data["total_working_days"] <= 0:
+        raise ValueError("total_working_days must be > 0")
+    if data["cumulative_completed_qty"] > data["full_order_qty"]:
+        raise ValueError("cumulative_completed_qty cannot exceed full_order_qty")
+
+    non_negative_fields = [
+        "plant_daily_output", "daily_damage_qty", "max_daily_damage_qty",
+        "machine_breakdown_count", "worker_shortage_count",
+        "cumulative_completed_qty", "cutting_days", "sewing_days",
+    ]
+    negative_fields = [field for field in non_negative_fields if data[field] < 0]
+    if negative_fields:
+        raise ValueError(f"Fields must be >= 0: {negative_fields}")
+
+    if not (1 <= data["working_day_no"] <= data["total_working_days"]):
+        raise ValueError(
+            "working_day_no must be between 1 and total_working_days"
+        )
+
+    try:
+        data["recovery_parameters"] = normalize_recovery_parameters(
+            data.get("recovery_parameters"),
+            worker_shortage_count=data["worker_shortage_count"],
+            machine_breakdown_count=data["machine_breakdown_count"],
+        )
+    except ValueError as error:
+        raise ValueError(f"Invalid field value: {error}") from error
+
+    return data
+
+
+def _tracking_store() -> Component3TrackingStore:
+    configured_path = current_app.config.get("COMPONENT3_TRACKING_DB")
+    database_path = configured_path or os.environ.get(
+        "COMPONENT3_TRACKING_DB",
+        os.path.join(BASE_DIR, "instance", "component3_tracking.db"),
+    )
+    return Component3TrackingStore(str(database_path))
+
+
+def _required_text(data: dict, field: str) -> str:
+    value = data.get(field)
+    if not isinstance(value, str) or not value.strip():
+        raise ValueError(f"{field} is required and must be a non-empty string")
+    return value.strip()
+
+
+def _optional_text(data: dict, field: str) -> str | None:
+    value = data.get(field)
+    if value is None or value == "":
+        return None
+    if not isinstance(value, str):
+        raise ValueError(f"{field} must be a string")
+    return value.strip() or None
+
+
+def _iso_date(data: dict, field: str, *, required: bool = True) -> str | None:
+    value = data.get(field)
+    if not required and (value is None or value == ""):
+        return None
+    if not isinstance(value, str):
+        raise ValueError(f"{field} must use YYYY-MM-DD format")
+    try:
+        datetime.strptime(value, "%Y-%m-%d")
+    except ValueError as error:
+        raise ValueError(f"{field} must use YYYY-MM-DD format") from error
+    return value
+
+
+def _non_negative_integer(
+    data: dict,
+    field: str,
+    *,
+    required: bool = True,
+) -> int | None:
+    value = data.get(field)
+    if not required and (value is None or value == ""):
+        return None
+    if isinstance(value, bool):
+        raise ValueError(f"{field} must be an integer")
+    try:
+        number = float(value)
+    except (TypeError, ValueError) as error:
+        raise ValueError(f"{field} must be an integer") from error
+    if not math.isfinite(number) or not number.is_integer():
+        raise ValueError(f"{field} must be an integer")
+    if number < 0:
+        raise ValueError(f"{field} must be >= 0")
+    return int(number)
+
+
+def _pagination_args() -> tuple[int, int]:
+    try:
+        limit = int(request.args.get("limit", 50))
+        offset = int(request.args.get("offset", 0))
+    except (TypeError, ValueError) as error:
+        raise ValueError("limit and offset must be integers") from error
+    if not 1 <= limit <= 100:
+        raise ValueError("limit must be between 1 and 100")
+    if offset < 0:
+        raise ValueError("offset must be >= 0")
+    return limit, offset
+
+
 # ── Routes ────────────────────────────────────────────────────────
 
 @component3_bp.route("/health", methods=["GET"])
@@ -528,70 +679,12 @@ def predict():
         plant_daily_output, daily_damage_qty, max_daily_damage_qty,
         machine_breakdown_count, worker_shortage_count, cumulative_completed_qty
     """
-    data = request.get_json(force=True, silent=True)
-    if not data:
-        return jsonify({"error": "Request body must be valid JSON"}), 400
-
-    required = [
-        "bulk_order_id", "style_id", "buyer_name", "allocated_bulk_plant",
-        "plant_location", "full_order_qty", "bulk_order_approved_date",
-        "buyer_required_date", "total_working_days", "cutting_days",
-        "sewing_days", "daily_commitment", "production_date", "working_day_no",
-        "plant_daily_output", "daily_damage_qty", "max_daily_damage_qty",
-        "machine_breakdown_count", "worker_shortage_count", "cumulative_completed_qty",
-    ]
-    missing = [f for f in required if f not in data]
-    if missing:
-        return jsonify({"error": f"Missing required fields: {missing}"}), 400
-
     try:
-        int_fields = [
-            "full_order_qty", "daily_commitment", "plant_daily_output",
-            "daily_damage_qty", "max_daily_damage_qty", "machine_breakdown_count",
-            "worker_shortage_count", "cumulative_completed_qty",
-            "working_day_no", "total_working_days", "cutting_days", "sewing_days",
-        ]
-        for f in int_fields:
-            data[f] = int(data[f])
-        datetime.strptime(data["production_date"],          "%Y-%m-%d")
-        datetime.strptime(data["buyer_required_date"],      "%Y-%m-%d")
-        datetime.strptime(data["bulk_order_approved_date"], "%Y-%m-%d")
-    except (ValueError, TypeError) as e:
-        return jsonify({"error": f"Invalid field value: {e}"}), 400
-
-    if data["daily_commitment"] <= 0:
-        return jsonify({"error": "daily_commitment must be > 0"}), 400
-    if data["full_order_qty"] <= 0:
-        return jsonify({"error": "full_order_qty must be > 0"}), 400
-    if data["total_working_days"] <= 0:
-        return jsonify({"error": "total_working_days must be > 0"}), 400
-    if data["cumulative_completed_qty"] > data["full_order_qty"]:
-        return jsonify({
-            "error": "cumulative_completed_qty cannot exceed full_order_qty"
-        }), 400
-
-    non_negative_fields = [
-        "plant_daily_output", "daily_damage_qty", "max_daily_damage_qty",
-        "machine_breakdown_count", "worker_shortage_count",
-        "cumulative_completed_qty", "cutting_days", "sewing_days",
-    ]
-    negative_fields = [field for field in non_negative_fields if data[field] < 0]
-    if negative_fields:
-        return jsonify({
-            "error": f"Fields must be >= 0: {negative_fields}"
-        }), 400
-
-    if not (1 <= data["working_day_no"] <= data["total_working_days"]):
-        return jsonify({"error": "working_day_no must be between 1 and total_working_days"}), 400
-
-    try:
-        data["recovery_parameters"] = normalize_recovery_parameters(
-            data.get("recovery_parameters"),
-            worker_shortage_count=data["worker_shortage_count"],
-            machine_breakdown_count=data["machine_breakdown_count"],
+        data = _validate_prediction_payload(
+            request.get_json(force=True, silent=True)
         )
     except ValueError as e:
-        return jsonify({"error": f"Invalid field value: {e}"}), 400
+        return jsonify({"error": str(e)}), 400
 
     try:
         models = _load_models()
@@ -603,3 +696,172 @@ def predict():
         return jsonify(result), 200
     except Exception as e:
         return jsonify({"error": f"Prediction failed: {str(e)}"}), 500
+
+
+@component3_bp.route("/incidents", methods=["POST"])
+def create_incident():
+    """Run a canonical analysis and persist it as a trackable incident."""
+    raw_data = request.get_json(force=True, silent=True)
+    if not isinstance(raw_data, dict) or not raw_data:
+        return jsonify({"error": "Request body must be valid JSON"}), 400
+
+    raw_data = dict(raw_data)
+    try:
+        created_by = _required_text(
+            {"created_by": raw_data.pop("created_by", "System User")},
+            "created_by",
+        )
+        data = _validate_prediction_payload(raw_data)
+    except ValueError as error:
+        return jsonify({"error": str(error)}), 400
+
+    try:
+        models = _load_models()
+    except RuntimeError as error:
+        return jsonify({"error": str(error)}), 503
+
+    try:
+        analysis = _build_response(data, models)
+        if analysis["recovery_plan"]["recommended_option"] is None:
+            return jsonify({
+                "error": "The order is already complete and has no recovery "
+                "action to track"
+            }), 409
+        incident = _tracking_store().create_incident(
+            data,
+            analysis,
+            created_by=created_by,
+        )
+    except TrackingConflictError as error:
+        return jsonify({"error": str(error)}), 409
+    except Exception as error:
+        return jsonify({"error": f"Incident creation failed: {error}"}), 500
+
+    return jsonify({"status": "success", "incident": incident}), 201
+
+
+@component3_bp.route("/incidents", methods=["GET"])
+def list_incidents():
+    """List recovery incidents with optional order and workflow filters."""
+    try:
+        limit, offset = _pagination_args()
+        raw_status = request.args.get("status")
+        status = normalize_status(raw_status) if raw_status else None
+        bulk_order_id = request.args.get("bulk_order_id") or None
+        result = _tracking_store().list_incidents(
+            bulk_order_id=bulk_order_id,
+            status=status,
+            limit=limit,
+            offset=offset,
+        )
+    except ValueError as error:
+        return jsonify({"error": str(error)}), 400
+    return jsonify(result), 200
+
+
+@component3_bp.route("/orders/<bulk_order_id>/incidents", methods=["GET"])
+def order_incident_history(bulk_order_id: str):
+    """Return the incident history for one bulk order."""
+    try:
+        limit, offset = _pagination_args()
+        result = _tracking_store().list_incidents(
+            bulk_order_id=bulk_order_id,
+            limit=limit,
+            offset=offset,
+        )
+    except ValueError as error:
+        return jsonify({"error": str(error)}), 400
+    return jsonify(result), 200
+
+
+@component3_bp.route("/incidents/<incident_id>", methods=["GET"])
+def get_incident(incident_id: str):
+    """Return one incident with its analysis, outcomes, and audit timeline."""
+    try:
+        incident = _tracking_store().get_incident(incident_id)
+    except TrackingNotFoundError as error:
+        return jsonify({"error": str(error)}), 404
+    return jsonify({"incident": incident}), 200
+
+
+@component3_bp.route("/incidents/<incident_id>/decision", methods=["POST"])
+def approve_incident_decision(incident_id: str):
+    """Select and approve one recovery option for a Pending incident."""
+    data = request.get_json(force=True, silent=True)
+    if not isinstance(data, dict):
+        return jsonify({"error": "Request body must be valid JSON"}), 400
+    try:
+        incident = _tracking_store().approve_decision(
+            incident_id,
+            selected_option_id=_required_text(data, "selected_option_id"),
+            approved_by=_required_text(data, "approved_by"),
+            notes=_optional_text(data, "notes"),
+        )
+    except ValueError as error:
+        return jsonify({"error": str(error)}), 400
+    except TrackingNotFoundError as error:
+        return jsonify({"error": str(error)}), 404
+    except TrackingConflictError as error:
+        return jsonify({"error": str(error)}), 409
+    return jsonify({"status": "success", "incident": incident}), 200
+
+
+@component3_bp.route("/incidents/<incident_id>/status", methods=["PATCH"])
+def update_incident_status(incident_id: str):
+    """Advance an approved recovery action through its workflow."""
+    data = request.get_json(force=True, silent=True)
+    if not isinstance(data, dict):
+        return jsonify({"error": "Request body must be valid JSON"}), 400
+    try:
+        incident = _tracking_store().update_status(
+            incident_id,
+            new_status=normalize_status(data.get("status")),
+            updated_by=_required_text(data, "updated_by"),
+            notes=_optional_text(data, "notes"),
+        )
+    except ValueError as error:
+        return jsonify({"error": str(error)}), 400
+    except TrackingNotFoundError as error:
+        return jsonify({"error": str(error)}), 404
+    except TrackingConflictError as error:
+        return jsonify({"error": str(error)}), 409
+    return jsonify({"status": "success", "incident": incident}), 200
+
+
+@component3_bp.route("/incidents/<incident_id>/outcomes", methods=["POST"])
+def record_incident_outcome(incident_id: str):
+    """Record actual production and calculate recovery effectiveness."""
+    data = request.get_json(force=True, silent=True)
+    if not isinstance(data, dict):
+        return jsonify({"error": "Request body must be valid JSON"}), 400
+    try:
+        actual_daily_output = _non_negative_integer(
+            data,
+            "actual_daily_output",
+        )
+        cumulative_completed_qty = _non_negative_integer(
+            data,
+            "cumulative_completed_qty",
+            required=False,
+        )
+
+        outcome = _tracking_store().record_outcome(
+            incident_id,
+            outcome_date=str(_iso_date(data, "outcome_date")),
+            actual_daily_output=int(actual_daily_output),
+            cumulative_completed_qty=cumulative_completed_qty,
+            actual_completion_date=_iso_date(
+                data,
+                "actual_completion_date",
+                required=False,
+            ),
+            notes=_optional_text(data, "notes"),
+            recorded_by=_required_text(data, "recorded_by"),
+        )
+    except (TypeError, ValueError) as error:
+        return jsonify({"error": str(error)}), 400
+    except TrackingNotFoundError as error:
+        return jsonify({"error": str(error)}), 404
+    except TrackingConflictError as error:
+        return jsonify({"error": str(error)}), 409
+    return jsonify({"status": "success", "outcome": outcome}), 201

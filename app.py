@@ -50,6 +50,9 @@ def index():
             "component3": {
                 "predict": "POST /api/component3/predict",
                 "health":  "GET  /api/component3/health",
+                "create_incident": "POST /api/component3/incidents",
+                "incident_history": "GET /api/component3/incidents",
+                "incident_detail": "GET /api/component3/incidents/{incident_id}",
             },
             "component4": {
                 "predict": "POST /api/component4/predict",

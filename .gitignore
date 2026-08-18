@@ -14,5 +14,11 @@ wheels/
 .env.*
 !.env.example
 
+# Local application state
+instance/
+*.db
+*.sqlite
+*.sqlite3
+
 # Operating-system metadata
 .DS_Store

@@ -930,6 +930,101 @@
   line-height: 1.4;
 }
 
+.trackingCard {
+  display: flex;
+  flex-direction: column;
+  gap: 0.7rem;
+  margin-top: 0.9rem;
+  padding: 0.85rem;
+  color: #e0e7ff;
+  border-radius: 10px;
+  background: linear-gradient(135deg, #1e1b4b, #1e3a8a);
+}
+
+.trackingCard > div:first-child strong,
+.trackingCard > div:first-child span {
+  display: block;
+}
+
+.trackingCard > div:first-child strong {
+  margin-bottom: 0.18rem;
+  color: #fff;
+  font-size: 0.76rem;
+}
+
+.trackingCard > div:first-child span {
+  color: #c7d2fe;
+  font-size: 0.62rem;
+  line-height: 1.4;
+}
+
+.trackingControls {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: end;
+  gap: 0.6rem;
+}
+
+.trackingControls label {
+  color: #c7d2fe;
+  font-size: 0.58rem;
+  font-weight: 600;
+}
+
+.trackingControls input {
+  display: block;
+  width: 100%;
+  min-height: 38px;
+  margin-top: 0.25rem;
+  padding: 0.55rem 0.65rem;
+  color: #fff;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 8px;
+  outline: none;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.trackingControls input:focus {
+  border-color: #a5b4fc;
+  box-shadow: 0 0 0 3px rgba(165, 180, 252, 0.12);
+}
+
+.trackingControls button {
+  min-height: 38px;
+  padding: 0.55rem 0.75rem;
+  color: #1e1b4b;
+  border-radius: 8px;
+  background: #e0e7ff;
+  font-size: 0.64rem;
+  font-weight: 800;
+}
+
+.trackingControls button:disabled {
+  cursor: wait;
+  opacity: 0.62;
+}
+
+.trackingError {
+  color: #fecaca;
+  font-size: 0.62rem;
+}
+
+.trackingSuccess {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding-top: 0.65rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.12);
+  color: #bbf7d0;
+  font-size: 0.62rem;
+}
+
+.trackingSuccess a {
+  color: #fff;
+  font-weight: 700;
+}
+
 .statDanger strong,
 .dangerText {
   color: var(--error);
@@ -1146,6 +1241,15 @@
 
   .triggerRow > div {
     justify-content: flex-start;
+  }
+
+  .trackingControls {
+    grid-template-columns: 1fr;
+  }
+
+  .trackingSuccess {
+    align-items: flex-start;
+    flex-direction: column;
   }
 
   .assessmentGrid {

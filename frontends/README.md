@@ -32,6 +32,12 @@ The screen contains both parts of Component 3:
 The recovery-capacity values in the demo presets are examples. Replace them
 with the actual limits of the selected plant before using a recommendation.
 
+After an analysis, use **Save & track incident** to create a persistent
+workflow record. Open the Recovery History screen at
+[http://localhost:3000/dashboard/recovery-history](http://localhost:3000/dashboard/recovery-history)
+to approve an option, start the action, record actual output, review
+effectiveness, and complete the incident.
+
 Copy the example environment file before starting the frontend:
 
 ```bash
