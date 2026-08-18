@@ -941,6 +941,10 @@
   background: linear-gradient(135deg, #1e1b4b, #1e3a8a);
 }
 
+.dailyTrackingCard {
+  background: linear-gradient(135deg, #064e3b, #0f766e);
+}
+
 .trackingCard > div:first-child strong,
 .trackingCard > div:first-child span {
   display: block;

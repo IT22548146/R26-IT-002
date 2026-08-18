@@ -38,6 +38,13 @@ workflow record. Open the Recovery History screen at
 to approve an option, start the action, record actual output, review
 effectiveness, and complete the incident.
 
+Use **Save daily record** for every stable or emergency production day. The
+Daily Monitoring History screen at
+[http://localhost:3000/dashboard/monitoring-history](http://localhost:3000/dashboard/monitoring-history)
+shows saved observations, automatically derived three-day labels, and current
+early-warning training readiness. Incident tracking remains a separate action
+for emergency recovery approval and outcomes.
+
 Copy the example environment file before starting the frontend:
 
 ```bash

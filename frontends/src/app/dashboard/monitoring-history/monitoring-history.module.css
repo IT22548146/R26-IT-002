@@ -1,0 +1,369 @@
+.container {
+  display: flex;
+  flex-direction: column;
+  gap: 1.35rem;
+}
+
+.hero {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1.5rem;
+  padding: 1.8rem;
+  color: #ecfeff;
+  border-radius: var(--radius-xl);
+  background:
+    radial-gradient(circle at 90% 0%, rgba(45, 212, 191, 0.24), transparent 32%),
+    linear-gradient(135deg, #042f2e, #164e63 58%, #1e3a8a);
+  box-shadow: var(--shadow-md);
+}
+
+.hero > div > span,
+.kicker {
+  display: block;
+  margin-bottom: 0.4rem;
+  color: #5eead4;
+  font-size: 0.66rem;
+  font-weight: 800;
+  letter-spacing: 0.11em;
+  text-transform: uppercase;
+}
+
+.hero h1 {
+  margin-bottom: 0.45rem;
+  font-size: clamp(1.55rem, 3vw, 2.2rem);
+}
+
+.hero p {
+  max-width: 690px;
+  color: #bae6fd;
+  font-size: 0.82rem;
+  line-height: 1.55;
+}
+
+.hero > a,
+.cardHeader button {
+  flex: 0 0 auto;
+  padding: 0.62rem 0.85rem;
+  border-radius: 9px;
+  font-size: 0.7rem;
+  font-weight: 800;
+}
+
+.hero > a {
+  color: #134e4a;
+  background: #ccfbf1;
+}
+
+.metrics {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.8rem;
+}
+
+.metrics article,
+.readinessCard,
+.historyCard {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--card-bg);
+  box-shadow: var(--shadow-sm);
+}
+
+.metrics article {
+  padding: 1rem;
+}
+
+.metrics span,
+.metrics strong,
+.metrics small {
+  display: block;
+}
+
+.metrics span {
+  color: var(--secondary);
+  font-size: 0.67rem;
+}
+
+.metrics strong {
+  margin: 0.28rem 0;
+  font-size: 1.45rem;
+}
+
+.metrics small {
+  color: var(--secondary);
+  font-size: 0.6rem;
+}
+
+.readinessCard {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(420px, 0.8fr);
+  gap: 1.5rem;
+  padding: 1.2rem;
+  border-left-width: 5px;
+}
+
+.readinessCollecting {
+  border-left-color: #f59e0b;
+}
+
+.readinessReady {
+  border-left-color: #10b981;
+}
+
+.readinessCard .kicker {
+  color: var(--primary);
+}
+
+.readinessCard h2 {
+  margin-bottom: 0.35rem;
+  font-size: 1rem;
+}
+
+.readinessCard p {
+  max-width: 620px;
+  color: var(--secondary);
+  font-size: 0.72rem;
+  line-height: 1.5;
+}
+
+.readinessCard dl {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+
+.readinessCard dl > div {
+  padding: 0.72rem;
+  border-right: 1px solid var(--border);
+  background: var(--input-bg);
+}
+
+.readinessCard dl > div:last-child {
+  border-right: 0;
+}
+
+.readinessCard dt {
+  min-height: 2.1em;
+  color: var(--secondary);
+  font-size: 0.56rem;
+}
+
+.readinessCard dd {
+  margin-top: 0.25rem;
+  font-size: 1rem;
+  font-weight: 800;
+}
+
+.historyCard {
+  padding: 1.2rem;
+}
+
+.cardHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.cardHeader .kicker {
+  color: var(--primary);
+}
+
+.cardHeader h2 {
+  font-size: 1rem;
+}
+
+.cardHeader button {
+  color: var(--primary);
+  border: 1px solid rgba(99, 102, 241, 0.28);
+  background: rgba(99, 102, 241, 0.08);
+}
+
+.filters {
+  display: grid;
+  grid-template-columns: 1.2fr 0.8fr 0.8fr;
+  gap: 0.75rem;
+  margin: 1rem 0;
+  padding: 0.85rem;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--input-bg);
+}
+
+.filters label {
+  color: var(--secondary);
+  font-size: 0.62rem;
+  font-weight: 700;
+}
+
+.filters input,
+.filters select {
+  display: block;
+  width: 100%;
+  min-height: 39px;
+  margin-top: 0.3rem;
+  padding: 0.55rem 0.62rem;
+  color: var(--foreground);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  outline: none;
+  background: var(--card-bg);
+}
+
+.filters input:focus,
+.filters select:focus {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
+}
+
+.tableWrap {
+  overflow-x: auto;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+
+.tableWrap table {
+  width: 100%;
+  min-width: 1020px;
+  border-collapse: collapse;
+}
+
+.tableWrap th,
+.tableWrap td {
+  padding: 0.75rem;
+  text-align: left;
+  border-bottom: 1px solid var(--border);
+  vertical-align: top;
+}
+
+.tableWrap th {
+  color: var(--secondary);
+  background: var(--input-bg);
+  font-size: 0.59rem;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.tableWrap td {
+  font-size: 0.68rem;
+}
+
+.tableWrap tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.tableWrap td strong,
+.tableWrap td span,
+.tableWrap td small {
+  display: block;
+}
+
+.tableWrap td > span:not(.riskBadge, .labelBadge),
+.tableWrap td small {
+  margin-top: 0.17rem;
+  color: var(--secondary);
+  font-size: 0.59rem;
+}
+
+.riskBadge,
+.labelBadge {
+  width: fit-content;
+  padding: 0.28rem 0.45rem;
+  border-radius: 999px;
+  font-size: 0.57rem;
+  font-weight: 800;
+}
+
+.risk {
+  color: #b91c1c;
+  background: rgba(239, 68, 68, 0.11);
+}
+
+.noRisk,
+.labelReady {
+  color: #047857;
+  background: rgba(16, 185, 129, 0.11);
+}
+
+.labelWaiting {
+  color: #a16207;
+  background: rgba(234, 179, 8, 0.12);
+}
+
+.labelNotEligible {
+  color: #b91c1c;
+  background: rgba(239, 68, 68, 0.1);
+}
+
+.labelCensored,
+.labelIncomplete {
+  color: #475569;
+  background: rgba(100, 116, 139, 0.12);
+}
+
+.futureOutcome {
+  max-width: 190px;
+  line-height: 1.4;
+}
+
+.empty,
+.error {
+  display: flex;
+  min-height: 160px;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.3rem;
+  padding: 1.5rem;
+  text-align: center;
+}
+
+.empty {
+  color: var(--secondary);
+  font-size: 0.72rem;
+}
+
+.error {
+  min-height: auto;
+  margin-bottom: 1rem;
+  color: #b91c1c;
+  border: 1px solid rgba(239, 68, 68, 0.24);
+  border-radius: 9px;
+  background: rgba(239, 68, 68, 0.08);
+  font-size: 0.7rem;
+}
+
+@media (max-width: 1100px) {
+  .metrics {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .readinessCard {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 680px) {
+  .hero,
+  .cardHeader {
+    flex-direction: column;
+  }
+
+  .metrics,
+  .filters,
+  .readinessCard dl {
+    grid-template-columns: 1fr;
+  }
+
+  .readinessCard dl > div {
+    border-right: 0;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .readinessCard dl > div:last-child {
+    border-bottom: 0;
+  }
+}

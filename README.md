@@ -31,6 +31,9 @@ The backend is organized into four specialized components, each accessible via i
 - **Early-Warning Readiness**: Builds leakage-safe future labels from currently
   stable production days and checks whether grouped model training is valid.
   See [`COMPONENT3_EARLY_WARNING_STEP5A.md`](COMPONENT3_EARLY_WARNING_STEP5A.md).
+- **Daily Monitoring Collection**: Stores stable and emergency days, derives
+  exact three-day future labels, and reports live training readiness. See
+  [`COMPONENT3_DAILY_MONITORING.md`](COMPONENT3_DAILY_MONITORING.md).
 
 ### 4. Production Analysis & Resource Optimization (`/api/component4`)
 - **Efficiency Analytics**: Detailed insights into production performance.

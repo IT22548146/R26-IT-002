@@ -585,6 +585,9 @@ export default function MonitoringPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [trackingActor, setTrackingActor] = useState('Production Manager');
+  const [savingDailyRecord, setSavingDailyRecord] = useState(false);
+  const [savedDailyRecordId, setSavedDailyRecordId] = useState('');
+  const [dailyRecordError, setDailyRecordError] = useState('');
   const [savingIncident, setSavingIncident] = useState(false);
   const [savedIncidentId, setSavedIncidentId] = useState('');
   const [trackingError, setTrackingError] = useState('');
@@ -611,6 +614,8 @@ export default function MonitoringPage() {
     setRecoveryData({ ...scenario.recoveryValues });
     setResult(null);
     setError('');
+    setSavedDailyRecordId('');
+    setDailyRecordError('');
     setSavedIncidentId('');
     setTrackingError('');
   };
@@ -618,6 +623,8 @@ export default function MonitoringPage() {
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setError('');
+    setSavedDailyRecordId('');
+    setDailyRecordError('');
     setSavedIncidentId('');
     setTrackingError('');
 
@@ -670,6 +677,50 @@ export default function MonitoringPage() {
       );
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleSaveDailyRecord = async () => {
+    if (!result || !trackingActor.trim()) return;
+    setSavingDailyRecord(true);
+    setDailyRecordError('');
+
+    try {
+      const response = await fetch(`${API_BASE_URL}/monitoring-records`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          ...formData,
+          recovery_parameters: recoveryParameters(recoveryData),
+          recorded_by: trackingActor.trim(),
+        }),
+      });
+      const payload: unknown = await response.json();
+      if (!response.ok) {
+        const apiError = payload as { error?: unknown };
+        throw new Error(
+          typeof apiError.error === 'string'
+            ? apiError.error
+            : 'The daily monitoring record could not be saved.',
+        );
+      }
+
+      const saved = payload as {
+        monitoring_record: {
+          record_id: string;
+          analysis: MonitoringResponse;
+        };
+      };
+      setResult(saved.monitoring_record.analysis);
+      setSavedDailyRecordId(saved.monitoring_record.record_id);
+    } catch (requestError: unknown) {
+      setDailyRecordError(
+        requestError instanceof Error
+          ? requestError.message
+          : 'Unable to save this daily monitoring record.',
+      );
+    } finally {
+      setSavingDailyRecord(false);
     }
   };
 
@@ -1091,19 +1142,19 @@ export default function MonitoringPage() {
                   </ul>
                 </details>
 
-                <div className={styles.trackingCard}>
+                <div className={`${styles.trackingCard} ${styles.dailyTrackingCard}`}>
                   <div>
-                    <strong>Track this recovery incident</strong>
+                    <strong>Save today&apos;s monitoring record</strong>
                     <span>
-                      Save the analysis before approving an action or recording
-                      actual production results.
+                      Store both stable and emergency days. Three consecutive future
+                      records automatically create the early-warning outcome label.
                     </span>
                   </div>
                   <div className={styles.trackingControls}>
-                    <label htmlFor="tracking-actor">
-                      Created by
+                    <label htmlFor="daily-record-actor">
+                      Recorded by
                       <input
-                        id="tracking-actor"
+                        id="daily-record-actor"
                         value={trackingActor}
                         onChange={(event) => setTrackingActor(event.target.value)}
                         placeholder="Production Manager"
@@ -1111,26 +1162,79 @@ export default function MonitoringPage() {
                     </label>
                     <button
                       type="button"
-                      onClick={handleSaveIncident}
-                      disabled={savingIncident || !trackingActor.trim()}
+                      onClick={handleSaveDailyRecord}
+                      disabled={
+                        savingDailyRecord ||
+                        Boolean(savedDailyRecordId) ||
+                        !trackingActor.trim()
+                      }
                     >
-                      {savingIncident ? 'Saving incident...' : 'Save & track incident'}
+                      {savingDailyRecord
+                        ? 'Saving daily record...'
+                        : savedDailyRecordId
+                          ? 'Daily record saved'
+                          : 'Save daily record'}
                     </button>
                   </div>
-                  {trackingError && (
+                  {dailyRecordError && (
                     <span className={styles.trackingError} role="alert">
-                      {trackingError}
+                      {dailyRecordError}
                     </span>
                   )}
-                  {savedIncidentId && (
+                  {savedDailyRecordId && (
                     <div className={styles.trackingSuccess} role="status">
-                      <span>Incident saved successfully.</span>
-                      <Link href="/dashboard/recovery-history">
-                        Open recovery history →
+                      <span>Daily record saved for early-warning data collection.</span>
+                      <Link href="/dashboard/monitoring-history">
+                        Open daily history →
                       </Link>
                     </div>
                   )}
                 </div>
+
+                {result.risk_detection.risk_status === 'Risk' && (
+                  <div className={styles.trackingCard}>
+                    <div>
+                      <strong>Track this recovery incident</strong>
+                      <span>
+                        Save the analysis before approving an action or recording
+                        actual production results.
+                      </span>
+                    </div>
+                    <div className={styles.trackingControls}>
+                      <label htmlFor="tracking-actor">
+                        Created by
+                        <input
+                          id="tracking-actor"
+                          value={trackingActor}
+                          onChange={(event) => setTrackingActor(event.target.value)}
+                          placeholder="Production Manager"
+                        />
+                      </label>
+                      <button
+                        type="button"
+                        onClick={handleSaveIncident}
+                        disabled={savingIncident || !trackingActor.trim()}
+                      >
+                        {savingIncident
+                          ? 'Saving incident...'
+                          : 'Save & track incident'}
+                      </button>
+                    </div>
+                    {trackingError && (
+                      <span className={styles.trackingError} role="alert">
+                        {trackingError}
+                      </span>
+                    )}
+                    {savedIncidentId && (
+                      <div className={styles.trackingSuccess} role="status">
+                        <span>Incident saved successfully.</span>
+                        <Link href="/dashboard/recovery-history">
+                          Open recovery history →
+                        </Link>
+                      </div>
+                    )}
+                  </div>
+                )}
               </section>
 
               <div className={styles.detailGrid}>

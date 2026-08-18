@@ -41,6 +41,11 @@ from datetime import datetime, timedelta
 from flask import Blueprint, current_app, request, jsonify
 
 from components.component3_features import FEATURES, build_feature_row
+from components.component3_monitoring import (
+    Component3MonitoringStore,
+    normalize_monitoring_label_status,
+    normalize_monitoring_risk_status,
+)
 from components.component3_recovery import (
     build_recovery_plan,
     normalize_recovery_parameters,
@@ -582,13 +587,20 @@ def _validate_prediction_payload(raw_data: object) -> dict:
     return data
 
 
-def _tracking_store() -> Component3TrackingStore:
+def _tracking_database_path() -> str:
     configured_path = current_app.config.get("COMPONENT3_TRACKING_DB")
-    database_path = configured_path or os.environ.get(
+    return str(configured_path or os.environ.get(
         "COMPONENT3_TRACKING_DB",
         os.path.join(BASE_DIR, "instance", "component3_tracking.db"),
-    )
-    return Component3TrackingStore(str(database_path))
+    ))
+
+
+def _tracking_store() -> Component3TrackingStore:
+    return Component3TrackingStore(_tracking_database_path())
+
+
+def _monitoring_store() -> Component3MonitoringStore:
+    return Component3MonitoringStore(_tracking_database_path())
 
 
 def _required_text(data: dict, field: str) -> str:
@@ -696,6 +708,109 @@ def predict():
         return jsonify(result), 200
     except Exception as e:
         return jsonify({"error": f"Prediction failed: {str(e)}"}), 500
+
+
+@component3_bp.route("/monitoring-records", methods=["POST"])
+def create_monitoring_record():
+    """Run and save one canonical daily record, including stable days."""
+    raw_data = request.get_json(force=True, silent=True)
+    if not isinstance(raw_data, dict) or not raw_data:
+        return jsonify({"error": "Request body must be valid JSON"}), 400
+
+    raw_data = dict(raw_data)
+    try:
+        recorded_by = _required_text(
+            {"recorded_by": raw_data.pop("recorded_by", "System User")},
+            "recorded_by",
+        )
+        data = _validate_prediction_payload(raw_data)
+    except ValueError as error:
+        return jsonify({"error": str(error)}), 400
+
+    try:
+        models = _load_models()
+    except RuntimeError as error:
+        return jsonify({"error": str(error)}), 503
+
+    try:
+        analysis = _build_response(data, models)
+        monitoring_record = _monitoring_store().create_record(
+            data,
+            analysis,
+            recorded_by=recorded_by,
+        )
+    except TrackingConflictError as error:
+        return jsonify({"error": str(error)}), 409
+    except Exception as error:
+        return jsonify({
+            "error": f"Daily monitoring record creation failed: {error}"
+        }), 500
+
+    return jsonify({
+        "status": "success",
+        "monitoring_record": monitoring_record,
+    }), 201
+
+
+@component3_bp.route("/monitoring-records", methods=["GET"])
+def list_monitoring_records():
+    """List stable and emergency daily records with optional filters."""
+    try:
+        limit, offset = _pagination_args()
+        raw_risk_status = request.args.get("risk_status")
+        raw_label_status = request.args.get("label_status")
+        result = _monitoring_store().list_records(
+            bulk_order_id=request.args.get("bulk_order_id") or None,
+            risk_status=(
+                normalize_monitoring_risk_status(raw_risk_status)
+                if raw_risk_status
+                else None
+            ),
+            label_status=(
+                normalize_monitoring_label_status(raw_label_status)
+                if raw_label_status
+                else None
+            ),
+            limit=limit,
+            offset=offset,
+        )
+    except ValueError as error:
+        return jsonify({"error": str(error)}), 400
+    return jsonify(result), 200
+
+
+@component3_bp.route(
+    "/orders/<bulk_order_id>/monitoring-records",
+    methods=["GET"],
+)
+def order_monitoring_history(bulk_order_id: str):
+    """Return the daily monitoring sequence for one bulk order."""
+    try:
+        limit, offset = _pagination_args()
+        result = _monitoring_store().list_records(
+            bulk_order_id=bulk_order_id,
+            limit=limit,
+            offset=offset,
+        )
+    except ValueError as error:
+        return jsonify({"error": str(error)}), 400
+    return jsonify(result), 200
+
+
+@component3_bp.route("/monitoring-records/<record_id>", methods=["GET"])
+def get_monitoring_record(record_id: str):
+    """Return one monitoring record with its canonical input and analysis."""
+    try:
+        monitoring_record = _monitoring_store().get_record(record_id)
+    except TrackingNotFoundError as error:
+        return jsonify({"error": str(error)}), 404
+    return jsonify({"monitoring_record": monitoring_record}), 200
+
+
+@component3_bp.route("/monitoring-readiness", methods=["GET"])
+def monitoring_readiness():
+    """Report live early-warning label and grouped-training readiness."""
+    return jsonify(_monitoring_store().readiness_summary()), 200
 
 
 @component3_bp.route("/incidents", methods=["POST"])
