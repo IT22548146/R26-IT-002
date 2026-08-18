@@ -1,0 +1,160 @@
+{
+  "report_version": "component3-recovery-historical-v1",
+  "scope": {
+    "method": "historical next-production-day replay",
+    "generated_rows_policy": "Rows explicitly marked or identified as generated/augmented are excluded.",
+    "capacity_metric_rule": "A final partial production day is excluded because its output is limited by remaining order quantity, not line capacity."
+  },
+  "dataset": {
+    "workbook": "component3_final_preprossed dataset.xlsx",
+    "worksheet_count": 11,
+    "source_rows": 598,
+    "generated_or_augmented_rows_excluded": 0,
+    "historical_rows_used": 598,
+    "bulk_orders": 11,
+    "styles": 11,
+    "duplicate_order_date_rows": 0,
+    "cumulative_output_mismatch_rows": 0,
+    "cumulative_over_order_rows": 0,
+    "risk_rows_with_next_workday_outcome": 405,
+    "orders_with_inferred_completion_date": 11,
+    "capacity_cases_excluding_final_partial_day": 398,
+    "final_partial_day_cases_excluded_from_capacity_metrics": 7,
+    "orders_completed_exactly_on_deadline": 10,
+    "orders_completed_before_deadline": 1,
+    "orders_completed_after_deadline": 0
+  },
+  "validation": {
+    "current_output_as_next_workday_baseline": {
+      "case_count": 398,
+      "mae": 46.312,
+      "rmse": 59.8,
+      "mean_error": -19.754,
+      "wape_pct": 13.631,
+      "within_10_pct": 0.362
+    },
+    "recommended_capacity_observational_comparison": {
+      "case_count": 276,
+      "mae": 43.806,
+      "rmse": 61.367,
+      "mean_error": 29.476,
+      "wape_pct": 12.539,
+      "within_10_pct": 0.529
+    },
+    "completion_date_forecast": {
+      "case_count": 280,
+      "mae_calendar_days": 0.218,
+      "mean_error_calendar_days": 0.218,
+      "within_3_calendar_days": 0.971
+    },
+    "deadline_feasibility": {
+      "case_count": 405,
+      "accuracy": 0.691,
+      "actual_class_counts": {
+        "met_deadline": 405,
+        "missed_deadline": 0
+      },
+      "both_actual_classes_present": false
+    },
+    "historical_policy_category_agreement": {
+      "case_count": 405,
+      "agreement": 0.291,
+      "note": "This compares recommendation categories only; it does not show that the historical action was implemented or successful."
+    },
+    "engine_recommendation_counts": {
+      "overtime": 265,
+      "manual_escalation": 125,
+      "current_plan": 15
+    },
+    "missing_parameter_counts": {
+      "planned_worker_count": 316,
+      "planned_machine_count": 44,
+      "expected_machine_repair_hours": 44
+    }
+  },
+  "calibration_evidence": {
+    "next_workday_output_multipliers": {
+      "all_risk_cases": {
+        "case_count": 398,
+        "mean_multiplier": 1.071,
+        "median_multiplier": 1.089,
+        "q25_multiplier": 0.943,
+        "q75_multiplier": 1.179
+      },
+      "worker_shortage": {
+        "case_count": 311,
+        "mean_multiplier": 1.032,
+        "median_multiplier": 1.04,
+        "q25_multiplier": 0.926,
+        "q75_multiplier": 1.152
+      },
+      "machine_breakdown": {
+        "case_count": 42,
+        "mean_multiplier": 1.338,
+        "median_multiplier": 1.325,
+        "q25_multiplier": 1.259,
+        "q75_multiplier": 1.39
+      },
+      "quality_limit": {
+        "case_count": 193,
+        "mean_multiplier": 1.081,
+        "median_multiplier": 1.098,
+        "q25_multiplier": 0.953,
+        "q75_multiplier": 1.193
+      },
+      "schedule_or_output_risk": {
+        "case_count": 23,
+        "mean_multiplier": 1.083,
+        "median_multiplier": 1.066,
+        "q25_multiplier": 1.021,
+        "q75_multiplier": 1.153
+      }
+    },
+    "when_trigger_reduces_or_resolves": {
+      "worker_shortage": {
+        "case_count": 253,
+        "mean_multiplier": 1.045,
+        "median_multiplier": 1.092,
+        "q25_multiplier": 0.916,
+        "q75_multiplier": 1.159
+      },
+      "machine_breakdown": {
+        "case_count": 42,
+        "mean_multiplier": 1.338,
+        "median_multiplier": 1.325,
+        "q25_multiplier": 1.259,
+        "q75_multiplier": 1.39
+      },
+      "quality_limit": {
+        "case_count": 135,
+        "mean_multiplier": 1.128,
+        "median_multiplier": 1.143,
+        "q25_multiplier": 1.023,
+        "q75_multiplier": 1.209
+      }
+    },
+    "interpretation": "These are observational output multipliers, not causal action gains."
+  },
+  "calibration_decision": {
+    "status": "observational_only",
+    "engine_parameters_updated": false,
+    "action_labeled_rows": 0,
+    "available_action_outcome_fields": [],
+    "missing_action_outcome_fields": [
+      "Applied_Action",
+      "Actual_Overtime_Hours",
+      "Actual_Additional_Workers",
+      "Actual_Backup_Machines",
+      "Actual_Machine_Repair_Hours"
+    ],
+    "reason": "The workbook records recommendations and daily outputs but not which recovery action was actually applied or its resource dose.",
+    "next_collection_source": "Use Component 3 incident tracking decisions, recovery parameters, and daily outcomes for future causal calibration."
+  },
+  "limitations": [
+    "Historical recommendations are prescribed text, not applied-action evidence.",
+    "All observed orders in this workbook met their buyer deadline, so missed-deadline discrimination cannot be measured.",
+    "The 11 orders are repeated daily observations; case counts are not independent order counts.",
+    "Ten of 11 orders complete exactly on the recorded buyer deadline, while the planner also targets that deadline; the low completion-date error is not independent predictive evidence.",
+    "The calendar assumes Monday-Friday production and does not include factory holidays."
+  ]
+}

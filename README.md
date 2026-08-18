@@ -24,6 +24,10 @@ The backend is organized into four specialized components, each accessible via i
 - **Recovery Tracking**: Stores approval, execution, actual output,
   effectiveness and the incident audit timeline. See
   [`COMPONENT3_TRACKING_API.md`](COMPONENT3_TRACKING_API.md).
+- **Historical Validation**: Replays recovery plans against the next recorded
+  production day and reports calibration evidence without assuming an action
+  was applied. See
+  [`COMPONENT3_HISTORICAL_VALIDATION.md`](COMPONENT3_HISTORICAL_VALIDATION.md).
 
 ### 4. Production Analysis & Resource Optimization (`/api/component4`)
 - **Efficiency Analytics**: Detailed insights into production performance.
