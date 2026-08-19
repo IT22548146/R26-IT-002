@@ -45,6 +45,7 @@ from components.component3_monitoring import (
     Component3MonitoringStore,
     normalize_monitoring_label_status,
     normalize_monitoring_risk_status,
+    normalize_monitoring_verification_status,
 )
 from components.component3_recovery import (
     build_recovery_plan,
@@ -759,6 +760,7 @@ def list_monitoring_records():
         limit, offset = _pagination_args()
         raw_risk_status = request.args.get("risk_status")
         raw_label_status = request.args.get("label_status")
+        raw_verification_status = request.args.get("verification_status")
         result = _monitoring_store().list_records(
             bulk_order_id=request.args.get("bulk_order_id") or None,
             risk_status=(
@@ -769,6 +771,13 @@ def list_monitoring_records():
             label_status=(
                 normalize_monitoring_label_status(raw_label_status)
                 if raw_label_status
+                else None
+            ),
+            verification_status=(
+                normalize_monitoring_verification_status(
+                    raw_verification_status
+                )
+                if raw_verification_status
                 else None
             ),
             limit=limit,
@@ -805,6 +814,47 @@ def get_monitoring_record(record_id: str):
     except TrackingNotFoundError as error:
         return jsonify({"error": str(error)}), 404
     return jsonify({"monitoring_record": monitoring_record}), 200
+
+
+@component3_bp.route(
+    "/monitoring-records/<record_id>/verification",
+    methods=["PUT"],
+)
+def verify_monitoring_record(record_id: str):
+    """Confirm the actual daily outcome used for future ground truth."""
+    raw_data = request.get_json(force=True, silent=True)
+    if not isinstance(raw_data, dict) or not raw_data:
+        return jsonify({"error": "Request body must be valid JSON"}), 400
+
+    try:
+        actual_emergency = raw_data.get("actual_emergency")
+        if not isinstance(actual_emergency, bool):
+            raise ValueError("actual_emergency must be true or false")
+        verified_by = _required_text(raw_data, "verified_by")
+        actual_emergency_type = _optional_text(
+            raw_data,
+            "actual_emergency_type",
+        )
+        verification_notes = _optional_text(
+            raw_data,
+            "verification_notes",
+        )
+        monitoring_record = _monitoring_store().verify_record(
+            record_id,
+            actual_emergency=actual_emergency,
+            actual_emergency_type=actual_emergency_type,
+            verified_by=verified_by,
+            verification_notes=verification_notes,
+        )
+    except ValueError as error:
+        return jsonify({"error": str(error)}), 400
+    except TrackingNotFoundError as error:
+        return jsonify({"error": str(error)}), 404
+
+    return jsonify({
+        "status": "success",
+        "monitoring_record": monitoring_record,
+    }), 200
 
 
 @component3_bp.route("/monitoring-readiness", methods=["GET"])

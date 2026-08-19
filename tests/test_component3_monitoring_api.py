@@ -1,4 +1,6 @@
+import json
 import os
+import sqlite3
 import tempfile
 import unittest
 from datetime import date, timedelta
@@ -78,14 +80,39 @@ class Component3MonitoringStoreTests(unittest.TestCase):
             recorded_by="Line Supervisor",
         )
 
+    def verify(
+        self,
+        record,
+        *,
+        actual_emergency: bool = False,
+        actual_emergency_type: str | None = None,
+        notes: str | None = None,
+    ):
+        return self.store.verify_record(
+            record["record_id"],
+            actual_emergency=actual_emergency,
+            actual_emergency_type=actual_emergency_type,
+            verified_by="Factory Supervisor",
+            verification_notes=notes,
+        )
+
     def test_three_future_days_automatically_label_stable_source_day(self):
         day1 = self.save(self.prediction_input(1))
-        self.save(
+        day2 = self.save(
             self.prediction_input(2, worker_shortage=2),
             "Worker Issue",
         )
-        self.save(self.prediction_input(3))
-        self.save(self.prediction_input(4))
+        day3 = self.save(self.prediction_input(3))
+        day4 = self.save(self.prediction_input(4))
+
+        self.verify(day1)
+        self.verify(
+            day2,
+            actual_emergency=True,
+            actual_emergency_type="Worker Shortage",
+        )
+        self.verify(day3)
+        self.verify(day4)
 
         labelled = self.store.get_record(day1["record_id"])
         self.assertEqual(labelled["label_status"], "Ready")
@@ -93,7 +120,7 @@ class Component3MonitoringStoreTests(unittest.TestCase):
         self.assertEqual(labelled["emergency_within_3_days"], 1)
         self.assertEqual(
             labelled["first_emergency_type_within_3_days"],
-            "Worker Issue",
+            "Worker Shortage",
         )
         self.assertEqual(labelled["first_emergency_lead_days"], 1)
         self.assertEqual(labelled["worker_shortage_within_3_days"], 1)
@@ -106,8 +133,13 @@ class Component3MonitoringStoreTests(unittest.TestCase):
 
     def test_stable_three_day_window_creates_negative_example(self):
         source = self.save(self.prediction_input(1, order_id="ORDER_2"))
+        records = [source]
         for day in (2, 3, 4):
-            self.save(self.prediction_input(day, order_id="ORDER_2"))
+            records.append(
+                self.save(self.prediction_input(day, order_id="ORDER_2"))
+            )
+        for record in records:
+            self.verify(record)
 
         labelled = self.store.get_record(source["record_id"])
         self.assertEqual(labelled["label_status"], "Ready")
@@ -125,7 +157,14 @@ class Component3MonitoringStoreTests(unittest.TestCase):
         )
 
         self.assertTrue(record["is_emergency"])
-        self.assertEqual(record["label_status"], "Not Eligible")
+        self.assertEqual(record["label_status"], "Awaiting Verification")
+        verified = self.verify(
+            record,
+            actual_emergency=True,
+            actual_emergency_type="Machine Breakdown",
+        )
+        self.assertTrue(verified["actual_emergency"])
+        self.assertEqual(verified["label_status"], "Not Eligible")
 
     def test_completed_order_without_full_horizon_is_censored(self):
         day1 = self.save(
@@ -136,7 +175,7 @@ class Component3MonitoringStoreTests(unittest.TestCase):
                 full_order_qty=1_000,
             )
         )
-        self.save(
+        day2 = self.save(
             self.prediction_input(
                 2,
                 order_id="ORDER_3",
@@ -144,6 +183,8 @@ class Component3MonitoringStoreTests(unittest.TestCase):
                 full_order_qty=1_000,
             )
         )
+        self.verify(day1)
+        self.verify(day2)
 
         self.assertEqual(
             self.store.get_record(day1["record_id"])["label_status"],
@@ -160,6 +201,125 @@ class Component3MonitoringStoreTests(unittest.TestCase):
         inconsistent["production_date"] = payload["production_date"]
         with self.assertRaisesRegex(TrackingConflictError, "production_date"):
             self.save(inconsistent)
+
+    def test_unverified_predictions_never_create_training_labels(self):
+        source = self.save(self.prediction_input(1, order_id="ORDER_PENDING"))
+        for day in (2, 3, 4):
+            self.save(
+                self.prediction_input(day, order_id="ORDER_PENDING"),
+                "Worker Issue" if day == 2 else "No Issue",
+            )
+
+        record = self.store.get_record(source["record_id"])
+        self.assertEqual(record["label_status"], "Awaiting Verification")
+        self.assertIsNone(record["emergency_within_3_days"])
+        readiness = self.store.readiness_summary()
+        self.assertEqual(readiness["verified_records"], 0)
+        self.assertEqual(readiness["three_day_target"]["ready_rows"], 0)
+
+    def test_verified_actual_outcome_overrides_model_detection(self):
+        detected = self.save(
+            self.prediction_input(1, order_id="ORDER_OVERRIDE"),
+            "Worker Issue",
+        )
+        verified = self.verify(detected, actual_emergency=False)
+
+        self.assertTrue(verified["is_emergency"])
+        self.assertFalse(verified["actual_emergency"])
+        self.assertEqual(verified["label_status"], "Waiting")
+
+    def test_reverification_keeps_an_audit_history(self):
+        record = self.save(self.prediction_input(1, order_id="ORDER_AUDIT"))
+        self.verify(record, notes="No disruption observed")
+        corrected = self.verify(
+            record,
+            actual_emergency=True,
+            actual_emergency_type="Other Emergency",
+            notes="Corrected after supervisor review",
+        )
+
+        self.assertEqual(len(corrected["verification_history"]), 2)
+        self.assertTrue(corrected["verification_history"][0]["actual_emergency"])
+        self.assertEqual(corrected["label_status"], "Not Eligible")
+
+    def test_existing_monitoring_database_is_migrated_without_data_loss(self):
+        database_path = os.path.join(
+            self.temporary_directory.name,
+            "legacy-monitoring.sqlite3",
+        )
+        prediction_input = self.prediction_input(1, order_id="LEGACY_ORDER")
+        analysis = self.analysis(prediction_input)
+        with sqlite3.connect(database_path) as connection:
+            connection.executescript(
+                """
+                CREATE TABLE component3_daily_monitoring (
+                    record_id TEXT PRIMARY KEY,
+                    bulk_order_id TEXT NOT NULL,
+                    style_id TEXT NOT NULL,
+                    production_date TEXT NOT NULL,
+                    working_day_no INTEGER NOT NULL,
+                    risk_status TEXT NOT NULL,
+                    risk_type TEXT NOT NULL,
+                    severity TEXT,
+                    is_emergency INTEGER NOT NULL,
+                    prediction_input_json TEXT NOT NULL,
+                    analysis_json TEXT NOT NULL,
+                    recorded_by TEXT NOT NULL,
+                    label_status TEXT NOT NULL DEFAULT 'Waiting',
+                    emergency_within_1_day INTEGER,
+                    emergency_within_3_days INTEGER,
+                    first_emergency_type_within_3_days TEXT,
+                    first_emergency_lead_days INTEGER,
+                    worker_shortage_within_3_days INTEGER,
+                    machine_breakdown_within_3_days INTEGER,
+                    quality_limit_within_3_days INTEGER,
+                    output_schedule_risk_within_3_days INTEGER,
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL
+                );
+                """
+            )
+            connection.execute(
+                """
+                INSERT INTO component3_daily_monitoring (
+                    record_id, bulk_order_id, style_id, production_date,
+                    working_day_no, risk_status, risk_type, is_emergency,
+                    prediction_input_json, analysis_json, recorded_by,
+                    label_status, emergency_within_1_day,
+                    emergency_within_3_days,
+                    first_emergency_type_within_3_days,
+                    worker_shortage_within_3_days,
+                    machine_breakdown_within_3_days,
+                    quality_limit_within_3_days,
+                    output_schedule_risk_within_3_days,
+                    created_at, updated_at
+                ) VALUES (
+                    'legacy-record', 'LEGACY_ORDER', 'STYLE_LEGACY_ORDER',
+                    '2026-08-17', 1, 'No Risk', 'No Issue', 0,
+                    ?, ?, 'Legacy Supervisor', 'Ready', 0, 0,
+                    'No Emergency', 0, 0, 0, 0,
+                    '2026-08-17T00:00:00+00:00',
+                    '2026-08-17T00:00:00+00:00'
+                )
+                """,
+                (json.dumps(prediction_input), json.dumps(analysis)),
+            )
+
+        migrated_store = Component3MonitoringStore(database_path)
+        migrated = migrated_store.get_record("legacy-record")
+        self.assertEqual(migrated["actual_outcome_status"], "Pending")
+        self.assertEqual(migrated["label_status"], "Awaiting Verification")
+        self.assertIsNone(migrated["emergency_within_3_days"])
+        self.assertEqual(migrated["recorded_by"], "Legacy Supervisor")
+
+        verified = migrated_store.verify_record(
+            "legacy-record",
+            actual_emergency=False,
+            actual_emergency_type=None,
+            verified_by="Migration Verifier",
+        )
+        self.assertEqual(verified["actual_outcome_status"], "Verified")
+        self.assertEqual(len(verified["verification_history"]), 1)
 
 
 class Component3MonitoringApiTests(unittest.TestCase):
@@ -227,11 +387,14 @@ class Component3MonitoringApiTests(unittest.TestCase):
         record = response.get_json()["monitoring_record"]
         self.assertEqual(record["bulk_order_id"], "MONITORING001")
         self.assertEqual(record["risk_status"], "No Risk")
-        self.assertEqual(record["label_status"], "Waiting")
+        self.assertEqual(record["actual_outcome_status"], "Pending")
+        self.assertEqual(record["label_status"], "Awaiting Verification")
         self.assertEqual(record["analysis"]["model_version"], "v2")
 
         response = self.client.get(
-            "/api/component3/monitoring-records?risk_status=No%20Risk&label_status=Waiting"
+            "/api/component3/monitoring-records?risk_status=No%20Risk"
+            "&label_status=Awaiting%20Verification"
+            "&verification_status=Pending"
         )
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.get_json()["total"], 1)
@@ -248,6 +411,8 @@ class Component3MonitoringApiTests(unittest.TestCase):
         response = self.client.get("/api/component3/monitoring-readiness")
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.get_json()["total_records"], 1)
+        self.assertEqual(response.get_json()["verified_records"], 0)
+        self.assertEqual(response.get_json()["pending_verification_records"], 1)
         self.assertFalse(
             response.get_json()["three_day_target"][
                 "general_early_warning_training_ready"
@@ -266,6 +431,83 @@ class Component3MonitoringApiTests(unittest.TestCase):
         self.assertEqual(first.status_code, 201)
         self.assertEqual(second.status_code, 409)
 
+    def test_supervisor_can_verify_and_correct_actual_outcome(self):
+        created = self.client.post(
+            "/api/component3/monitoring-records",
+            json=self.payload(),
+        ).get_json()["monitoring_record"]
+        endpoint = (
+            f"/api/component3/monitoring-records/{created['record_id']}"
+            "/verification"
+        )
+
+        response = self.client.put(
+            endpoint,
+            json={
+                "actual_emergency": False,
+                "verified_by": "Shift Supervisor",
+                "verification_notes": "No actual disruption",
+            },
+        )
+        self.assertEqual(response.status_code, 200, response.get_json())
+        record = response.get_json()["monitoring_record"]
+        self.assertEqual(record["actual_outcome_status"], "Verified")
+        self.assertFalse(record["actual_emergency"])
+        self.assertEqual(record["label_status"], "Waiting")
+        self.assertEqual(len(record["verification_history"]), 1)
+
+        corrected = self.client.put(
+            endpoint,
+            json={
+                "actual_emergency": True,
+                "actual_emergency_type": "Machine Breakdown",
+                "verified_by": "Factory Manager",
+                "verification_notes": "Maintenance log confirmed failure",
+            },
+        )
+        self.assertEqual(corrected.status_code, 200, corrected.get_json())
+        record = corrected.get_json()["monitoring_record"]
+        self.assertTrue(record["actual_emergency"])
+        self.assertEqual(record["actual_emergency_type"], "Machine Breakdown")
+        self.assertEqual(record["label_status"], "Not Eligible")
+        self.assertEqual(len(record["verification_history"]), 2)
+
+        readiness = self.client.get(
+            "/api/component3/monitoring-readiness"
+        ).get_json()
+        self.assertEqual(readiness["verified_records"], 1)
+        self.assertEqual(readiness["emergency_records"], 1)
+
+    def test_verification_payload_requires_consistent_actual_outcome(self):
+        created = self.client.post(
+            "/api/component3/monitoring-records",
+            json=self.payload(),
+        ).get_json()["monitoring_record"]
+        endpoint = (
+            f"/api/component3/monitoring-records/{created['record_id']}"
+            "/verification"
+        )
+
+        response = self.client.put(
+            endpoint,
+            json={"actual_emergency": "yes", "verified_by": "Supervisor"},
+        )
+        self.assertEqual(response.status_code, 400)
+        response = self.client.put(
+            endpoint,
+            json={"actual_emergency": True, "verified_by": "Supervisor"},
+        )
+        self.assertEqual(response.status_code, 400)
+        response = self.client.put(
+            endpoint,
+            json={
+                "actual_emergency": False,
+                "actual_emergency_type": "Quality Issue",
+                "verified_by": "Supervisor",
+            },
+        )
+        self.assertEqual(response.status_code, 400)
+
     def test_invalid_filters_and_unknown_record_are_rejected(self):
         response = self.client.get(
             "/api/component3/monitoring-records?label_status=Unknown"
@@ -276,7 +518,19 @@ class Component3MonitoringApiTests(unittest.TestCase):
         )
         self.assertEqual(response.status_code, 400)
         response = self.client.get(
+            "/api/component3/monitoring-records?verification_status=Unknown"
+        )
+        self.assertEqual(response.status_code, 400)
+        response = self.client.get(
             "/api/component3/monitoring-records/not-found"
+        )
+        self.assertEqual(response.status_code, 404)
+        response = self.client.put(
+            "/api/component3/monitoring-records/not-found/verification",
+            json={
+                "actual_emergency": False,
+                "verified_by": "Supervisor",
+            },
         )
         self.assertEqual(response.status_code, 404)
 

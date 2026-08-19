@@ -41,9 +41,11 @@ effectiveness, and complete the incident.
 Use **Save daily record** for every stable or emergency production day. The
 Daily Monitoring History screen at
 [http://localhost:3000/dashboard/monitoring-history](http://localhost:3000/dashboard/monitoring-history)
-shows saved observations, automatically derived three-day labels, and current
-early-warning training readiness. Incident tracking remains a separate action
-for emergency recovery approval and outcomes.
+shows saved observations and lets a supervisor verify the actual stable or
+emergency outcome. Three-day labels and training readiness use only those
+verified actual outcomes; model detections remain visible for comparison.
+Corrections create audit-history entries. Incident tracking remains a separate
+action for emergency recovery approval and outcomes.
 
 Copy the example environment file before starting the frontend:
 

@@ -63,6 +63,7 @@
 
 .metrics article,
 .readinessCard,
+.verificationCard,
 .historyCard {
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
@@ -161,6 +162,153 @@
   padding: 1.2rem;
 }
 
+.verificationCard {
+  padding: 1.2rem;
+  border-left: 5px solid #0f766e;
+}
+
+.verificationHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.verificationHeader .kicker {
+  color: #0f766e;
+}
+
+.verificationHeader h2 {
+  margin-bottom: 0.3rem;
+  font-size: 1rem;
+}
+
+.verificationHeader p {
+  color: var(--secondary);
+  font-size: 0.7rem;
+  line-height: 1.5;
+}
+
+.verificationHeader button {
+  padding: 0.52rem 0.72rem;
+  color: var(--secondary);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--input-bg);
+  font-size: 0.65rem;
+  font-weight: 700;
+}
+
+.verificationCard form {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.8rem;
+  padding: 1rem;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--input-bg);
+}
+
+.verificationCard form label {
+  color: var(--secondary);
+  font-size: 0.62rem;
+  font-weight: 700;
+}
+
+.verificationCard form input,
+.verificationCard form select,
+.verificationCard form textarea {
+  display: block;
+  width: 100%;
+  margin-top: 0.3rem;
+  padding: 0.55rem 0.62rem;
+  color: var(--foreground);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  outline: none;
+  background: var(--card-bg);
+  font: inherit;
+}
+
+.verificationCard form input,
+.verificationCard form select {
+  min-height: 39px;
+}
+
+.verificationCard form textarea {
+  resize: vertical;
+}
+
+.verificationCard form input:focus,
+.verificationCard form select:focus,
+.verificationCard form textarea:focus {
+  border-color: #0f766e;
+  box-shadow: 0 0 0 3px rgba(15, 118, 110, 0.1);
+}
+
+.verificationCard form select:disabled {
+  cursor: not-allowed;
+  opacity: 0.62;
+}
+
+.notesField,
+.verificationActions,
+.formError {
+  grid-column: 1 / -1;
+}
+
+.verificationActions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.verificationActions span {
+  color: var(--secondary);
+  font-size: 0.62rem;
+}
+
+.verificationActions button,
+.verifyButton {
+  border: 0;
+  border-radius: 8px;
+  font-weight: 800;
+}
+
+.verificationActions button {
+  padding: 0.62rem 0.85rem;
+  color: #ecfeff;
+  background: #0f766e;
+  font-size: 0.66rem;
+}
+
+.verificationActions button:disabled {
+  cursor: not-allowed;
+  opacity: 0.58;
+}
+
+.formError,
+.success {
+  padding: 0.65rem 0.75rem;
+  border-radius: 8px;
+  font-size: 0.66rem;
+}
+
+.formError {
+  color: #b91c1c;
+  border: 1px solid rgba(239, 68, 68, 0.24);
+  background: rgba(239, 68, 68, 0.08);
+}
+
+.success {
+  margin-top: 0.85rem;
+  color: #047857;
+  border: 1px solid rgba(16, 185, 129, 0.24);
+  background: rgba(16, 185, 129, 0.08);
+}
+
 .cardHeader {
   display: flex;
   align-items: flex-start;
@@ -184,7 +332,7 @@
 
 .filters {
   display: grid;
-  grid-template-columns: 1.2fr 0.8fr 0.8fr;
+  grid-template-columns: 1.2fr repeat(3, minmax(0, 0.8fr));
   gap: 0.75rem;
   margin: 1rem 0;
   padding: 0.85rem;
@@ -227,7 +375,7 @@
 
 .tableWrap table {
   width: 100%;
-  min-width: 1020px;
+  min-width: 1240px;
   border-collapse: collapse;
 }
 
@@ -269,7 +417,8 @@
 }
 
 .riskBadge,
-.labelBadge {
+.labelBadge,
+.verificationBadge {
   width: fit-content;
   padding: 0.28rem 0.45rem;
   border-radius: 999px;
@@ -291,6 +440,27 @@
 .labelWaiting {
   color: #a16207;
   background: rgba(234, 179, 8, 0.12);
+}
+
+.labelAwaitingVerification,
+.pending {
+  color: #a16207;
+  background: rgba(234, 179, 8, 0.12);
+}
+
+.verified {
+  color: #047857;
+  background: rgba(16, 185, 129, 0.11);
+}
+
+.verifyButton {
+  width: fit-content;
+  margin-top: 0.38rem;
+  padding: 0.32rem 0.52rem;
+  color: #0f766e;
+  border: 1px solid rgba(15, 118, 110, 0.24);
+  background: rgba(15, 118, 110, 0.08);
+  font-size: 0.58rem;
 }
 
 .labelNotEligible {
@@ -348,12 +518,15 @@
 
 @media (max-width: 680px) {
   .hero,
-  .cardHeader {
+  .cardHeader,
+  .verificationHeader,
+  .verificationActions {
     flex-direction: column;
   }
 
   .metrics,
   .filters,
+  .verificationCard form,
   .readinessCard dl {
     grid-template-columns: 1fr;
   }

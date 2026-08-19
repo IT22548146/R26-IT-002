@@ -55,6 +55,7 @@ def index():
                 "incident_detail": "GET /api/component3/incidents/{incident_id}",
                 "save_daily_monitoring": "POST /api/component3/monitoring-records",
                 "daily_monitoring_history": "GET /api/component3/monitoring-records",
+                "verify_daily_outcome": "PUT /api/component3/monitoring-records/{record_id}/verification",
                 "early_warning_readiness": "GET /api/component3/monitoring-readiness",
             },
             "component4": {

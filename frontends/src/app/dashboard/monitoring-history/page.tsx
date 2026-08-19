@@ -5,7 +5,15 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import styles from './monitoring-history.module.css';
 
 type RiskStatus = 'No Risk' | 'Risk';
+type VerificationStatus = 'Pending' | 'Verified';
+type ActualEmergencyType =
+  | 'Worker Shortage'
+  | 'Machine Breakdown'
+  | 'Quality Issue'
+  | 'Output / Schedule Risk'
+  | 'Other Emergency';
 type LabelStatus =
+  | 'Awaiting Verification'
   | 'Waiting'
   | 'Ready'
   | 'Not Eligible'
@@ -22,6 +30,12 @@ interface MonitoringRecord {
   risk_type: string;
   severity: string | null;
   is_emergency: boolean;
+  actual_outcome_status: VerificationStatus;
+  actual_emergency: boolean | null;
+  actual_emergency_type: ActualEmergencyType | null;
+  verified_by: string | null;
+  verification_notes: string | null;
+  verified_at: string | null;
   plant_daily_output: number;
   daily_commitment: number;
   worker_shortage_count: number;
@@ -47,8 +61,13 @@ interface MonitoringListResponse {
 
 interface ReadinessResponse {
   total_records: number;
+  verified_records: number;
+  pending_verification_records: number;
   stable_records: number;
   emergency_records: number;
+  detected_stable_records: number;
+  detected_emergency_records: number;
+  verification_status_counts: Record<VerificationStatus, number>;
   label_status_counts: Record<LabelStatus, number>;
   three_day_target: {
     ready_rows: number;
@@ -63,6 +82,14 @@ interface ReadinessResponse {
     general_early_warning_training_ready: boolean;
   };
 }
+
+const ACTUAL_EMERGENCY_TYPES: ActualEmergencyType[] = [
+  'Worker Shortage',
+  'Machine Breakdown',
+  'Quality Issue',
+  'Output / Schedule Risk',
+  'Other Emergency',
+];
 
 const API_BASE_URL = (
   process.env.NEXT_PUBLIC_COMPONENT3_API_URL ??
@@ -91,9 +118,20 @@ export default function MonitoringHistoryPage() {
   const [orderFilter, setOrderFilter] = useState('');
   const [riskFilter, setRiskFilter] = useState('');
   const [labelFilter, setLabelFilter] = useState('');
+  const [verificationFilter, setVerificationFilter] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [refreshVersion, setRefreshVersion] = useState(0);
+  const [selectedRecord, setSelectedRecord] = useState<MonitoringRecord | null>(
+    null,
+  );
+  const [actualEmergency, setActualEmergency] = useState('');
+  const [actualEmergencyType, setActualEmergencyType] = useState('');
+  const [verifiedBy, setVerifiedBy] = useState('');
+  const [verificationNotes, setVerificationNotes] = useState('');
+  const [savingVerification, setSavingVerification] = useState(false);
+  const [verificationError, setVerificationError] = useState('');
+  const [verificationMessage, setVerificationMessage] = useState('');
 
   const requestJson = useCallback(async (path: string) => {
     const response = await fetch(`${API_BASE_URL}${path}`);
@@ -114,8 +152,11 @@ export default function MonitoringHistoryPage() {
     if (orderFilter.trim()) parameters.set('bulk_order_id', orderFilter.trim());
     if (riskFilter) parameters.set('risk_status', riskFilter);
     if (labelFilter) parameters.set('label_status', labelFilter);
+    if (verificationFilter) {
+      parameters.set('verification_status', verificationFilter);
+    }
     return parameters.toString();
-  }, [labelFilter, orderFilter, riskFilter]);
+  }, [labelFilter, orderFilter, riskFilter, verificationFilter]);
 
   useEffect(() => {
     let cancelled = false;
@@ -149,6 +190,73 @@ export default function MonitoringHistoryPage() {
 
   const target = readiness?.three_day_target;
 
+  const openVerification = (record: MonitoringRecord) => {
+    setSelectedRecord(record);
+    setActualEmergency(
+      record.actual_emergency === null ? '' : String(record.actual_emergency),
+    );
+    setActualEmergencyType(record.actual_emergency_type ?? '');
+    setVerifiedBy(record.verified_by ?? '');
+    setVerificationNotes(record.verification_notes ?? '');
+    setVerificationError('');
+    setVerificationMessage('');
+  };
+
+  const closeVerification = () => {
+    setSelectedRecord(null);
+    setVerificationError('');
+  };
+
+  const handleVerification = async (
+    event: React.FormEvent<HTMLFormElement>,
+  ) => {
+    event.preventDefault();
+    if (!selectedRecord) return;
+
+    setSavingVerification(true);
+    setVerificationError('');
+    try {
+      const response = await fetch(
+        `${API_BASE_URL}/monitoring-records/${selectedRecord.record_id}/verification`,
+        {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            actual_emergency: actualEmergency === 'true',
+            actual_emergency_type:
+              actualEmergency === 'true' ? actualEmergencyType : null,
+            verified_by: verifiedBy.trim(),
+            verification_notes: verificationNotes.trim() || null,
+          }),
+        },
+      );
+      const payload: unknown = await response.json();
+      if (!response.ok) {
+        const apiError = payload as { error?: unknown };
+        throw new Error(
+          typeof apiError.error === 'string'
+            ? apiError.error
+            : 'The actual outcome could not be verified.',
+        );
+      }
+
+      setSelectedRecord(null);
+      setVerificationMessage(
+        `Actual outcome verified for ${selectedRecord.bulk_order_id}, working day ${selectedRecord.working_day_no}.`,
+      );
+      setLoading(true);
+      setRefreshVersion((value) => value + 1);
+    } catch (requestError: unknown) {
+      setVerificationError(
+        requestError instanceof Error
+          ? requestError.message
+          : 'Unable to verify this daily outcome.',
+      );
+    } finally {
+      setSavingVerification(false);
+    }
+  };
+
   return (
     <div className={styles.container}>
       <section className={styles.hero}>
@@ -156,8 +264,8 @@ export default function MonitoringHistoryPage() {
           <span>Component 3 data collection</span>
           <h1>Daily Monitoring History</h1>
           <p>
-            Review stable and emergency observations, automatic future labels,
-            and live readiness for the three-day early-warning target.
+            Verify actual factory outcomes, review automatic future labels, and
+            track readiness for the three-day early-warning target.
           </p>
         </div>
         <Link href="/dashboard/monitoring">+ Record another day</Link>
@@ -170,14 +278,18 @@ export default function MonitoringHistoryPage() {
           <small>All saved Component 3 days</small>
         </article>
         <article>
-          <span>Stable records</span>
-          <strong>{NUMBER_FORMATTER.format(readiness?.stable_records ?? 0)}</strong>
-          <small>Potential early-warning source days</small>
+          <span>Verified records</span>
+          <strong>{NUMBER_FORMATTER.format(readiness?.verified_records ?? 0)}</strong>
+          <small>Supervisor-confirmed actual outcomes</small>
         </article>
         <article>
-          <span>Emergency records</span>
-          <strong>{NUMBER_FORMATTER.format(readiness?.emergency_records ?? 0)}</strong>
-          <small>Used as future outcomes</small>
+          <span>Pending verification</span>
+          <strong>
+            {NUMBER_FORMATTER.format(
+              readiness?.pending_verification_records ?? 0,
+            )}
+          </strong>
+          <small>Cannot be used as training ground truth</small>
         </article>
         <article>
           <span>Ready labels</span>
@@ -201,8 +313,9 @@ export default function MonitoringHistoryPage() {
               : 'Continue collecting real daily sequences'}
           </h2>
           <p>
-            Training requires both outcomes across independent orders. Waiting,
-            incomplete and current-emergency rows are not treated as negative labels.
+            Training uses supervisor-verified actual outcomes only. Model
+            detections are retained for comparison, but never become their own
+            training labels.
           </p>
         </div>
         <dl>
@@ -225,6 +338,111 @@ export default function MonitoringHistoryPage() {
         </dl>
       </section>
 
+      {selectedRecord && (
+        <section className={styles.verificationCard}>
+          <div className={styles.verificationHeader}>
+            <div>
+              <span className={styles.kicker}>Supervisor ground truth</span>
+              <h2>
+                {selectedRecord.actual_outcome_status === 'Verified'
+                  ? 'Correct actual outcome'
+                  : 'Verify actual outcome'}
+              </h2>
+              <p>
+                {selectedRecord.bulk_order_id} · {selectedRecord.production_date}{' '}
+                · working day {selectedRecord.working_day_no}. The system detected{' '}
+                <strong>{selectedRecord.risk_type}</strong>; confirm what actually
+                happened in the factory.
+              </p>
+            </div>
+            <button type="button" onClick={closeVerification}>
+              Cancel
+            </button>
+          </div>
+
+          <form onSubmit={handleVerification}>
+            <label>
+              Actual emergency
+              <select
+                value={actualEmergency}
+                onChange={(event) => {
+                  setActualEmergency(event.target.value);
+                  if (event.target.value !== 'true') {
+                    setActualEmergencyType('');
+                  }
+                }}
+                required
+              >
+                <option value="">Select actual outcome</option>
+                <option value="false">No actual emergency</option>
+                <option value="true">Yes, an emergency occurred</option>
+              </select>
+            </label>
+            <label>
+              Actual emergency type
+              <select
+                value={actualEmergencyType}
+                onChange={(event) => setActualEmergencyType(event.target.value)}
+                required={actualEmergency === 'true'}
+                disabled={actualEmergency !== 'true'}
+              >
+                <option value="">Select emergency type</option>
+                {ACTUAL_EMERGENCY_TYPES.map((emergencyType) => (
+                  <option key={emergencyType} value={emergencyType}>
+                    {emergencyType}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label>
+              Verified by
+              <input
+                value={verifiedBy}
+                onChange={(event) => setVerifiedBy(event.target.value)}
+                placeholder="Factory supervisor name or ID"
+                maxLength={120}
+                required
+              />
+            </label>
+            <label className={styles.notesField}>
+              Verification notes
+              <textarea
+                value={verificationNotes}
+                onChange={(event) => setVerificationNotes(event.target.value)}
+                placeholder="Optional maintenance log, attendance, quality, or shift evidence"
+                maxLength={2000}
+                rows={3}
+              />
+            </label>
+            <div className={styles.verificationActions}>
+              <span>
+                {selectedRecord.actual_outcome_status === 'Verified'
+                  ? 'This correction will be added to the audit history.'
+                  : 'This confirmation controls future training labels.'}
+              </span>
+              <button
+                type="submit"
+                disabled={
+                  savingVerification ||
+                  !actualEmergency ||
+                  !verifiedBy.trim() ||
+                  (actualEmergency === 'true' && !actualEmergencyType)
+                }
+              >
+                {savingVerification
+                  ? 'Saving verification...'
+                  : 'Save verified outcome'}
+              </button>
+            </div>
+            {verificationError && (
+              <div className={styles.formError} role="alert">
+                {verificationError}
+              </div>
+            )}
+          </form>
+        </section>
+      )}
+
       <section className={styles.historyCard}>
         <div className={styles.cardHeader}>
           <div>
@@ -241,6 +459,12 @@ export default function MonitoringHistoryPage() {
             Refresh
           </button>
         </div>
+
+        {verificationMessage && (
+          <div className={styles.success} role="status">
+            {verificationMessage}
+          </div>
+        )}
 
         <div className={styles.filters}>
           <label>
@@ -263,12 +487,26 @@ export default function MonitoringHistoryPage() {
             </select>
           </label>
           <label>
+            Verification
+            <select
+              value={verificationFilter}
+              onChange={(event) => setVerificationFilter(event.target.value)}
+            >
+              <option value="">All</option>
+              <option value="Pending">Pending</option>
+              <option value="Verified">Verified</option>
+            </select>
+          </label>
+          <label>
             Label status
             <select
               value={labelFilter}
               onChange={(event) => setLabelFilter(event.target.value)}
             >
               <option value="">All</option>
+              <option value="Awaiting Verification">
+                Awaiting Verification
+              </option>
               <option value="Waiting">Waiting</option>
               <option value="Ready">Ready</option>
               <option value="Not Eligible">Not Eligible</option>
@@ -294,8 +532,9 @@ export default function MonitoringHistoryPage() {
                 <tr>
                   <th>Production day</th>
                   <th>Order</th>
-                  <th>Current status</th>
+                  <th>System detection</th>
                   <th>Output</th>
+                  <th>Verified actual outcome</th>
                   <th>Label status</th>
                   <th>Future outcome</th>
                   <th>Recorded by</th>
@@ -325,6 +564,35 @@ export default function MonitoringHistoryPage() {
                     <td>
                       <strong>{NUMBER_FORMATTER.format(record.plant_daily_output)}</strong>
                       <span>of {NUMBER_FORMATTER.format(record.daily_commitment)}</span>
+                    </td>
+                    <td>
+                      <span
+                        className={`${styles.verificationBadge} ${
+                          record.actual_outcome_status === 'Verified'
+                            ? styles.verified
+                            : styles.pending
+                        }`}
+                      >
+                        {record.actual_outcome_status}
+                      </span>
+                      {record.actual_outcome_status === 'Verified' && (
+                        <small>
+                          {record.actual_emergency
+                            ? record.actual_emergency_type
+                            : 'No actual emergency'}
+                          {' · '}
+                          {record.verified_by}
+                        </small>
+                      )}
+                      <button
+                        className={styles.verifyButton}
+                        type="button"
+                        onClick={() => openVerification(record)}
+                      >
+                        {record.actual_outcome_status === 'Verified'
+                          ? 'Correct'
+                          : 'Verify'}
+                      </button>
                     </td>
                     <td>
                       <span className={`${styles.labelBadge} ${labelClass(record.label_status)}`}>

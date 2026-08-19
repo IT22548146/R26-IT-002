@@ -17,6 +17,7 @@ from components.component3_tracking import (
 
 
 MONITORING_LABEL_STATUSES = (
+    "Awaiting Verification",
     "Waiting",
     "Ready",
     "Not Eligible",
@@ -24,6 +25,14 @@ MONITORING_LABEL_STATUSES = (
     "Incomplete",
 )
 MONITORING_RISK_STATUSES = ("No Risk", "Risk")
+MONITORING_VERIFICATION_STATUSES = ("Pending", "Verified")
+ACTUAL_EMERGENCY_TYPES = (
+    "Worker Shortage",
+    "Machine Breakdown",
+    "Quality Issue",
+    "Output / Schedule Risk",
+    "Other Emergency",
+)
 MIN_ROWS_PER_CLASS = 20
 MIN_ORDERS_PER_CLASS = 3
 
@@ -44,6 +53,22 @@ def normalize_monitoring_label_status(value: Any) -> str:
 
 def normalize_monitoring_risk_status(value: Any) -> str:
     return _normalize_choice(value, MONITORING_RISK_STATUSES, "risk_status")
+
+
+def normalize_monitoring_verification_status(value: Any) -> str:
+    return _normalize_choice(
+        value,
+        MONITORING_VERIFICATION_STATUSES,
+        "verification_status",
+    )
+
+
+def normalize_actual_emergency_type(value: Any) -> str:
+    return _normalize_choice(
+        value,
+        ACTUAL_EMERGENCY_TYPES,
+        "actual_emergency_type",
+    )
 
 
 class Component3MonitoringStore:
@@ -74,7 +99,7 @@ class Component3MonitoringStore:
 
     def _initialize(self) -> None:
         with self._connection() as connection:
-            connection.executescript(
+            connection.execute(
                 """
                 CREATE TABLE IF NOT EXISTS component3_daily_monitoring (
                     record_id TEXT PRIMARY KEY,
@@ -89,7 +114,13 @@ class Component3MonitoringStore:
                     prediction_input_json TEXT NOT NULL,
                     analysis_json TEXT NOT NULL,
                     recorded_by TEXT NOT NULL,
-                    label_status TEXT NOT NULL DEFAULT 'Waiting',
+                    actual_outcome_status TEXT NOT NULL DEFAULT 'Pending',
+                    actual_emergency INTEGER,
+                    actual_emergency_type TEXT,
+                    verified_by TEXT,
+                    verification_notes TEXT,
+                    verified_at TEXT,
+                    label_status TEXT NOT NULL DEFAULT 'Awaiting Verification',
                     emergency_within_1_day INTEGER,
                     emergency_within_3_days INTEGER,
                     first_emergency_type_within_3_days TEXT,
@@ -100,6 +131,36 @@ class Component3MonitoringStore:
                     output_schedule_risk_within_3_days INTEGER,
                     created_at TEXT NOT NULL,
                     updated_at TEXT NOT NULL
+                )
+                """
+            )
+            self._ensure_column(
+                connection,
+                "actual_outcome_status",
+                "TEXT NOT NULL DEFAULT 'Pending'",
+            )
+            self._ensure_column(connection, "actual_emergency", "INTEGER")
+            self._ensure_column(
+                connection,
+                "actual_emergency_type",
+                "TEXT",
+            )
+            self._ensure_column(connection, "verified_by", "TEXT")
+            self._ensure_column(connection, "verification_notes", "TEXT")
+            self._ensure_column(connection, "verified_at", "TEXT")
+
+            connection.executescript(
+                """
+                CREATE TABLE IF NOT EXISTS component3_monitoring_verifications (
+                    verification_id TEXT PRIMARY KEY,
+                    record_id TEXT NOT NULL,
+                    actual_emergency INTEGER NOT NULL,
+                    actual_emergency_type TEXT,
+                    verified_by TEXT NOT NULL,
+                    verification_notes TEXT,
+                    verified_at TEXT NOT NULL,
+                    FOREIGN KEY (record_id)
+                        REFERENCES component3_daily_monitoring(record_id)
                 );
 
                 CREATE UNIQUE INDEX IF NOT EXISTS idx_c3_monitoring_order_date
@@ -116,7 +177,55 @@ class Component3MonitoringStore:
                     ON component3_daily_monitoring (label_status);
                 CREATE INDEX IF NOT EXISTS idx_c3_monitoring_risk_status
                     ON component3_daily_monitoring (risk_status);
+                CREATE INDEX IF NOT EXISTS idx_c3_monitoring_verification_status
+                    ON component3_daily_monitoring (actual_outcome_status);
+                CREATE INDEX IF NOT EXISTS idx_c3_verifications_record
+                    ON component3_monitoring_verifications (
+                        record_id, verified_at DESC
+                    );
                 """
+            )
+
+            # Records created before verified outcomes were introduced cannot
+            # be treated as ground truth. Preserve them, but remove any labels
+            # that were derived from the model's own detections.
+            connection.execute(
+                """
+                UPDATE component3_daily_monitoring
+                SET label_status = 'Awaiting Verification',
+                    emergency_within_1_day = NULL,
+                    emergency_within_3_days = NULL,
+                    first_emergency_type_within_3_days = NULL,
+                    first_emergency_lead_days = NULL,
+                    worker_shortage_within_3_days = NULL,
+                    machine_breakdown_within_3_days = NULL,
+                    quality_limit_within_3_days = NULL,
+                    output_schedule_risk_within_3_days = NULL
+                WHERE actual_outcome_status = 'Pending'
+                  AND (
+                    label_status <> 'Awaiting Verification'
+                    OR emergency_within_1_day IS NOT NULL
+                    OR emergency_within_3_days IS NOT NULL
+                  )
+                """
+            )
+
+    @staticmethod
+    def _ensure_column(
+        connection: sqlite3.Connection,
+        column_name: str,
+        declaration: str,
+    ) -> None:
+        columns = {
+            row["name"]
+            for row in connection.execute(
+                "PRAGMA table_info(component3_daily_monitoring)"
+            ).fetchall()
+        }
+        if column_name not in columns:
+            connection.execute(
+                "ALTER TABLE component3_daily_monitoring "
+                f"ADD COLUMN {column_name} {declaration}"
             )
 
     @staticmethod
@@ -135,28 +244,6 @@ class Component3MonitoringStore:
             or int(prediction_input["daily_damage_qty"])
             > int(prediction_input["max_daily_damage_qty"])
         )
-
-    @staticmethod
-    def _physical_trigger(prediction_input: dict[str, Any]) -> bool:
-        return bool(
-            int(prediction_input["worker_shortage_count"]) > 0
-            or int(prediction_input["machine_breakdown_count"]) > 0
-            or int(prediction_input["daily_damage_qty"])
-            > int(prediction_input["max_daily_damage_qty"])
-        )
-
-    @staticmethod
-    def _first_emergency_type(
-        row: sqlite3.Row,
-        prediction_input: dict[str, Any],
-    ) -> str:
-        if row["risk_type"] != "No Issue":
-            return str(row["risk_type"])
-        if int(prediction_input["machine_breakdown_count"]) > 0:
-            return "Machine Breakdown Issue"
-        if int(prediction_input["worker_shortage_count"]) > 0:
-            return "Worker Issue"
-        return "Quality Issue"
 
     def _validate_order_sequence(
         self,
@@ -256,7 +343,7 @@ class Component3MonitoringStore:
                         self._json(prediction_input),
                         self._json(analysis),
                         recorded_by,
-                        "Not Eligible" if is_emergency else "Waiting",
+                        "Awaiting Verification",
                         now,
                         now,
                     ),
@@ -270,6 +357,106 @@ class Component3MonitoringStore:
             self._refresh_labels(
                 connection,
                 str(prediction_input["bulk_order_id"]),
+                updated_at=now,
+            )
+
+        return self.get_record(record_id)
+
+    def verify_record(
+        self,
+        record_id: str,
+        *,
+        actual_emergency: bool,
+        actual_emergency_type: str | None,
+        verified_by: str,
+        verification_notes: str | None = None,
+    ) -> dict[str, Any]:
+        """Store a supervisor-confirmed outcome and refresh affected labels."""
+        if not isinstance(actual_emergency, bool):
+            raise ValueError("actual_emergency must be true or false")
+        if not isinstance(verified_by, str) or not verified_by.strip():
+            raise ValueError("verified_by is required")
+        verified_by = verified_by.strip()
+        if len(verified_by) > 120:
+            raise ValueError("verified_by must be 120 characters or fewer")
+
+        if actual_emergency:
+            normalized_type = normalize_actual_emergency_type(
+                actual_emergency_type
+            )
+        else:
+            if actual_emergency_type not in (None, ""):
+                raise ValueError(
+                    "actual_emergency_type must be empty when "
+                    "actual_emergency is false"
+                )
+            normalized_type = None
+
+        if verification_notes is not None:
+            if not isinstance(verification_notes, str):
+                raise ValueError("verification_notes must be a string")
+            verification_notes = verification_notes.strip() or None
+            if verification_notes and len(verification_notes) > 2_000:
+                raise ValueError(
+                    "verification_notes must be 2000 characters or fewer"
+                )
+
+        verification_id = str(uuid.uuid4())
+        now = utc_now()
+        with self._connection() as connection:
+            row = connection.execute(
+                """
+                SELECT bulk_order_id
+                FROM component3_daily_monitoring
+                WHERE record_id = ?
+                """,
+                (record_id,),
+            ).fetchone()
+            if row is None:
+                raise TrackingNotFoundError(
+                    f"Daily monitoring record {record_id} was not found"
+                )
+
+            connection.execute(
+                """
+                INSERT INTO component3_monitoring_verifications (
+                    verification_id, record_id, actual_emergency,
+                    actual_emergency_type, verified_by,
+                    verification_notes, verified_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    verification_id,
+                    record_id,
+                    int(actual_emergency),
+                    normalized_type,
+                    verified_by,
+                    verification_notes,
+                    now,
+                ),
+            )
+            connection.execute(
+                """
+                UPDATE component3_daily_monitoring
+                SET actual_outcome_status = 'Verified',
+                    actual_emergency = ?, actual_emergency_type = ?,
+                    verified_by = ?, verification_notes = ?,
+                    verified_at = ?, updated_at = ?
+                WHERE record_id = ?
+                """,
+                (
+                    int(actual_emergency),
+                    normalized_type,
+                    verified_by,
+                    verification_notes,
+                    now,
+                    now,
+                    record_id,
+                ),
+            )
+            self._refresh_labels(
+                connection,
+                str(row["bulk_order_id"]),
                 updated_at=now,
             )
 
@@ -296,66 +483,54 @@ class Component3MonitoringStore:
         for row in rows:
             day = int(row["working_day_no"])
             current_input = json.loads(row["prediction_input_json"])
-            status = "Waiting"
+            status = "Awaiting Verification"
             labels: tuple[Any, ...] = (None,) * 8
 
-            if bool(row["is_emergency"]):
+            if row["actual_outcome_status"] != "Verified":
+                status = "Awaiting Verification"
+            elif bool(row["actual_emergency"]):
                 status = "Not Eligible"
             else:
+                status = "Waiting"
                 future = [by_day.get(day + offset) for offset in (1, 2, 3)]
                 if all(future):
                     future_rows = [item for item in future if item is not None]
-                    future_inputs = [
-                        json.loads(item["prediction_input_json"])
+                    if any(
+                        item["actual_outcome_status"] != "Verified"
                         for item in future_rows
-                    ]
-                    future_emergencies = [
-                        bool(item["is_emergency"]) for item in future_rows
-                    ]
-                    first_emergency_type = "No Emergency"
-                    first_emergency_lead = None
-                    for lead, (future_row, future_input, emergency) in enumerate(
-                        zip(future_rows, future_inputs, future_emergencies),
-                        start=1,
                     ):
-                        if emergency:
-                            first_emergency_type = self._first_emergency_type(
-                                future_row, future_input
-                            )
-                            first_emergency_lead = lead
-                            break
+                        status = "Awaiting Verification"
+                    else:
+                        future_emergencies = [
+                            bool(item["actual_emergency"])
+                            for item in future_rows
+                        ]
+                        future_types = [
+                            item["actual_emergency_type"]
+                            for item in future_rows
+                        ]
+                        first_emergency_type = "No Emergency"
+                        first_emergency_lead = None
+                        for lead, (emergency, emergency_type) in enumerate(
+                            zip(future_emergencies, future_types),
+                            start=1,
+                        ):
+                            if emergency:
+                                first_emergency_type = str(emergency_type)
+                                first_emergency_lead = lead
+                                break
 
-                    worker = any(
-                        int(item["worker_shortage_count"]) > 0
-                        for item in future_inputs
-                    )
-                    machine = any(
-                        int(item["machine_breakdown_count"]) > 0
-                        for item in future_inputs
-                    )
-                    quality = any(
-                        int(item["daily_damage_qty"])
-                        > int(item["max_daily_damage_qty"])
-                        for item in future_inputs
-                    )
-                    schedule = any(
-                        future_row["risk_type"] != "No Issue"
-                        and not self._physical_trigger(future_input)
-                        for future_row, future_input in zip(
-                            future_rows, future_inputs
+                        status = "Ready"
+                        labels = (
+                            int(future_emergencies[0]),
+                            int(any(future_emergencies)),
+                            first_emergency_type,
+                            first_emergency_lead,
+                            int("Worker Shortage" in future_types),
+                            int("Machine Breakdown" in future_types),
+                            int("Quality Issue" in future_types),
+                            int("Output / Schedule Risk" in future_types),
                         )
-                    )
-                    status = "Ready"
-                    labels = (
-                        int(future_emergencies[0]),
-                        int(any(future_emergencies)),
-                        first_emergency_type,
-                        first_emergency_lead,
-                        int(worker),
-                        int(machine),
-                        int(quality),
-                        int(schedule),
-                    )
                 else:
                     later_rows = [
                         later for later in rows if int(later["working_day_no"]) > day
@@ -398,6 +573,7 @@ class Component3MonitoringStore:
         bulk_order_id: str | None = None,
         risk_status: str | None = None,
         label_status: str | None = None,
+        verification_status: str | None = None,
         limit: int = 50,
         offset: int = 0,
     ) -> dict[str, Any]:
@@ -412,6 +588,9 @@ class Component3MonitoringStore:
         if label_status:
             conditions.append("label_status = ?")
             parameters.append(label_status)
+        if verification_status:
+            conditions.append("actual_outcome_status = ?")
+            parameters.append(verification_status)
         clause = f"WHERE {' AND '.join(conditions)}" if conditions else ""
 
         with self._connection() as connection:
@@ -443,6 +622,17 @@ class Component3MonitoringStore:
                 "SELECT * FROM component3_daily_monitoring WHERE record_id = ?",
                 (record_id,),
             ).fetchone()
+            verification_rows = connection.execute(
+                """
+                SELECT verification_id, actual_emergency,
+                    actual_emergency_type, verified_by,
+                    verification_notes, verified_at
+                FROM component3_monitoring_verifications
+                WHERE record_id = ?
+                ORDER BY verified_at DESC, verification_id DESC
+                """,
+                (record_id,),
+            ).fetchall()
         if row is None:
             raise TrackingNotFoundError(
                 f"Daily monitoring record {record_id} was not found"
@@ -452,6 +642,19 @@ class Component3MonitoringStore:
             {
                 "prediction_input": json.loads(row["prediction_input_json"]),
                 "analysis": json.loads(row["analysis_json"]),
+                "verification_history": [
+                    {
+                        "verification_id": item["verification_id"],
+                        "actual_emergency": bool(item["actual_emergency"]),
+                        "actual_emergency_type": item[
+                            "actual_emergency_type"
+                        ],
+                        "verified_by": item["verified_by"],
+                        "verification_notes": item["verification_notes"],
+                        "verified_at": item["verified_at"],
+                    }
+                    for item in verification_rows
+                ],
             }
         )
         return record
@@ -463,6 +666,9 @@ class Component3MonitoringStore:
             ).fetchall()
 
         ready = [row for row in rows if row["label_status"] == "Ready"]
+        verified = [
+            row for row in rows if row["actual_outcome_status"] == "Verified"
+        ]
         positives = [row for row in ready if row["emergency_within_3_days"] == 1]
         negatives = [row for row in ready if row["emergency_within_3_days"] == 0]
         positive_orders = len({row["bulk_order_id"] for row in positives})
@@ -477,8 +683,26 @@ class Component3MonitoringStore:
         }
         return {
             "total_records": len(rows),
-            "stable_records": sum(not bool(row["is_emergency"]) for row in rows),
-            "emergency_records": sum(bool(row["is_emergency"]) for row in rows),
+            "verified_records": len(verified),
+            "pending_verification_records": len(rows) - len(verified),
+            "stable_records": sum(
+                not bool(row["actual_emergency"]) for row in verified
+            ),
+            "emergency_records": sum(
+                bool(row["actual_emergency"]) for row in verified
+            ),
+            "detected_stable_records": sum(
+                not bool(row["is_emergency"]) for row in rows
+            ),
+            "detected_emergency_records": sum(
+                bool(row["is_emergency"]) for row in rows
+            ),
+            "verification_status_counts": {
+                status: sum(
+                    row["actual_outcome_status"] == status for row in rows
+                )
+                for status in MONITORING_VERIFICATION_STATUSES
+            },
             "label_status_counts": label_counts,
             "three_day_target": {
                 "ready_rows": len(ready),
@@ -509,6 +733,16 @@ class Component3MonitoringStore:
             "risk_type": row["risk_type"],
             "severity": row["severity"],
             "is_emergency": bool(row["is_emergency"]),
+            "actual_outcome_status": row["actual_outcome_status"],
+            "actual_emergency": (
+                None
+                if row["actual_emergency"] is None
+                else bool(row["actual_emergency"])
+            ),
+            "actual_emergency_type": row["actual_emergency_type"],
+            "verified_by": row["verified_by"],
+            "verification_notes": row["verification_notes"],
+            "verified_at": row["verified_at"],
             "plant_daily_output": prediction_input["plant_daily_output"],
             "daily_commitment": prediction_input["daily_commitment"],
             "worker_shortage_count": prediction_input["worker_shortage_count"],
