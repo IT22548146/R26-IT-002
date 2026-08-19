@@ -63,6 +63,7 @@
 
 .metrics article,
 .readinessCard,
+.exportCard,
 .verificationCard,
 .historyCard {
   border: 1px solid var(--border);
@@ -160,6 +161,121 @@
 
 .historyCard {
   padding: 1.2rem;
+}
+
+.exportCard {
+  display: grid;
+  grid-template-columns: minmax(0, 1.15fr) minmax(360px, 0.9fr) auto;
+  align-items: center;
+  gap: 1rem;
+  padding: 1.2rem;
+  border-left-width: 5px;
+}
+
+.exportPassed {
+  border-left-color: #0f766e;
+}
+
+.exportCollecting {
+  border-left-color: #f59e0b;
+}
+
+.exportBlocked {
+  border-left-color: #dc2626;
+}
+
+.exportIntro .kicker {
+  color: #0f766e;
+}
+
+.exportIntro h2 {
+  margin-bottom: 0.3rem;
+  font-size: 1rem;
+}
+
+.exportIntro p {
+  color: var(--secondary);
+  font-size: 0.7rem;
+  line-height: 1.48;
+}
+
+.exportIntro small {
+  display: block;
+  margin-top: 0.45rem;
+  color: var(--secondary);
+  font-size: 0.6rem;
+}
+
+.exportMetrics {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+
+.exportMetrics > div {
+  padding: 0.65rem;
+  border-right: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+  background: var(--input-bg);
+}
+
+.exportMetrics > div:nth-child(2n) {
+  border-right: 0;
+}
+
+.exportMetrics > div:nth-last-child(-n + 2) {
+  border-bottom: 0;
+}
+
+.exportMetrics span,
+.exportMetrics strong {
+  display: block;
+}
+
+.exportMetrics span {
+  color: var(--secondary);
+  font-size: 0.57rem;
+}
+
+.exportMetrics strong {
+  margin-top: 0.2rem;
+  font-size: 0.9rem;
+}
+
+.exportActions {
+  display: flex;
+  min-width: 155px;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.exportActions a {
+  padding: 0.6rem 0.75rem;
+  color: #ecfeff;
+  border-radius: 8px;
+  background: #0f766e;
+  font-size: 0.64rem;
+  font-weight: 800;
+  text-align: center;
+}
+
+.exportActions a:last-child {
+  color: #0f766e;
+  border: 1px solid rgba(15, 118, 110, 0.28);
+  background: rgba(15, 118, 110, 0.08);
+}
+
+.exportActions > span {
+  max-width: 180px;
+  padding: 0.65rem;
+  color: #a16207;
+  border: 1px solid rgba(234, 179, 8, 0.25);
+  border-radius: 8px;
+  background: rgba(234, 179, 8, 0.08);
+  font-size: 0.6rem;
+  line-height: 1.45;
 }
 
 .verificationCard {
@@ -409,7 +525,7 @@
   display: block;
 }
 
-.tableWrap td > span:not(.riskBadge, .labelBadge),
+.tableWrap td > span:not(.riskBadge, .labelBadge, .verificationBadge),
 .tableWrap td small {
   margin-top: 0.17rem;
   color: var(--secondary);
@@ -514,6 +630,19 @@
   .readinessCard {
     grid-template-columns: 1fr;
   }
+
+  .exportCard {
+    grid-template-columns: 1fr;
+  }
+
+  .exportActions {
+    min-width: 0;
+    flex-direction: row;
+  }
+
+  .exportActions > * {
+    flex: 1;
+  }
 }
 
 @media (max-width: 680px) {
@@ -527,8 +656,24 @@
   .metrics,
   .filters,
   .verificationCard form,
+  .exportMetrics,
   .readinessCard dl {
     grid-template-columns: 1fr;
+  }
+
+  .exportActions {
+    flex-direction: column;
+  }
+
+  .exportMetrics > div,
+  .exportMetrics > div:nth-child(2n),
+  .exportMetrics > div:nth-last-child(-n + 2) {
+    border-right: 0;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .exportMetrics > div:last-child {
+    border-bottom: 0;
   }
 
   .readinessCard dl > div {

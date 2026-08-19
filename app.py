@@ -57,6 +57,8 @@ def index():
                 "daily_monitoring_history": "GET /api/component3/monitoring-records",
                 "verify_daily_outcome": "PUT /api/component3/monitoring-records/{record_id}/verification",
                 "early_warning_readiness": "GET /api/component3/monitoring-readiness",
+                "training_dataset_audit": "GET /api/component3/training-dataset-audit",
+                "download_training_dataset": "GET /api/component3/training-dataset?format=csv|xlsx",
             },
             "component4": {
                 "predict": "POST /api/component4/predict",

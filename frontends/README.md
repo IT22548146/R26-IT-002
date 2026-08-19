@@ -47,6 +47,11 @@ verified actual outcomes; model detections remain visible for comparison.
 Corrections create audit-history entries. Incident tracking remains a separate
 action for emergency recovery approval and outcomes.
 
+The Step 5A.3 card on Daily Monitoring History audits the verified training
+export and enables CSV or Excel downloads when an eligible `Ready` row exists.
+The Excel workbook includes the training table, audit evidence, and a column
+role manifest.
+
 Copy the example environment file before starting the frontend:
 
 ```bash

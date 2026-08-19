@@ -37,8 +37,9 @@ Request body (JSON):
 import math
 import os
 import joblib
+from io import BytesIO
 from datetime import datetime, timedelta
-from flask import Blueprint, current_app, request, jsonify
+from flask import Blueprint, current_app, request, jsonify, send_file
 
 from components.component3_features import FEATURES, build_feature_row
 from components.component3_monitoring import (
@@ -56,6 +57,11 @@ from components.component3_tracking import (
     TrackingConflictError,
     TrackingNotFoundError,
     normalize_status,
+)
+from components.component3_training_export import (
+    build_verified_training_dataset,
+    dataframe_to_csv_bytes,
+    dataframe_to_xlsx_bytes,
 )
 
 component3_bp = Blueprint("component3", __name__)
@@ -855,6 +861,67 @@ def verify_monitoring_record(record_id: str):
         "status": "success",
         "monitoring_record": monitoring_record,
     }), 200
+
+
+def _verified_training_export():
+    return build_verified_training_dataset(
+        _monitoring_store().training_export_snapshot()
+    )
+
+
+@component3_bp.route("/training-dataset-audit", methods=["GET"])
+def training_dataset_audit():
+    """Return leakage and class-balance evidence for the current export."""
+    _, audit = _verified_training_export()
+    return jsonify(audit), 200
+
+
+@component3_bp.route("/training-dataset", methods=["GET"])
+def download_training_dataset():
+    """Download verified Ready rows as CSV or an audited Excel workbook."""
+    export_format = request.args.get("format", "csv").strip().lower()
+    if export_format not in {"csv", "xlsx"}:
+        return jsonify({"error": "format must be csv or xlsx"}), 400
+
+    dataset, audit = _verified_training_export()
+    if dataset.empty:
+        return jsonify({
+            "error": "No verified Ready rows are available for export",
+            "audit": audit,
+        }), 409
+    if not audit["leakage_controls"]["passed"]:
+        return jsonify({
+            "error": "Training export failed its leakage controls",
+            "audit": audit,
+        }), 409
+
+    if export_format == "xlsx":
+        content = dataframe_to_xlsx_bytes(dataset, audit)
+        mimetype = (
+            "application/vnd.openxmlformats-officedocument."
+            "spreadsheetml.sheet"
+        )
+        filename = "component3_verified_training_dataset.xlsx"
+    else:
+        content = dataframe_to_csv_bytes(dataset)
+        mimetype = "text/csv; charset=utf-8"
+        filename = "component3_verified_training_dataset.csv"
+
+    response = send_file(
+        BytesIO(content),
+        mimetype=mimetype,
+        as_attachment=True,
+        download_name=filename,
+        max_age=0,
+    )
+    response.headers["X-Component3-Export-Rows"] = str(len(dataset))
+    response.headers["X-Component3-Export-SHA256"] = audit["dataset"][
+        "sha256_csv"
+    ]
+    response.headers["X-Component3-Training-Ready"] = str(
+        audit["primary_target"]["training_ready"]
+    ).lower()
+    return response
 
 
 @component3_bp.route("/monitoring-readiness", methods=["GET"])

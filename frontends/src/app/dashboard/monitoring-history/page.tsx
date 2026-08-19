@@ -83,6 +83,43 @@ interface ReadinessResponse {
   };
 }
 
+interface TrainingExportAudit {
+  export_version: string;
+  dataset: {
+    all_monitoring_records: number;
+    ready_source_candidates: number;
+    exported_rows: number;
+    independent_orders: number;
+    excluded_rows_by_reason: Record<string, number>;
+    sha256_csv: string;
+  };
+  schema: {
+    group_validation_column: string;
+    model_feature_count: number;
+    model_features: string[];
+    target_columns: string[];
+  };
+  sequence_quality: {
+    working_day_gap_transitions: number;
+    orders_with_working_day_gaps: string[];
+    passed: boolean;
+  };
+  leakage_controls: {
+    identity_columns_in_model_features: string[];
+    future_targets_in_model_features: string[];
+    passed: boolean;
+  };
+  primary_target: {
+    name: string;
+    positive_rows: number;
+    negative_rows: number;
+    positive_orders: number;
+    negative_orders: number;
+    training_ready: boolean;
+  };
+  decision: string;
+}
+
 const ACTUAL_EMERGENCY_TYPES: ActualEmergencyType[] = [
   'Worker Shortage',
   'Machine Breakdown',
@@ -114,6 +151,9 @@ function futureOutcome(record: MonitoringRecord) {
 export default function MonitoringHistoryPage() {
   const [records, setRecords] = useState<MonitoringRecord[]>([]);
   const [readiness, setReadiness] = useState<ReadinessResponse | null>(null);
+  const [exportAudit, setExportAudit] = useState<TrainingExportAudit | null>(
+    null,
+  );
   const [total, setTotal] = useState(0);
   const [orderFilter, setOrderFilter] = useState('');
   const [riskFilter, setRiskFilter] = useState('');
@@ -163,13 +203,15 @@ export default function MonitoringHistoryPage() {
     Promise.all([
       requestJson(`/monitoring-records?${query}`),
       requestJson('/monitoring-readiness'),
+      requestJson('/training-dataset-audit'),
     ])
-      .then(([listPayload, readinessPayload]) => {
+      .then(([listPayload, readinessPayload, exportAuditPayload]) => {
         if (cancelled) return;
         const list = listPayload as MonitoringListResponse;
         setRecords(list.items);
         setTotal(list.total);
         setReadiness(readinessPayload as ReadinessResponse);
+        setExportAudit(exportAuditPayload as TrainingExportAudit);
         setError('');
       })
       .catch((requestError: unknown) => {
@@ -189,6 +231,11 @@ export default function MonitoringHistoryPage() {
   }, [query, refreshVersion, requestJson]);
 
   const target = readiness?.three_day_target;
+  const canExport = Boolean(
+    exportAudit &&
+      exportAudit.dataset.exported_rows > 0 &&
+      exportAudit.leakage_controls.passed,
+  );
 
   const openVerification = (record: MonitoringRecord) => {
     setSelectedRecord(record);
@@ -336,6 +383,78 @@ export default function MonitoringHistoryPage() {
             <dd>{target?.negative_orders ?? 0}</dd>
           </div>
         </dl>
+      </section>
+
+      <section
+        className={`${styles.exportCard} ${
+          !exportAudit
+            ? styles.exportCollecting
+            : exportAudit.leakage_controls.passed
+            ? styles.exportPassed
+            : styles.exportBlocked
+        }`}
+      >
+        <div className={styles.exportIntro}>
+          <span className={styles.kicker}>Step 5A.3 training export</span>
+          <h2>
+            {exportAudit?.primary_target.training_ready
+              ? 'Export is ready for Step 5B evaluation'
+              : 'Audited dataset export'}
+          </h2>
+          <p>
+            Only verified Ready source days are exported. Order identity remains
+            grouping metadata, while future outcomes and verification fields are
+            excluded from model inputs.
+          </p>
+          <small>
+            {exportAudit
+              ? `${exportAudit.decision} Sequence check: ${
+                  exportAudit.sequence_quality.passed
+                    ? 'Passed'
+                    : `${exportAudit.sequence_quality.working_day_gap_transitions} gap transition(s)`
+                }.`
+              : 'Loading export audit...'}
+          </small>
+        </div>
+
+        <div className={styles.exportMetrics}>
+          <div>
+            <span>Export rows</span>
+            <strong>{exportAudit?.dataset.exported_rows ?? 0}</strong>
+          </div>
+          <div>
+            <span>Independent orders</span>
+            <strong>{exportAudit?.dataset.independent_orders ?? 0}</strong>
+          </div>
+          <div>
+            <span>Model features</span>
+            <strong>{exportAudit?.schema.model_feature_count ?? 0}</strong>
+          </div>
+          <div>
+            <span>Leakage check</span>
+            <strong>
+              {exportAudit?.leakage_controls.passed ? 'Passed' : 'Blocked'}
+            </strong>
+          </div>
+        </div>
+
+        <div className={styles.exportActions}>
+          {canExport ? (
+            <>
+              <a href={`${API_BASE_URL}/training-dataset?format=csv`}>
+                Download CSV
+              </a>
+              <a href={`${API_BASE_URL}/training-dataset?format=xlsx`}>
+                Download Excel + audit
+              </a>
+            </>
+          ) : (
+            <span>
+              Verify enough daily sequences to create at least one exportable
+              Ready row.
+            </span>
+          )}
+        </div>
       </section>
 
       {selectedRecord && (

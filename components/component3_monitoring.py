@@ -659,6 +659,25 @@ class Component3MonitoringStore:
         )
         return record
 
+    def training_export_snapshot(self) -> list[dict[str, Any]]:
+        """Return an ordered, read-only snapshot for dataset preparation."""
+        with self._connection() as connection:
+            rows = connection.execute(
+                """
+                SELECT * FROM component3_daily_monitoring
+                ORDER BY bulk_order_id, working_day_no, production_date
+                """
+            ).fetchall()
+
+        snapshot: list[dict[str, Any]] = []
+        for row in rows:
+            record = self._summary(row)
+            record["prediction_input"] = json.loads(
+                row["prediction_input_json"]
+            )
+            snapshot.append(record)
+        return snapshot
+
     def readiness_summary(self) -> dict[str, Any]:
         with self._connection() as connection:
             rows = connection.execute(

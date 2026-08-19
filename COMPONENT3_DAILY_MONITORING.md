@@ -139,6 +139,9 @@ The minimum research threshold is 20 ready examples and three independent
 orders in each class. Passing this threshold allows Step 5B evaluation to
 begin; it is not by itself a production-readiness claim.
 
+The Step 5A.3 leakage-safe CSV/Excel export and its independent audit are
+documented in [`COMPONENT3_TRAINING_EXPORT.md`](COMPONENT3_TRAINING_EXPORT.md).
+
 ## Frontend workflow
 
 1. Open `/dashboard/monitoring` and run the daily analysis.
@@ -150,6 +153,8 @@ begin; it is not by itself a production-readiness claim.
 5. Review saved sequences, verification status, future labels, filters, and
    live readiness. Use **Correct** if a supervisor-approved outcome changes;
    the audit history remains available.
+6. Use the Step 5A.3 export card to inspect the leakage audit and download CSV
+   or Excel when at least one verified Ready source row exists.
 
 ## Production boundary
 

@@ -35,6 +35,9 @@ The backend is organized into four specialized components, each accessible via i
   supervisor-verified actual outcomes with an audit history, derives exact
   three-day future labels, and reports live training readiness. See
   [`COMPONENT3_DAILY_MONITORING.md`](COMPONENT3_DAILY_MONITORING.md).
+- **Verified Training Export**: Exports only eligible verified source days,
+  audits leakage and class balance, and provides CSV/Excel artifacts for Step
+  5B. See [`COMPONENT3_TRAINING_EXPORT.md`](COMPONENT3_TRAINING_EXPORT.md).
 
 ### 4. Production Analysis & Resource Optimization (`/api/component4`)
 - **Efficiency Analytics**: Detailed insights into production performance.
