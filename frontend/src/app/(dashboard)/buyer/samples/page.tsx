@@ -55,6 +55,11 @@ export default function BuyerSamples() {
 
   // Today's date (YYYY-MM-DD) — used to block past required dates.
   const today = new Date().toISOString().split("T")[0];
+  // Orders need a realistic lead time - the buyer cannot request a date sooner
+  // than this. Mirrors MIN_LEAD_DAYS on the server.
+  const MIN_LEAD_DAYS = 20;
+  const earliestDate = new Date(Date.now() + MIN_LEAD_DAYS * 86400000)
+    .toISOString().split("T")[0];
 
   const fetchOrders = async () => {
     try {
@@ -102,8 +107,8 @@ export default function BuyerSamples() {
       Swal.fire({ icon: 'warning', title: 'Sample quantity must be between 5 and 9.' });
       return;
     }
-    if (editForm.buyer_required_date < today) {
-      Swal.fire({ icon: 'warning', title: 'Required date cannot be in the past.' });
+    if (editForm.buyer_required_date < earliestDate) {
+      Swal.fire({ icon: 'warning', title: `Required date must be at least ${MIN_LEAD_DAYS} days from today.` });
       return;
     }
     setSavingEdit(true);
@@ -179,8 +184,8 @@ export default function BuyerSamples() {
       Swal.fire({ icon: 'warning', title: 'The style file must be a PDF.' });
       return;
     }
-    if (formData.buyer_required_date < today) {
-      Swal.fire({ icon: 'warning', title: 'Invalid date', text: 'Required date cannot be in the past.' });
+    if (formData.buyer_required_date < earliestDate) {
+      Swal.fire({ icon: 'warning', title: 'Invalid date', text: `Required date must be at least ${MIN_LEAD_DAYS} days from today (earliest ${earliestDate}).` });
       return;
     }
 
@@ -306,7 +311,7 @@ export default function BuyerSamples() {
               </div>
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">Required Date *</label>
-                <Input type="date" required min={today} value={formData.buyer_required_date} onChange={e => setFormData({...formData, buyer_required_date: e.target.value})} />
+                <Input type="date" required min={earliestDate} value={formData.buyer_required_date} onChange={e => setFormData({...formData, buyer_required_date: e.target.value})} />
               </div>
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">Style PDF *</label>
@@ -443,7 +448,7 @@ export default function BuyerSamples() {
               </div>
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">Required Date *</label>
-                <Input type="date" required min={today} value={editForm.buyer_required_date}
+                <Input type="date" required min={earliestDate} value={editForm.buyer_required_date}
                   onChange={(e) => setEditForm({ ...editForm, buyer_required_date: e.target.value })} />
               </div>
               <div>

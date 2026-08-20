@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import { useParams, useRouter } from "next/navigation";
 import api from "@/lib/api";
 import Swal from "@/lib/swal";
-import { ArrowLeft, CheckCircle2, AlertTriangle, AlertCircle, Info, Mail, RefreshCw, Factory, Pause, Play, Truck, Split, Plus, X } from "lucide-react";
+import { ArrowLeft, CheckCircle2, AlertTriangle, AlertCircle, Info, Mail, RefreshCw, Factory, Pause, Play, Truck, Split, Plus, X, Clock, CalendarCheck } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { StageSelect } from "@/components/OrderTracker";
@@ -73,13 +73,60 @@ export default function BulkOrderDetail() {
     }
   };
 
+  // These buttons RECORD a reply the buyer gave outside the app (phone, direct
+  // email). They are not the admin approving on the buyer's behalf, so confirm
+  // the intent explicitly before writing it against the buyer's name.
   const handleCustomerResponse = async (response: "Approved" | "Rejected") => {
+    const proposed = order?.proposed_required_date;
+    const confirm = await Swal.fire({
+      icon: "warning",
+      title: `Record that the buyer ${response.toLowerCase()} this?`,
+      text: response === "Approved"
+        ? (proposed
+            ? `Only do this if the buyer confirmed outside the app. The required date will move to ${new Date(proposed).toLocaleDateString()}.`
+            : "Only do this if the buyer confirmed outside the app.")
+        : "Only do this if the buyer declined outside the app. The order moves to On Hold.",
+      showCancelButton: true,
+      confirmButtonText: `Yes, buyer ${response.toLowerCase()}`,
+    });
+    if (!confirm.isConfirmed) return;
     try {
       const res = await api.post(`/admin/orders/bulk/${id}/customer-response`, { response });
-      Swal.fire({ icon: "success", title: `Recorded: ${response}`, text: res.data.assignable ? "You can now assign a plant." : "Order moved to On Hold." });
+      Swal.fire({
+        icon: "success",
+        title: `Recorded: ${response}`,
+        text: res.data.buyer_required_date
+          ? `Required date updated to ${res.data.buyer_required_date}.`
+          : (res.data.assignable ? "You can now assign a plant." : "Order moved to On Hold."),
+      });
       await fetchOrder();
     } catch (err: any) {
       Swal.fire({ icon: "error", title: "Error", text: err.response?.data?.error || "Failed." });
+    }
+  };
+
+  // Accept the extension the buyer asked for: moves buyer_required_date out and
+  // re-runs Component 2 against the new deadline.
+  const handleAcceptExtension = async () => {
+    const days = order?.extension_days_requested;
+    const r = await Swal.fire({
+      icon: "question",
+      title: days ? `Accept +${days} day(s)?` : "Accept the new date?",
+      text: "The required date moves out and the timeline is recalculated.",
+      showCancelButton: true, confirmButtonText: "Accept",
+    });
+    if (!r.isConfirmed) return;
+    try {
+      const res = await api.post(`/admin/orders/bulk/${id}/apply-extension`, {});
+      Swal.fire({
+        icon: "success",
+        title: "Required date updated",
+        text: `${res.data.previous_required_date} → ${res.data.buyer_required_date}` +
+              (res.data.deadline_match ? ` · deadline ${res.data.deadline_match}` : ""),
+      });
+      await fetchOrder();
+    } catch (err: any) {
+      Swal.fire({ icon: "error", title: "Error", text: err.response?.data?.error || "Failed to apply the extension." });
     }
   };
 
@@ -128,6 +175,9 @@ export default function BulkOrderDetail() {
   const canReeval = ["Pending", "CustomerPending", "Hold"].includes(order.status);
   const canAssign = ["Pending", "CustomerPending", "Hold"].includes(order.status);
   const c2ok = Boolean(c2_result);
+  // Timeline email sent but the buyer has not replied yet - assignment must wait.
+  const awaitingBuyer = order.status === "CustomerPending" && !order.customer_response;
+  const extensionRequested = order.customer_response === "Rejected" && Boolean(order.extension_days_requested);
 
   // Plants this order was actually assigned to (highlighted in the ranking below).
   const assignedPlants: any[] = order.allocations || [];
@@ -231,7 +281,6 @@ export default function BulkOrderDetail() {
             <div className="px-6 py-4 border-b border-slate-100 bg-slate-50 flex items-center justify-between gap-3">
               <h3 className="font-semibold text-slate-800">Order Actions</h3>
               <div className="flex items-center gap-2">
-                <span className="text-xs text-slate-500 hidden sm:inline">Production stage</span>
                 <StageSelect value={order.production_stage} onChange={handleStageChange} />
               </div>
             </div>
@@ -243,18 +292,39 @@ export default function BulkOrderDetail() {
               )}
 
               {order.status === "CustomerPending" && order.customer_response !== "Approved" && (
-                <>
-                  <Button size="sm" className="bg-green-600 hover:bg-green-700" onClick={() => handleCustomerResponse("Approved")}>
-                    Customer Approved
-                  </Button>
-                  <Button size="sm" variant="outline" onClick={() => handleCustomerResponse("Rejected")}>
-                    Customer Rejected
-                  </Button>
-                </>
+                <div className="w-full rounded-lg border border-slate-200 bg-slate-50 p-3">
+                  <p className="text-xs text-slate-500 mb-2">
+                    Waiting for the buyer to respond in their portal. Only use these if they
+                    replied <strong>outside the app</strong>:
+                  </p>
+                  <div className="flex flex-wrap gap-2">
+                    <Button size="sm" variant="outline" className="border-green-300 text-green-700 hover:bg-green-50"
+                            onClick={() => handleCustomerResponse("Approved")}>
+                      Record buyer approval
+                    </Button>
+                    <Button size="sm" variant="outline" className="border-orange-300 text-orange-700 hover:bg-orange-50"
+                            onClick={() => handleCustomerResponse("Rejected")}>
+                      Record buyer rejection
+                    </Button>
+                  </div>
+                </div>
+              )}
+
+              {awaitingBuyer && (
+                <span className="inline-flex items-center gap-1 text-xs font-semibold px-2.5 py-1 rounded-full bg-purple-50 text-purple-700 border border-purple-200">
+                  <Clock className="w-3.5 h-3.5" /> Awaiting buyer reply — assignment locked
+                </span>
+              )}
+
+              {extensionRequested && (
+                <Button size="sm" className="bg-emerald-600 hover:bg-emerald-700" onClick={handleAcceptExtension}>
+                  <CalendarCheck className="w-4 h-4 mr-1" /> Accept +{order.extension_days_requested} day(s)
+                </Button>
               )}
 
               {canAssign && (
                 <Button size="sm" className="bg-indigo-600 hover:bg-indigo-700" onClick={() => setAssignOpen(true)}
+                  title={awaitingBuyer ? "Waiting for the buyer to respond to the proposed timeline" : undefined}
                   disabled={order.status === "CustomerPending" && order.customer_response !== "Approved"}>
                   <Factory className="w-4 h-4 mr-1" /> Assign Plant
                 </Button>
@@ -297,6 +367,23 @@ export default function BulkOrderDetail() {
               )}
             </div>
             <div className="p-6 space-y-4">
+              {/* What we proposed - so the admin sees the same figures as the buyer. */}
+              {order.timeline_decision && (
+                <div className="rounded-lg border border-indigo-200 bg-indigo-50 p-3 text-sm">
+                  <p className="font-semibold text-indigo-900">
+                    {order.timeline_decision === "cannot_complete"
+                      ? `Proposed: ${order.timeline_gap_days} extra day(s)`
+                      : "Proposed: can complete within the buyer's schedule"}
+                  </p>
+                  <p className="text-xs text-indigo-700 mt-1">
+                    {order.timeline_needed_days} days needed vs {order.timeline_given_days} given
+                    {order.proposed_required_date
+                      ? ` · new date ${new Date(order.proposed_required_date).toLocaleDateString()} (pending acceptance)`
+                      : ""}
+                  </p>
+                </div>
+              )}
+
               {/* Latest structured response */}
               {order.customer_response ? (
                 <div className="rounded-lg border border-slate-200 p-4">

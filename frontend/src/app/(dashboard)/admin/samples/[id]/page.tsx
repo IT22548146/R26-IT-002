@@ -222,7 +222,6 @@ export default function SampleOrderDetail() {
             <div className="px-6 py-4 border-b border-slate-100 bg-slate-50 flex items-center justify-between gap-3">
               <h3 className="font-semibold text-slate-800">Order Actions</h3>
               <div className="flex items-center gap-2">
-                <span className="text-xs text-slate-500 hidden sm:inline">Production stage</span>
                 <StageSelect value={order.production_stage} onChange={handleStageChange} />
               </div>
             </div>
