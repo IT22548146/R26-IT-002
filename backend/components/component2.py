@@ -275,23 +275,20 @@ def _score_plants_bulk(priority: str, complexity: str,
         pref_bon     = 0.5 if plant in preferred else 0.0
         buf_bon      = min(buffer_days * 0.03, 0.30)
 
-        # Per-plant capacity load: how many months of this plant's capacity
-        # does this order consume? Raw ratio, not capped at 1.0.
-        raw_ratio = order_qty / max(plant_cap * sp_working_days, 1)
+        # Per-plant capacity load: what share of this plant's AVAILABLE capacity
+        # does the order consume? monthly_caps already holds units available over
+        # the production window, so dividing by sp_working_days as well counted
+        # the capacity 25x over and made this penalty almost meaningless
+        # (dropping a plant from 60,000 free units to 2,000 moved its score by
+        # 0.02). Compare the order against the capacity directly.
+        raw_ratio = order_qty / max(plant_cap, 1)
         cap_pen   = raw_ratio * 0.10
 
-        # FIX: can_solo uses per-plant network share ratio.
-        # Previous formula multiplied styles/month × pcs/day — a unit mismatch
-        # that inflated small capacities (e.g. cap=10 × dc=400 = 4000 ≥ 1200 → True
-        # for a plant that clearly cannot handle the order alone).
-        # New formula: a plant can handle solo only if it holds a meaningful share
-        # of the total network capacity (≥ MIN_SOLO_SHARE). This correctly flags
-        # low-capacity plants (e.g. Bobbin at 10/634 = 1.6% → False) while
-        # accepting normal plants (e.g. Dinusha at 120/634 = 18.9% → True).
-        MIN_SOLO_SHARE  = 0.15
-        network_total   = sum(monthly_caps.values())
-        plant_share     = plant_cap / max(network_total, 1)
-        can_solo        = plant_share >= MIN_SOLO_SHARE
+        # can_solo now asks the literal question: does the order fit inside this
+        # plant's available capacity for the production window? The old network
+        # share test (>= 15% of total capacity) said nothing about whether the
+        # order actually fits - a plant with 2,000 units free still passed it.
+        can_solo = plant_cap >= order_qty
 
         score = quality - (miss_r * 3) - cap_pen + pref_bon + buf_bon
         scores[plant] = (round(score, 4), can_solo)
@@ -776,6 +773,33 @@ def predict():
             daily_commitment=daily_commitment,
             daily_commitment_adj=daily_commitment_adj,
         )
+
+        # No plant has room for this order in the window - say so instead of
+        # returning a "top plant" with a nonsense negative score.
+        network_available = sum(monthly_caps.values())
+        best_plant_cap    = max(monthly_caps.values()) if monthly_caps else 0
+        no_plant_fits     = best_plant_cap < order_qty
+        network_too_small = network_available < order_qty
+        if network_too_small:
+            # capacity_status in the response is derived from plant_blocked, so set
+            # that flag rather than a local (which would be dead code).
+            plant_blocked = True
+            plant_blocked_warning = (
+                "No plant has capacity for this order. The network has "
+                "%s units available across the production window but the order is "
+                "%s pcs. Reduce the quantity, extend the timeline, or free capacity."
+                % (f"{int(network_available):,}", f"{order_qty:,}")
+            )
+        elif no_plant_fits:
+            # The network can absorb it, but only if the work is split.
+            alloc_type = "Split Between Sub Plants"
+            alloc_prob = max(alloc_prob, 0.99)
+            if not alloc_override_note:
+                alloc_override_note = (
+                    "No single plant has room for %s pcs (largest free capacity is %s). "
+                    "The order must be split across plants."
+                    % (f"{order_qty:,}", f"{int(best_plant_cap):,}")
+                )
 
         return jsonify({
             "status":          "success",
