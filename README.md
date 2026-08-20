@@ -38,6 +38,10 @@ The backend is organized into four specialized components, each accessible via i
 - **Verified Training Export**: Exports only eligible verified source days,
   audits leakage and class balance, and provides CSV/Excel artifacts for Step
   5B. See [`COMPONENT3_TRAINING_EXPORT.md`](COMPONENT3_TRAINING_EXPORT.md).
+- **Grouped Subtype Early-Warning Experiment**: Compares Logistic Regression,
+  Random Forest and XGBoost against a no-skill baseline using complete held-out
+  bulk orders, then saves research-only three-day warning artifacts. See
+  [`COMPONENT3_EARLY_WARNING_STEP5B.md`](COMPONENT3_EARLY_WARNING_STEP5B.md).
 
 ### 4. Production Analysis & Resource Optimization (`/api/component4`)
 - **Efficiency Analytics**: Detailed insights into production performance.

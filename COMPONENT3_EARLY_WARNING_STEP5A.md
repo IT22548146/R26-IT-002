@@ -58,6 +58,9 @@ These subtype targets may be compared in a research experiment, but they do not
 make the complete general early-warning objective production-ready. There are
 still only 11 independent orders.
 
+The three approved subtype comparisons are now implemented in Step 5B. See
+[`COMPONENT3_EARLY_WARNING_STEP5B.md`](COMPONENT3_EARLY_WARNING_STEP5B.md).
+
 ## Reproduce the audit
 
 ```bash
