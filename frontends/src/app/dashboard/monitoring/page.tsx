@@ -75,6 +75,56 @@ interface RecoveryPlan {
   assumptions: string[];
 }
 
+type EarlyWarningStatus =
+  | 'available'
+  | 'not_applicable_current_emergency'
+  | 'unavailable';
+
+interface EarlyWarningItem {
+  target: string;
+  display_name: string;
+  probability: number;
+  probability_pct: number;
+  decision_threshold: number;
+  warning_predicted: boolean;
+  model_name: string;
+  validation_metrics: {
+    accuracy: number;
+    macro_f1: number;
+    f1: number;
+  };
+  preparation: string;
+}
+
+interface EarlyWarningResult {
+  inference_version: string;
+  status: EarlyWarningStatus;
+  production_approved: boolean;
+  horizon_production_days: number;
+  current_risk_type: string;
+  alert_generated: boolean;
+  highest_warning: {
+    target: string;
+    display_name: string;
+    probability: number;
+    probability_pct: number;
+  } | null;
+  warnings: EarlyWarningItem[];
+  history: {
+    source: string;
+    saved_prior_records: number;
+    feature_history_days: number;
+    maximum_feature_history_days: number;
+    status: 'complete' | 'partial' | 'current_only' | 'gapped';
+    working_day_gap_detected: boolean;
+    working_day_gap_transitions: number;
+    latest_prior_working_day: number | null;
+    future_or_current_saved_rows_used: number;
+  } | null;
+  message: string;
+  limitations: string[];
+}
+
 interface MonitoringResponse {
   status: string;
   model_version: string;
@@ -163,6 +213,7 @@ interface MonitoringResponse {
     store_for_ml_training: boolean;
   };
   recovery_plan: RecoveryPlan;
+  early_warning: EarlyWarningResult;
 }
 
 interface FieldDefinition {
@@ -446,6 +497,25 @@ function recoveryStatusLabel(status: RecoveryPlan['status']) {
     recovery_required: 'Recovery required',
   };
   return labels[status];
+}
+
+function earlyWarningStatusLabel(warning: EarlyWarningResult) {
+  if (warning.status === 'not_applicable_current_emergency') {
+    return 'Current emergency active';
+  }
+  if (warning.status === 'unavailable') return 'Models unavailable';
+  return warning.alert_generated ? 'Warning threshold crossed' : 'Below thresholds';
+}
+
+function historyStatusLabel(history: EarlyWarningResult['history']) {
+  if (!history) return 'Not evaluated';
+  const labels: Record<NonNullable<EarlyWarningResult['history']>['status'], string> = {
+    complete: 'Complete 3-day feature history',
+    partial: 'Partial saved history',
+    current_only: 'Current day only',
+    gapped: 'Saved history has gaps',
+  };
+  return labels[history.status];
 }
 
 function recoveryParameters(data: RecoveryFormData) {
@@ -955,6 +1025,92 @@ export default function MonitoringPage() {
                   <span>{result.risk_detection.severity ?? 'No Risk'} severity</span>
                 </div>
               </div>
+
+              <section
+                className={`${styles.earlyWarningPanel} ${
+                  result.early_warning.status === 'available'
+                    ? result.early_warning.alert_generated
+                      ? styles.earlyWarningAlert
+                      : styles.earlyWarningClear
+                    : styles.earlyWarningNeutral
+                }`}
+                aria-labelledby="early-warning-title"
+              >
+                <div className={styles.earlyWarningHeader}>
+                  <div>
+                    <span className={styles.sectionKicker}>
+                      Experimental early warning · next 3 production days
+                    </span>
+                    <h3 id="early-warning-title">Emerging subtype risks</h3>
+                  </div>
+                  <span className={styles.earlyWarningStatus}>
+                    {earlyWarningStatusLabel(result.early_warning)}
+                  </span>
+                </div>
+
+                {result.early_warning.status === 'available' ? (
+                  <>
+                    <div className={styles.earlyWarningHistory}>
+                      <span>{historyStatusLabel(result.early_warning.history)}</span>
+                      <span>
+                        {result.early_warning.history?.saved_prior_records ?? 0}{' '}
+                        saved prior day(s)
+                      </span>
+                    </div>
+                    <div className={styles.earlyWarningGrid}>
+                      {result.early_warning.warnings.map((warning) => {
+                        const score = clampPercentage(warning.probability_pct);
+                        return (
+                          <article
+                            className={
+                              warning.warning_predicted
+                                ? styles.warningCrossed
+                                : styles.warningBelow
+                            }
+                            key={warning.target}
+                          >
+                            <div className={styles.warningScoreHeader}>
+                              <div>
+                                <span>{warning.display_name}</span>
+                                <small>{warning.model_name.replaceAll('_', ' ')}</small>
+                              </div>
+                              <strong>{score.toFixed(1)}%</strong>
+                            </div>
+                            <div className={styles.warningScoreTrack}>
+                              <span style={{ width: `${score}%` }} />
+                            </div>
+                            <div className={styles.warningDecision}>
+                              <strong>
+                                {warning.warning_predicted
+                                  ? 'Warning indicated'
+                                  : 'Below model threshold'}
+                              </strong>
+                              <span>
+                                threshold{' '}
+                                {(warning.decision_threshold * 100).toFixed(0)}%
+                              </span>
+                            </div>
+                            <p>{warning.preparation}</p>
+                          </article>
+                        );
+                      })}
+                    </div>
+                  </>
+                ) : (
+                  <div className={styles.earlyWarningMessage}>
+                    <strong>Future subtype warning was not scored</strong>
+                    <span>{result.early_warning.message}</span>
+                  </div>
+                )}
+
+                <div className={styles.earlyWarningFootnote}>
+                  <span>Research only · production approval pending</span>
+                  <span>
+                    Scores are uncalibrated; worker-shortage future warning is not
+                    included.
+                  </span>
+                </div>
+              </section>
 
               <div className={styles.confidenceGrid}>
                 <div className={styles.confidenceCard}>

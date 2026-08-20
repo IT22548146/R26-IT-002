@@ -570,6 +570,173 @@
   background: #f97316;
 }
 
+.earlyWarningPanel {
+  padding: 1.05rem;
+  border: 1px solid var(--border);
+  border-left-width: 4px;
+  border-radius: 12px;
+  background: var(--card-bg);
+}
+
+.earlyWarningAlert {
+  border-left-color: #dc2626;
+}
+
+.earlyWarningClear {
+  border-left-color: #0f766e;
+}
+
+.earlyWarningNeutral {
+  border-left-color: #f59e0b;
+}
+
+.earlyWarningHeader,
+.warningScoreHeader,
+.warningDecision,
+.earlyWarningHistory,
+.earlyWarningFootnote {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.8rem;
+}
+
+.earlyWarningHeader {
+  margin-bottom: 0.8rem;
+}
+
+.earlyWarningHeader h3 {
+  font-size: 1rem;
+}
+
+.earlyWarningHeader .sectionKicker {
+  color: var(--primary);
+  font-size: 0.6rem;
+}
+
+.earlyWarningStatus {
+  flex: 0 0 auto;
+  padding: 0.38rem 0.58rem;
+  color: var(--foreground);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--input-bg);
+  font-size: 0.62rem;
+  font-weight: 700;
+}
+
+.earlyWarningHistory {
+  margin-bottom: 0.7rem;
+  padding: 0.58rem 0.68rem;
+  color: var(--secondary);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--input-bg);
+  font-size: 0.6rem;
+}
+
+.earlyWarningGrid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.65rem;
+}
+
+.earlyWarningGrid article {
+  min-width: 0;
+  padding: 0.72rem;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: var(--input-bg);
+}
+
+.warningCrossed {
+  box-shadow: inset 0 3px 0 #ef4444;
+}
+
+.warningBelow {
+  box-shadow: inset 0 3px 0 #10b981;
+}
+
+.warningScoreHeader span,
+.warningScoreHeader small {
+  display: block;
+}
+
+.warningScoreHeader span {
+  font-size: 0.68rem;
+  font-weight: 700;
+}
+
+.warningScoreHeader small {
+  margin-top: 0.15rem;
+  color: var(--secondary);
+  font-size: 0.55rem;
+  text-transform: capitalize;
+}
+
+.warningScoreHeader strong {
+  flex: 0 0 auto;
+  font-size: 0.86rem;
+}
+
+.warningScoreTrack {
+  height: 6px;
+  margin: 0.55rem 0;
+  overflow: hidden;
+  border-radius: 99px;
+  background: var(--card-bg);
+}
+
+.warningScoreTrack span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #f59e0b, #ef4444);
+}
+
+.warningDecision {
+  align-items: center;
+  color: var(--secondary);
+  font-size: 0.55rem;
+}
+
+.warningDecision strong {
+  color: var(--foreground);
+  font-size: 0.58rem;
+}
+
+.earlyWarningGrid article > p {
+  margin-top: 0.55rem;
+  color: var(--secondary);
+  font-size: 0.58rem;
+  line-height: 1.45;
+}
+
+.earlyWarningMessage {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  padding: 0.75rem;
+  color: var(--secondary);
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: var(--input-bg);
+  font-size: 0.64rem;
+  line-height: 1.45;
+}
+
+.earlyWarningMessage strong {
+  color: var(--foreground);
+}
+
+.earlyWarningFootnote {
+  margin-top: 0.7rem;
+  padding-top: 0.6rem;
+  color: var(--secondary);
+  border-top: 1px solid var(--border);
+  font-size: 0.55rem;
+}
+
 .assessmentGrid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -1223,7 +1390,8 @@
   .detailGrid,
   .statsGrid,
   .recoverySummaryGrid,
-  .optionForecast {
+  .optionForecast,
+  .earlyWarningGrid {
     grid-template-columns: 1fr;
   }
 
@@ -1238,7 +1406,10 @@
 
   .recoveryHeader,
   .optionHeading,
-  .triggerRow {
+  .triggerRow,
+  .earlyWarningHeader,
+  .earlyWarningFootnote,
+  .earlyWarningHistory {
     align-items: flex-start;
     flex-direction: column;
   }

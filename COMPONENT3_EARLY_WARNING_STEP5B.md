@@ -114,8 +114,10 @@ These are model-selection scores from only 11 independent orders, not a locked
 final production test. The selected models are refitted research artifacts and
 must stay experimental until they are validated on new, untouched real orders.
 
-Step 5C can now load the artifacts, build current/past-only features from the
-saved order history, and expose the three probabilities through the Component
-3 Flask API and monitoring frontend. Worker-shortage recovery continues through
-the current-day detector and deterministic recovery engine while more real
-negative worker-shortage sequences are collected.
+Step 5C now loads the artifacts, builds current/past-only features from saved
+same-order history, and exposes the three research scores through the Component
+3 Flask API and monitoring frontend. See
+[`COMPONENT3_EARLY_WARNING_STEP5C.md`](COMPONENT3_EARLY_WARNING_STEP5C.md).
+Worker-shortage recovery continues through the current-day detector and
+deterministic recovery engine while more real negative worker-shortage
+sequences are collected.

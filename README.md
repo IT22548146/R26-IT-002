@@ -42,6 +42,11 @@ The backend is organized into four specialized components, each accessible via i
   Random Forest and XGBoost against a no-skill baseline using complete held-out
   bulk orders, then saves research-only three-day warning artifacts. See
   [`COMPONENT3_EARLY_WARNING_STEP5B.md`](COMPONENT3_EARLY_WARNING_STEP5B.md).
+- **Experimental Early-Warning Integration**: Loads the three selected
+  artifacts with current/past-only same-order history and displays
+  research-only next-three-production-day warnings without interrupting
+  current emergency recovery. See
+  [`COMPONENT3_EARLY_WARNING_STEP5C.md`](COMPONENT3_EARLY_WARNING_STEP5C.md).
 
 ### 4. Production Analysis & Resource Optimization (`/api/component4`)
 - **Efficiency Analytics**: Detailed insights into production performance.

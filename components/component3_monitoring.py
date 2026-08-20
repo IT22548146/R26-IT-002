@@ -678,6 +678,39 @@ class Component3MonitoringStore:
             snapshot.append(record)
         return snapshot
 
+    def inference_history(
+        self,
+        bulk_order_id: str,
+        *,
+        before_working_day: int,
+        before_production_date: str,
+    ) -> list[dict[str, Any]]:
+        """Return only saved observations earlier than the inference day."""
+        with self._connection() as connection:
+            rows = connection.execute(
+                """
+                SELECT * FROM component3_daily_monitoring
+                WHERE bulk_order_id = ?
+                  AND working_day_no < ?
+                  AND production_date < ?
+                ORDER BY working_day_no, production_date
+                """,
+                (
+                    str(bulk_order_id),
+                    int(before_working_day),
+                    str(before_production_date),
+                ),
+            ).fetchall()
+
+        history: list[dict[str, Any]] = []
+        for row in rows:
+            record = self._summary(row)
+            record["prediction_input"] = json.loads(
+                row["prediction_input_json"]
+            )
+            history.append(record)
+        return history
+
     def readiness_summary(self) -> dict[str, Any]:
         with self._connection() as connection:
             rows = connection.execute(

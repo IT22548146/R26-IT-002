@@ -1,4 +1,5 @@
 import os
+import tempfile
 import unittest
 
 from app import app
@@ -92,6 +93,7 @@ class Component3V2ApiTests(unittest.TestCase):
             "action",
             "planning_output",
             "recovery_plan",
+            "early_warning",
         }
         self.assertTrue(expected_sections.issubset(result))
         self.assertIn(
@@ -110,6 +112,77 @@ class Component3V2ApiTests(unittest.TestCase):
         self.assertLessEqual(
             result["risk_detection"]["order_risk_probability"], 1
         )
+        self.assertEqual(
+            result["early_warning"]["status"],
+            "not_applicable_current_emergency",
+        )
+
+    def test_stable_day_returns_experimental_three_day_warnings(self):
+        payload = self.payload()
+        payload.update(
+            {
+                "production_date": "2024-07-08",
+                "working_day_no": 6,
+                "plant_daily_output": 461,
+                "daily_damage_qty": 7,
+                "machine_breakdown_count": 0,
+                "worker_shortage_count": 0,
+                "cumulative_completed_qty": 2_469,
+            }
+        )
+
+        response = self.client.post("/api/component3/predict", json=payload)
+
+        self.assertEqual(response.status_code, 200, response.get_json())
+        warning = response.get_json()["early_warning"]
+        self.assertEqual(warning["status"], "available")
+        self.assertFalse(warning["production_approved"])
+        self.assertEqual(warning["horizon_production_days"], 3)
+        self.assertEqual(len(warning["warnings"]), 3)
+        self.assertEqual(
+            warning["history"]["future_or_current_saved_rows_used"],
+            0,
+        )
+
+    def test_missing_early_warning_models_do_not_break_current_prediction(self):
+        payload = self.payload()
+        payload.update(
+            {
+                "production_date": "2024-07-08",
+                "working_day_no": 6,
+                "plant_daily_output": 461,
+                "daily_damage_qty": 7,
+                "machine_breakdown_count": 0,
+                "worker_shortage_count": 0,
+                "cumulative_completed_qty": 2_469,
+            }
+        )
+        previous_directory = app.config.get(
+            "COMPONENT3_EARLY_WARNING_MODELS_DIR"
+        )
+        with tempfile.TemporaryDirectory() as directory:
+            app.config["COMPONENT3_EARLY_WARNING_MODELS_DIR"] = directory
+            try:
+                response = self.client.post(
+                    "/api/component3/predict",
+                    json=payload,
+                )
+            finally:
+                if previous_directory is None:
+                    app.config.pop(
+                        "COMPONENT3_EARLY_WARNING_MODELS_DIR",
+                        None,
+                    )
+                else:
+                    app.config[
+                        "COMPONENT3_EARLY_WARNING_MODELS_DIR"
+                    ] = previous_directory
+
+        self.assertEqual(response.status_code, 200, response.get_json())
+        result = response.get_json()
+        self.assertEqual(result["early_warning"]["status"], "unavailable")
+        self.assertFalse(result["early_warning"]["production_approved"])
+        self.assertIn("recovery_plan", result)
 
     def test_recovery_parameters_return_an_exact_worker_plan(self):
         payload = self.payload()

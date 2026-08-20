@@ -42,6 +42,11 @@ from datetime import datetime, timedelta
 from flask import Blueprint, current_app, request, jsonify, send_file
 
 from components.component3_features import FEATURES, build_feature_row
+from components.component3_early_warning_inference import (
+    EarlyWarningModelError,
+    MODEL_SPECS as EARLY_WARNING_MODEL_SPECS,
+    predict_early_warnings,
+)
 from components.component3_monitoring import (
     Component3MonitoringStore,
     normalize_monitoring_label_status,
@@ -610,6 +615,53 @@ def _monitoring_store() -> Component3MonitoringStore:
     return Component3MonitoringStore(_tracking_database_path())
 
 
+def _early_warning_models_directory() -> str:
+    configured_path = current_app.config.get(
+        "COMPONENT3_EARLY_WARNING_MODELS_DIR"
+    )
+    return str(configured_path or MODELS_DIR)
+
+
+def _attach_early_warning(data: dict, analysis: dict) -> dict:
+    """Add optional research warnings without breaking current detection."""
+    risk_type = str(analysis["risk_detection"]["risk_type"])
+    try:
+        history = _monitoring_store().inference_history(
+            str(data["bulk_order_id"]),
+            before_working_day=int(data["working_day_no"]),
+            before_production_date=str(data["production_date"]),
+        )
+        early_warning = predict_early_warnings(
+            data,
+            current_risk_type=risk_type,
+            history=history,
+            models_directory=_early_warning_models_directory(),
+        )
+    except EarlyWarningModelError as error:
+        current_app.logger.warning("Early-warning unavailable: %s", error)
+        early_warning = {
+            "inference_version": "component3-early-warning-inference-v1",
+            "status": "unavailable",
+            "production_approved": False,
+            "horizon_production_days": 3,
+            "current_risk_type": risk_type,
+            "alert_generated": False,
+            "highest_warning": None,
+            "warnings": [],
+            "history": None,
+            "message": str(error),
+            "limitations": [
+                "Current-day detection and recovery planning remain available."
+            ],
+        }
+    analysis["early_warning"] = early_warning
+    return analysis
+
+
+def _build_complete_response(data: dict, models: dict) -> dict:
+    return _attach_early_warning(data, _build_response(data, models))
+
+
 def _required_text(data: dict, field: str) -> str:
     value = data.get(field)
     if not isinstance(value, str) or not value.strip():
@@ -682,6 +734,8 @@ def health():
         "component": "3 — Emergency Situation Detection",
         "status": "ok",
         "configured_model_version": os.environ.get("COMPONENT3_MODEL_VERSION", "v1"),
+        "experimental_early_warning_models": len(EARLY_WARNING_MODEL_SPECS),
+        "early_warning_production_approved": False,
     })
 
 
@@ -711,7 +765,7 @@ def predict():
         return jsonify({"error": str(e)}), 503
 
     try:
-        result = _build_response(data, models)
+        result = _build_complete_response(data, models)
         return jsonify(result), 200
     except Exception as e:
         return jsonify({"error": f"Prediction failed: {str(e)}"}), 500
@@ -740,7 +794,7 @@ def create_monitoring_record():
         return jsonify({"error": str(error)}), 503
 
     try:
-        analysis = _build_response(data, models)
+        analysis = _build_complete_response(data, models)
         monitoring_record = _monitoring_store().create_record(
             data,
             analysis,
@@ -953,7 +1007,7 @@ def create_incident():
         return jsonify({"error": str(error)}), 503
 
     try:
-        analysis = _build_response(data, models)
+        analysis = _build_complete_response(data, models)
         if analysis["recovery_plan"]["recommended_option"] is None:
             return jsonify({
                 "error": "The order is already complete and has no recovery "

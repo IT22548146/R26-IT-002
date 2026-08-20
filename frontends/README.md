@@ -32,6 +32,14 @@ The screen contains both parts of Component 3:
 The recovery-capacity values in the demo presets are examples. Replace them
 with the actual limits of the selected plant before using a recommendation.
 
+For a currently stable day, the result also shows the three experimental
+next-three-production-day warnings supported by Step 5C: machine breakdown,
+quality-limit issue, and output/schedule risk. These uncalibrated scores use
+only the current input and saved earlier records for the same order. They are
+research-only, require manager review, and do not yet include a future
+worker-shortage model. See
+[`COMPONENT3_EARLY_WARNING_STEP5C.md`](../COMPONENT3_EARLY_WARNING_STEP5C.md).
+
 After an analysis, use **Save & track incident** to create a persistent
 workflow record. Open the Recovery History screen at
 [http://localhost:3000/dashboard/recovery-history](http://localhost:3000/dashboard/recovery-history)
@@ -62,7 +70,7 @@ The default configuration expects the Component 3 Flask API at
 `http://127.0.0.1:5001/api/component3`. Start that API from the repository root:
 
 ```bash
-COMPONENT3_MODEL_VERSION=v2 python3 main.py
+COMPONENT3_MODEL_VERSION=v2 python main.py
 ```
 
 Set `NEXT_PUBLIC_COMPONENT3_API_URL` in `.env.local` when the backend uses a

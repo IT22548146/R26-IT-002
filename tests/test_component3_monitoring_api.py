@@ -150,6 +150,26 @@ class Component3MonitoringStoreTests(unittest.TestCase):
         )
         self.assertIsNone(labelled["first_emergency_lead_days"])
 
+    def test_inference_history_returns_only_earlier_order_days(self):
+        for day in (1, 2, 3, 4):
+            self.save(self.prediction_input(day, order_id="ORDER_HISTORY"))
+        self.save(self.prediction_input(1, order_id="OTHER_ORDER"))
+
+        history = self.store.inference_history(
+            "ORDER_HISTORY",
+            before_working_day=3,
+            before_production_date="2026-08-19",
+        )
+
+        self.assertEqual(
+            [record["working_day_no"] for record in history],
+            [1, 2],
+        )
+        self.assertTrue(
+            all(record["bulk_order_id"] == "ORDER_HISTORY" for record in history)
+        )
+        self.assertTrue(all("prediction_input" in record for record in history))
+
     def test_current_emergency_is_not_an_early_warning_source(self):
         record = self.save(
             self.prediction_input(1, machine_breakdown=1),
@@ -430,6 +450,38 @@ class Component3MonitoringApiTests(unittest.TestCase):
         )
         self.assertEqual(first.status_code, 201)
         self.assertEqual(second.status_code, 409)
+
+    def test_next_saved_day_uses_only_earlier_same_order_history(self):
+        first = self.client.post(
+            "/api/component3/monitoring-records",
+            json=self.payload(),
+        )
+        self.assertEqual(first.status_code, 201, first.get_json())
+
+        second_payload = self.payload()
+        second_payload.update(
+            {
+                "production_date": "2024-07-22",
+                "working_day_no": 2,
+                "cumulative_completed_qty": 210,
+            }
+        )
+        second = self.client.post(
+            "/api/component3/monitoring-records",
+            json=second_payload,
+        )
+
+        self.assertEqual(second.status_code, 201, second.get_json())
+        warning = second.get_json()["monitoring_record"]["analysis"][
+            "early_warning"
+        ]
+        self.assertEqual(warning["status"], "available")
+        self.assertEqual(warning["history"]["saved_prior_records"], 1)
+        self.assertEqual(warning["history"]["status"], "partial")
+        self.assertEqual(
+            warning["history"]["future_or_current_saved_rows_used"],
+            0,
+        )
 
     def test_supervisor_can_verify_and_correct_actual_outcome(self):
         created = self.client.post(
