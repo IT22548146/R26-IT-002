@@ -236,6 +236,30 @@ class Component3HistoricalImportApiTests(unittest.TestCase):
             export_audit["dataset"]["retrospective_records_excluded"],
             21,
         )
+        validation = self.client.get(
+            "/api/component3/early-warning-validation"
+        )
+        self.assertEqual(validation.status_code, 200, validation.get_json())
+        validation_report = validation.get_json()
+        self.assertFalse(validation_report["scope_mixing_detected"])
+        self.assertEqual(
+            validation_report["independent_validation"]["ready_warning_rows"],
+            0,
+        )
+        retrospective = validation_report[
+            "retrospective_training_reuse"
+        ]
+        self.assertEqual(retrospective["ready_warning_rows"], 5)
+        self.assertEqual(
+            [target["rows_evaluated"] for target in retrospective["targets"]],
+            [5, 5, 5],
+        )
+        self.assertTrue(
+            all(
+                set(target["metrics"]) == {"accuracy", "macro_f1", "f1"}
+                for target in retrospective["targets"]
+            )
+        )
         detail = self.client.get(
             "/api/component3/monitoring-records/"
             f"{history['items'][0]['record_id']}"

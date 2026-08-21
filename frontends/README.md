@@ -70,6 +70,12 @@ records demonstrate the workflow but are not new independent validation. See
 They remain visible in monitoring history but are automatically excluded from
 independent readiness counts and the verified training export.
 
+The **Step 5D.1 validation report** card compares the early-warning decision
+saved before verification with its later verified three-day outcome. It shows
+Accuracy, Macro-F1, and F1 for each target while keeping retrospective rows and
+new unseen-order evidence in separate panels. See
+[`COMPONENT3_EARLY_WARNING_STEP5D1.md`](../COMPONENT3_EARLY_WARNING_STEP5D1.md).
+
 Copy the example environment file before starting the frontend:
 
 ```bash

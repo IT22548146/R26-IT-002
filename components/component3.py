@@ -52,6 +52,9 @@ from components.component3_early_warning_inference import (
     MODEL_SPECS as EARLY_WARNING_MODEL_SPECS,
     predict_early_warnings,
 )
+from components.component3_early_warning_validation import (
+    build_early_warning_validation_report,
+)
 from components.component3_monitoring import (
     Component3MonitoringStore,
     normalize_monitoring_label_status,
@@ -1128,6 +1131,15 @@ def import_historical_order():
         "This import is a retrospective workflow demo, not independent validation.",
     ]
     return jsonify(result), 200
+
+
+@component3_bp.route("/early-warning-validation", methods=["GET"])
+def early_warning_validation():
+    """Compare saved warnings with later verified outcomes by data scope."""
+    report = build_early_warning_validation_report(
+        _monitoring_store().training_export_snapshot()
+    )
+    return jsonify(report), 200
 
 
 def _verified_training_export():

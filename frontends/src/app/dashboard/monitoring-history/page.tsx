@@ -125,6 +125,59 @@ interface TrainingExportAudit {
   decision: string;
 }
 
+interface WarningValidationTarget {
+  target: string;
+  display_name: string;
+  rows_evaluated: number;
+  orders_evaluated: number;
+  positive_actual_rows: number;
+  negative_actual_rows: number;
+  positive_predictions: number;
+  negative_predictions: number;
+  class_coverage_complete: boolean;
+  metrics: {
+    accuracy: number;
+    macro_f1: number;
+    f1: number;
+  } | null;
+  missing_warning_or_outcome_rows: number;
+  stored_score_range: {
+    minimum: number;
+    maximum: number;
+  } | null;
+  status: 'no_evaluable_rows' | 'single_actual_class' | 'evaluated';
+}
+
+interface WarningValidationScope {
+  scope: 'independent_validation' | 'retrospective_training_reuse';
+  evidence_type: string;
+  status:
+    | 'awaiting_evaluable_rows'
+    | 'insufficient_class_coverage'
+    | 'evaluated';
+  records_in_scope: number;
+  ready_warning_rows: number;
+  orders_evaluated: number;
+  excluded_rows_by_reason: Record<string, number>;
+  targets: WarningValidationTarget[];
+  every_target_has_rows: boolean;
+  every_target_has_both_actual_classes: boolean;
+  production_approval_supported: false;
+}
+
+interface WarningValidationReport {
+  report_version: string;
+  status: 'success';
+  prediction_source: string;
+  outcome_source: string;
+  scope_mixing_detected: false;
+  production_approved: false;
+  independent_validation: WarningValidationScope;
+  retrospective_training_reuse: WarningValidationScope;
+  reported_metrics: ['accuracy', 'macro_f1', 'f1'];
+  limitations: string[];
+}
+
 interface HistoricalMasterConflict {
   field: string;
   component2_value: string | number | null;
@@ -221,6 +274,10 @@ const API_BASE_URL = (
 
 const NUMBER_FORMATTER = new Intl.NumberFormat('en-US');
 
+function formatMetric(value: number | undefined) {
+  return value === undefined ? '—' : `${(value * 100).toFixed(1)}%`;
+}
+
 function labelClass(status: LabelStatus) {
   return styles[`label${status.replace(' ', '')}`];
 }
@@ -240,6 +297,9 @@ export default function MonitoringHistoryPage() {
   const [exportAudit, setExportAudit] = useState<TrainingExportAudit | null>(
     null,
   );
+  const [validationReport, setValidationReport] =
+    useState<WarningValidationReport | null>(null);
+  const [validationReportError, setValidationReportError] = useState('');
   const [importPreview, setImportPreview] =
     useState<HistoricalImportPreview | null>(null);
   const [total, setTotal] = useState(0);
@@ -310,11 +370,21 @@ export default function MonitoringHistoryPage() {
             ? previewError.message
             : 'Historical import preview is unavailable.',
       }));
+    const validationReportRequest = requestJson('/early-warning-validation')
+      .then((payload) => ({ payload, error: '' }))
+      .catch((validationError: unknown) => ({
+        payload: null,
+        error:
+          validationError instanceof Error
+            ? validationError.message
+            : 'Early-warning validation report is unavailable.',
+      }));
     Promise.all([
       requestJson(`/monitoring-records?${query}`),
       requestJson('/monitoring-readiness'),
       requestJson('/training-dataset-audit'),
       historicalPreviewRequest,
+      validationReportRequest,
     ])
       .then(
         ([
@@ -322,40 +392,47 @@ export default function MonitoringHistoryPage() {
           readinessPayload,
           exportAuditPayload,
           historicalPreviewResult,
+          validationReportResult,
         ]) => {
-        if (cancelled) return;
-        const list = listPayload as MonitoringListResponse;
-        setRecords(list.items);
-        setTotal(list.total);
-        setReadiness(readinessPayload as ReadinessResponse);
-        setExportAudit(exportAuditPayload as TrainingExportAudit);
-        setHistoricalPreviewError(historicalPreviewResult.error);
-        if (historicalPreviewResult.payload) {
-          const historicalPreview =
-            historicalPreviewResult.payload as HistoricalImportPreview;
-          setImportPreview(historicalPreview);
-          setHistoricalOrderId((current) => {
-            if (
-              current &&
-              historicalPreview.orders.some(
-                (order) => order.bulk_order_id === current,
-              )
-            ) {
-              return current;
-            }
-            return (
-              historicalPreview.orders.find(
-                (order) => order.importable_rows > 0,
-              )?.bulk_order_id ??
-              historicalPreview.orders[0]?.bulk_order_id ??
-              ''
-            );
-          });
-        } else {
-          setImportPreview(null);
-        }
-        setError('');
-      },
+          if (cancelled) return;
+          const list = listPayload as MonitoringListResponse;
+          setRecords(list.items);
+          setTotal(list.total);
+          setReadiness(readinessPayload as ReadinessResponse);
+          setExportAudit(exportAuditPayload as TrainingExportAudit);
+          setValidationReportError(validationReportResult.error);
+          setValidationReport(
+            validationReportResult.payload
+              ? (validationReportResult.payload as WarningValidationReport)
+              : null,
+          );
+          setHistoricalPreviewError(historicalPreviewResult.error);
+          if (historicalPreviewResult.payload) {
+            const historicalPreview =
+              historicalPreviewResult.payload as HistoricalImportPreview;
+            setImportPreview(historicalPreview);
+            setHistoricalOrderId((current) => {
+              if (
+                current &&
+                historicalPreview.orders.some(
+                  (order) => order.bulk_order_id === current,
+                )
+              ) {
+                return current;
+              }
+              return (
+                historicalPreview.orders.find(
+                  (order) => order.importable_rows > 0,
+                )?.bulk_order_id ??
+                historicalPreview.orders[0]?.bulk_order_id ??
+                ''
+              );
+            });
+          } else {
+            setImportPreview(null);
+          }
+          setError('');
+        },
       )
       .catch((requestError: unknown) => {
         if (cancelled) return;
@@ -846,6 +923,131 @@ export default function MonitoringHistoryPage() {
             </div>
           )}
         </form>
+      </section>
+
+      <section className={styles.validationCard}>
+        <div className={styles.validationHeader}>
+          <div>
+            <span className={styles.kicker}>Step 5D.1 validation report</span>
+            <h2>Stored early warnings vs verified outcomes</h2>
+            <p>
+              Scores use the prediction saved before verification. Independent
+              orders and retrospective training-data reuse are reported
+              separately and never combined.
+            </p>
+          </div>
+          <span className={styles.validationBadge}>
+            Stored predictions only · no rescoring
+          </span>
+        </div>
+
+        {validationReportError && (
+          <div className={styles.formError} role="alert">
+            Validation report unavailable: {validationReportError}
+          </div>
+        )}
+
+        {validationReport && (
+          <div className={styles.validationScopes}>
+            {[
+              {
+                title: 'Independent validation',
+                note: 'New unseen real orders',
+                className: styles.scopeIndependent,
+                report: validationReport.independent_validation,
+              },
+              {
+                title: 'Retrospective workflow evidence',
+                note: 'Previously used model-development data',
+                className: styles.scopeRetrospective,
+                report: validationReport.retrospective_training_reuse,
+              },
+            ].map((scope) => (
+              <article
+                className={`${styles.validationScope} ${scope.className}`}
+                key={scope.report.scope}
+              >
+                <div className={styles.scopeHeader}>
+                  <div>
+                    <h3>{scope.title}</h3>
+                    <p>{scope.note}</p>
+                  </div>
+                  <span>
+                    {scope.report.status === 'evaluated'
+                      ? 'Both classes available'
+                      : scope.report.status ===
+                          'insufficient_class_coverage'
+                        ? 'More class coverage needed'
+                        : 'Awaiting evaluable rows'}
+                  </span>
+                </div>
+
+                <div className={styles.scopeMetrics}>
+                  <div>
+                    <span>Evaluated rows</span>
+                    <strong>{scope.report.ready_warning_rows}</strong>
+                  </div>
+                  <div>
+                    <span>Orders</span>
+                    <strong>{scope.report.orders_evaluated}</strong>
+                  </div>
+                  <div>
+                    <span>Production approval</span>
+                    <strong>No</strong>
+                  </div>
+                </div>
+
+                <div className={styles.validationTableWrap}>
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>Target</th>
+                        <th>Actual + / −</th>
+                        <th>Accuracy</th>
+                        <th>Macro-F1</th>
+                        <th>F1</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {scope.report.targets.map((targetResult) => (
+                        <tr key={targetResult.target}>
+                          <td>
+                            <strong>{targetResult.display_name}</strong>
+                            <small>{targetResult.rows_evaluated} rows</small>
+                          </td>
+                          <td>
+                            {targetResult.positive_actual_rows} /{' '}
+                            {targetResult.negative_actual_rows}
+                            {!targetResult.class_coverage_complete &&
+                              targetResult.rows_evaluated > 0 && (
+                                <small className={styles.classWarning}>
+                                  One actual class only
+                                </small>
+                              )}
+                          </td>
+                          <td>
+                            {formatMetric(targetResult.metrics?.accuracy)}
+                          </td>
+                          <td>
+                            {formatMetric(targetResult.metrics?.macro_f1)}
+                          </td>
+                          <td>{formatMetric(targetResult.metrics?.f1)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </article>
+            ))}
+          </div>
+        )}
+
+        <p className={styles.validationFootnote}>
+          A score calculated from one actual class, or from data reused during
+          model development, is not independent production evidence. Production
+          validation requires new unseen orders containing positive and negative
+          outcomes for every target.
+        </p>
       </section>
 
       {selectedRecord && (

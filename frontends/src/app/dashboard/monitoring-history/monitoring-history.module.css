@@ -65,6 +65,7 @@
 .readinessCard,
 .exportCard,
 .importCard,
+.validationCard,
 .verificationCard,
 .historyCard {
   border: 1px solid var(--border);
@@ -488,6 +489,187 @@
   margin-top: 0;
 }
 
+.validationCard {
+  padding: 1.2rem;
+  border-left: 5px solid #4338ca;
+}
+
+.validationHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.validationHeader .kicker {
+  color: #4338ca;
+}
+
+.validationHeader h2 {
+  margin-bottom: 0.3rem;
+  font-size: 1rem;
+}
+
+.validationHeader p {
+  max-width: 760px;
+  color: var(--secondary);
+  font-size: 0.7rem;
+  line-height: 1.5;
+}
+
+.validationBadge {
+  flex: 0 0 auto;
+  padding: 0.45rem 0.62rem;
+  color: #3730a3;
+  border: 1px solid rgba(67, 56, 202, 0.25);
+  border-radius: 999px;
+  background: rgba(99, 102, 241, 0.09);
+  font-size: 0.6rem;
+  font-weight: 800;
+}
+
+.validationScopes {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.9rem;
+}
+
+.validationScope {
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 11px;
+  background: var(--input-bg);
+}
+
+.scopeIndependent {
+  border-top: 4px solid #0f766e;
+}
+
+.scopeRetrospective {
+  border-top: 4px solid #d97706;
+}
+
+.scopeHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.8rem;
+  padding: 0.8rem;
+}
+
+.scopeHeader h3 {
+  margin-bottom: 0.2rem;
+  font-size: 0.78rem;
+}
+
+.scopeHeader p {
+  color: var(--secondary);
+  font-size: 0.58rem;
+}
+
+.scopeHeader > span {
+  padding: 0.32rem 0.45rem;
+  color: #92400e;
+  border-radius: 999px;
+  background: rgba(245, 158, 11, 0.1);
+  font-size: 0.54rem;
+  font-weight: 800;
+  text-align: center;
+}
+
+.scopeMetrics {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+}
+
+.scopeMetrics > div {
+  padding: 0.65rem 0.75rem;
+  border-right: 1px solid var(--border);
+  background: var(--card-bg);
+}
+
+.scopeMetrics > div:last-child {
+  border-right: 0;
+}
+
+.scopeMetrics span,
+.scopeMetrics strong {
+  display: block;
+}
+
+.scopeMetrics span {
+  color: var(--secondary);
+  font-size: 0.55rem;
+}
+
+.scopeMetrics strong {
+  margin-top: 0.18rem;
+  font-size: 0.86rem;
+}
+
+.validationTableWrap {
+  overflow-x: auto;
+}
+
+.validationTableWrap table {
+  width: 100%;
+  min-width: 540px;
+  border-collapse: collapse;
+}
+
+.validationTableWrap th,
+.validationTableWrap td {
+  padding: 0.65rem;
+  text-align: left;
+  border-bottom: 1px solid var(--border);
+}
+
+.validationTableWrap th {
+  color: var(--secondary);
+  background: var(--card-bg);
+  font-size: 0.54rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.validationTableWrap td {
+  font-size: 0.62rem;
+}
+
+.validationTableWrap tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.validationTableWrap td strong,
+.validationTableWrap td small {
+  display: block;
+}
+
+.validationTableWrap td small {
+  margin-top: 0.16rem;
+  color: var(--secondary);
+  font-size: 0.53rem;
+}
+
+.validationTableWrap td .classWarning {
+  color: #b45309;
+  font-weight: 800;
+}
+
+.validationFootnote {
+  margin-top: 0.9rem;
+  padding: 0.7rem 0.8rem;
+  color: #92400e;
+  border: 1px solid rgba(217, 119, 6, 0.22);
+  border-radius: 8px;
+  background: rgba(245, 158, 11, 0.07);
+  font-size: 0.61rem;
+  line-height: 1.48;
+}
+
 .verificationCard {
   padding: 1.2rem;
   border-left: 5px solid #0f766e;
@@ -855,6 +1037,10 @@
     grid-template-columns: 1fr;
   }
 
+  .validationScopes {
+    grid-template-columns: 1fr;
+  }
+
   .exportActions {
     min-width: 0;
     flex-direction: row;
@@ -870,6 +1056,8 @@
   .cardHeader,
   .importHeader,
   .importActions,
+  .validationHeader,
+  .scopeHeader,
   .verificationHeader,
   .verificationActions {
     flex-direction: column;
@@ -884,6 +1072,10 @@
   .verificationConsent,
   .exportMetrics,
   .readinessCard dl {
+    grid-template-columns: 1fr;
+  }
+
+  .scopeMetrics {
     grid-template-columns: 1fr;
   }
 
@@ -919,6 +1111,15 @@
   }
 
   .readinessCard dl > div:last-child {
+    border-bottom: 0;
+  }
+
+  .scopeMetrics > div {
+    border-right: 0;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .scopeMetrics > div:last-child {
     border-bottom: 0;
   }
 }

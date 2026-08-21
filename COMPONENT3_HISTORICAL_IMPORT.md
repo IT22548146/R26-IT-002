@@ -125,3 +125,8 @@ In **Retrospective data loader**:
 
 For actual Step 5D independent validation, collect a different daily workbook
 containing orders that were never used during training or model selection.
+
+After an order is imported and verified, review its separated retrospective
+scores through `GET /api/component3/early-warning-validation` or the Step 5D.1
+card on Daily Monitoring History. See
+[`COMPONENT3_EARLY_WARNING_STEP5D1.md`](COMPONENT3_EARLY_WARNING_STEP5D1.md).

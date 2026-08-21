@@ -52,6 +52,10 @@ The backend is organized into four specialized components, each accessible via i
   existing records. Imports are explicitly marked as training-data reuse, not
   independent validation. See
   [`COMPONENT3_HISTORICAL_IMPORT.md`](COMPONENT3_HISTORICAL_IMPORT.md).
+- **Early-Warning Outcome Validation**: Compares stored warnings with later
+  verified three-day outcomes, reports Accuracy, Macro-F1 and F1, and keeps
+  retrospective training-data reuse separate from unseen-order validation. See
+  [`COMPONENT3_EARLY_WARNING_STEP5D1.md`](COMPONENT3_EARLY_WARNING_STEP5D1.md).
 
 ### 4. Production Analysis & Resource Optimization (`/api/component4`)
 - **Efficiency Analytics**: Detailed insights into production performance.

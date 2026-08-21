@@ -702,6 +702,7 @@ class Component3MonitoringStore:
             record["prediction_input"] = json.loads(
                 row["prediction_input_json"]
             )
+            record["analysis"] = json.loads(row["analysis_json"])
             snapshot.append(record)
         return snapshot
 
