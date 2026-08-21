@@ -331,6 +331,8 @@ class Component3MonitoringStoreTests(unittest.TestCase):
         self.assertEqual(migrated["label_status"], "Awaiting Verification")
         self.assertIsNone(migrated["emergency_within_3_days"])
         self.assertEqual(migrated["recorded_by"], "Legacy Supervisor")
+        self.assertEqual(migrated["data_origin"], "live_monitoring")
+        self.assertTrue(migrated["independent_validation_eligible"])
 
         verified = migrated_store.verify_record(
             "legacy-record",

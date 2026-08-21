@@ -60,6 +60,16 @@ export and enables CSV or Excel downloads when an eligible `Ready` row exists.
 The Excel workbook includes the training table, audit evidence, and a column
 role manifest.
 
+The **Retrospective data loader** on the same page previews the original
+Component 3 workbook, audits its Component 2 master-data matches, and imports
+one order in chronological order. It requires explicit acknowledgement that
+the workbook trained the current models. Optional automatic outcome
+verification requires a second confirmation and reviewer identity. These
+records demonstrate the workflow but are not new independent validation. See
+[`COMPONENT3_HISTORICAL_IMPORT.md`](../COMPONENT3_HISTORICAL_IMPORT.md).
+They remain visible in monitoring history but are automatically excluded from
+independent readiness counts and the verified training export.
+
 Copy the example environment file before starting the frontend:
 
 ```bash

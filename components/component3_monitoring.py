@@ -114,6 +114,8 @@ class Component3MonitoringStore:
                     prediction_input_json TEXT NOT NULL,
                     analysis_json TEXT NOT NULL,
                     recorded_by TEXT NOT NULL,
+                    data_origin TEXT NOT NULL DEFAULT 'live_monitoring',
+                    independent_validation_eligible INTEGER NOT NULL DEFAULT 1,
                     actual_outcome_status TEXT NOT NULL DEFAULT 'Pending',
                     actual_emergency INTEGER,
                     actual_emergency_type TEXT,
@@ -148,6 +150,16 @@ class Component3MonitoringStore:
             self._ensure_column(connection, "verified_by", "TEXT")
             self._ensure_column(connection, "verification_notes", "TEXT")
             self._ensure_column(connection, "verified_at", "TEXT")
+            self._ensure_column(
+                connection,
+                "data_origin",
+                "TEXT NOT NULL DEFAULT 'live_monitoring'",
+            )
+            self._ensure_column(
+                connection,
+                "independent_validation_eligible",
+                "INTEGER NOT NULL DEFAULT 1",
+            )
 
             connection.executescript(
                 """
@@ -308,7 +320,18 @@ class Component3MonitoringStore:
         analysis: dict[str, Any],
         *,
         recorded_by: str,
+        data_origin: str = "live_monitoring",
+        independent_validation_eligible: bool = True,
     ) -> dict[str, Any]:
+        if not isinstance(data_origin, str) or not data_origin.strip():
+            raise ValueError("data_origin is required")
+        data_origin = data_origin.strip()
+        if len(data_origin) > 80:
+            raise ValueError("data_origin must be 80 characters or fewer")
+        if not isinstance(independent_validation_eligible, bool):
+            raise ValueError(
+                "independent_validation_eligible must be true or false"
+            )
         record_id = str(uuid.uuid4())
         now = utc_now()
         risk = analysis.get("risk_detection") or {}
@@ -327,8 +350,10 @@ class Component3MonitoringStore:
                         record_id, bulk_order_id, style_id, production_date,
                         working_day_no, risk_status, risk_type, severity,
                         is_emergency, prediction_input_json, analysis_json,
-                        recorded_by, label_status, created_at, updated_at
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        recorded_by, data_origin,
+                        independent_validation_eligible, label_status,
+                        created_at, updated_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """,
                     (
                         record_id,
@@ -343,6 +368,8 @@ class Component3MonitoringStore:
                         self._json(prediction_input),
                         self._json(analysis),
                         recorded_by,
+                        data_origin,
+                        int(independent_validation_eligible),
                         "Awaiting Verification",
                         now,
                         now,
@@ -717,7 +744,18 @@ class Component3MonitoringStore:
                 "SELECT * FROM component3_daily_monitoring"
             ).fetchall()
 
-        ready = [row for row in rows if row["label_status"] == "Ready"]
+        eligible_rows = [
+            row for row in rows if bool(row["independent_validation_eligible"])
+        ]
+        ready = [
+            row for row in eligible_rows if row["label_status"] == "Ready"
+        ]
+        retrospective_ready = [
+            row
+            for row in rows
+            if not bool(row["independent_validation_eligible"])
+            and row["label_status"] == "Ready"
+        ]
         verified = [
             row for row in rows if row["actual_outcome_status"] == "Verified"
         ]
@@ -737,6 +775,10 @@ class Component3MonitoringStore:
             "total_records": len(rows),
             "verified_records": len(verified),
             "pending_verification_records": len(rows) - len(verified),
+            "independent_validation_eligible_records": len(eligible_rows),
+            "retrospective_training_reuse_records": (
+                len(rows) - len(eligible_rows)
+            ),
             "stable_records": sum(
                 not bool(row["actual_emergency"]) for row in verified
             ),
@@ -758,6 +800,9 @@ class Component3MonitoringStore:
             "label_status_counts": label_counts,
             "three_day_target": {
                 "ready_rows": len(ready),
+                "retrospective_ready_rows_excluded": len(
+                    retrospective_ready
+                ),
                 "positive_rows": len(positives),
                 "negative_rows": len(negatives),
                 "positive_orders": positive_orders,
@@ -826,6 +871,10 @@ class Component3MonitoringStore:
                 "output_schedule_risk_within_3_days"
             ],
             "recorded_by": row["recorded_by"],
+            "data_origin": row["data_origin"],
+            "independent_validation_eligible": bool(
+                row["independent_validation_eligible"]
+            ),
             "created_at": row["created_at"],
             "updated_at": row["updated_at"],
         }

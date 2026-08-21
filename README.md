@@ -47,6 +47,11 @@ The backend is organized into four specialized components, each accessible via i
   research-only next-three-production-day warnings without interrupting
   current emergency recovery. See
   [`COMPONENT3_EARLY_WARNING_STEP5C.md`](COMPONENT3_EARLY_WARNING_STEP5C.md).
+- **Retrospective Historical Import**: Audits Component 2 master fields and
+  safely replays one Component 3 order without duplicating or overwriting
+  existing records. Imports are explicitly marked as training-data reuse, not
+  independent validation. See
+  [`COMPONENT3_HISTORICAL_IMPORT.md`](COMPONENT3_HISTORICAL_IMPORT.md).
 
 ### 4. Production Analysis & Resource Optimization (`/api/component4`)
 - **Efficiency Analytics**: Detailed insights into production performance.

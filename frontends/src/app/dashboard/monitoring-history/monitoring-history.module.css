@@ -64,6 +64,7 @@
 .metrics article,
 .readinessCard,
 .exportCard,
+.importCard,
 .verificationCard,
 .historyCard {
   border: 1px solid var(--border);
@@ -276,6 +277,215 @@
   background: rgba(234, 179, 8, 0.08);
   font-size: 0.6rem;
   line-height: 1.45;
+}
+
+.importCard {
+  padding: 1.2rem;
+  border-left: 5px solid #d97706;
+}
+
+.importHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.importHeader .kicker {
+  color: #b45309;
+}
+
+.importHeader h2 {
+  margin-bottom: 0.3rem;
+  font-size: 1rem;
+}
+
+.importHeader p {
+  max-width: 760px;
+  color: var(--secondary);
+  font-size: 0.7rem;
+  line-height: 1.5;
+}
+
+.researchBadge {
+  flex: 0 0 auto;
+  padding: 0.45rem 0.62rem;
+  color: #92400e;
+  border: 1px solid rgba(217, 119, 6, 0.28);
+  border-radius: 999px;
+  background: rgba(245, 158, 11, 0.1);
+  font-size: 0.6rem;
+  font-weight: 800;
+}
+
+.importMetrics {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  margin: 1rem 0;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+
+.importMetrics > div {
+  padding: 0.7rem;
+  border-right: 1px solid var(--border);
+  background: var(--input-bg);
+}
+
+.importMetrics > div:last-child {
+  border-right: 0;
+}
+
+.importMetrics span,
+.importMetrics strong {
+  display: block;
+}
+
+.importMetrics span {
+  color: var(--secondary);
+  font-size: 0.58rem;
+}
+
+.importMetrics strong {
+  margin-top: 0.2rem;
+  font-size: 0.95rem;
+}
+
+.importForm {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.8rem;
+  padding: 1rem;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--input-bg);
+}
+
+.importForm > label,
+.verificationConsent > label:first-child {
+  color: var(--secondary);
+  font-size: 0.62rem;
+  font-weight: 700;
+}
+
+.importForm select,
+.importForm input[type='text'],
+.importForm input:not([type]) {
+  display: block;
+  width: 100%;
+  min-height: 39px;
+  margin-top: 0.3rem;
+  padding: 0.55rem 0.62rem;
+  color: var(--foreground);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  outline: none;
+  background: var(--card-bg);
+  font: inherit;
+}
+
+.importForm select:focus,
+.importForm input:focus {
+  border-color: #d97706;
+  box-shadow: 0 0 0 3px rgba(217, 119, 6, 0.1);
+}
+
+.selectedOrderAudit {
+  display: grid;
+  grid-column: 1 / -1;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  overflow: hidden;
+  color: var(--secondary);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font-size: 0.58rem;
+}
+
+.selectedOrderAudit span {
+  padding: 0.62rem;
+  border-right: 1px solid var(--border);
+  background: var(--card-bg);
+  line-height: 1.45;
+}
+
+.selectedOrderAudit span:last-child {
+  border-right: 0;
+}
+
+.importCheck {
+  display: flex;
+  grid-column: 1 / -1;
+  align-items: flex-start;
+  gap: 0.6rem;
+  padding: 0.65rem;
+  border: 1px solid rgba(217, 119, 6, 0.2);
+  border-radius: 8px;
+  background: rgba(245, 158, 11, 0.06);
+}
+
+.importCheck input {
+  flex: 0 0 auto;
+  width: 15px;
+  height: 15px;
+  margin-top: 0.08rem;
+  accent-color: #d97706;
+}
+
+.importCheck span {
+  color: var(--secondary);
+  font-size: 0.61rem;
+  font-weight: 600;
+  line-height: 1.45;
+}
+
+.verificationConsent {
+  display: grid;
+  grid-column: 1 / -1;
+  grid-template-columns: minmax(220px, 0.65fr) minmax(0, 1.35fr);
+  gap: 0.8rem;
+  padding: 0.75rem;
+  border: 1px dashed rgba(217, 119, 6, 0.35);
+  border-radius: 8px;
+}
+
+.verificationConsent .importCheck {
+  grid-column: auto;
+}
+
+.importActions {
+  display: flex;
+  grid-column: 1 / -1;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.importActions span {
+  color: var(--secondary);
+  font-size: 0.6rem;
+}
+
+.importActions button {
+  flex: 0 0 auto;
+  padding: 0.62rem 0.85rem;
+  color: #fffbeb;
+  border: 0;
+  border-radius: 8px;
+  background: #b45309;
+  font-size: 0.66rem;
+  font-weight: 800;
+}
+
+.importActions button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.importForm .success,
+.importForm .formError {
+  grid-column: 1 / -1;
+  margin-top: 0;
 }
 
 .verificationCard {
@@ -532,6 +742,16 @@
   font-size: 0.59rem;
 }
 
+.tableWrap td .retrospectiveTag {
+  width: fit-content;
+  margin-top: 0.35rem;
+  padding: 0.25rem 0.4rem;
+  color: #92400e;
+  border-radius: 6px;
+  background: rgba(245, 158, 11, 0.1);
+  line-height: 1.35;
+}
+
 .riskBadge,
 .labelBadge,
 .verificationBadge {
@@ -648,6 +868,8 @@
 @media (max-width: 680px) {
   .hero,
   .cardHeader,
+  .importHeader,
+  .importActions,
   .verificationHeader,
   .verificationActions {
     flex-direction: column;
@@ -656,9 +878,24 @@
   .metrics,
   .filters,
   .verificationCard form,
+  .importForm,
+  .importMetrics,
+  .selectedOrderAudit,
+  .verificationConsent,
   .exportMetrics,
   .readinessCard dl {
     grid-template-columns: 1fr;
+  }
+
+  .importMetrics > div,
+  .selectedOrderAudit span {
+    border-right: 0;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .importMetrics > div:last-child,
+  .selectedOrderAudit span:last-child {
+    border-bottom: 0;
   }
 
   .exportActions {

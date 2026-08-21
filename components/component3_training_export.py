@@ -285,6 +285,9 @@ def build_verified_training_dataset(
     invalid_record_ids: list[str] = []
     for order_records in records_by_order.values():
         for position, record in enumerate(order_records):
+            if not record.get("independent_validation_eligible", True):
+                exclusion_counts["retrospective_training_reuse"] += 1
+                continue
             if record["label_status"] != "Ready":
                 exclusion_counts["label_not_ready"] += 1
                 continue
@@ -296,6 +299,12 @@ def build_verified_training_dataset(
                 continue
 
             source_history = order_records[: position + 1]
+            if any(
+                not item.get("independent_validation_eligible", True)
+                for item in source_history
+            ):
+                exclusion_counts["retrospective_prior_history"] += 1
+                continue
             if any(
                 item["actual_outcome_status"] != "Verified"
                 for item in source_history
@@ -367,7 +376,13 @@ def build_verified_training_dataset(
         "dataset": {
             "all_monitoring_records": len(snapshot),
             "ready_source_candidates": sum(
-                record["label_status"] == "Ready" for record in snapshot
+                record["label_status"] == "Ready"
+                and record.get("independent_validation_eligible", True)
+                for record in snapshot
+            ),
+            "retrospective_records_excluded": sum(
+                not record.get("independent_validation_eligible", True)
+                for record in snapshot
             ),
             "exported_rows": len(dataset),
             "independent_orders": (
@@ -396,6 +411,7 @@ def build_verified_training_dataset(
             "verified_future_outcomes_required": True,
             "current_actual_emergency_sources_excluded": True,
             "unverified_prior_history_excluded": True,
+            "retrospective_training_reuse_excluded": True,
             "identity_columns_in_model_features": identity_overlap,
             "future_targets_in_model_features": target_overlap,
             "excluded_from_model_features": sorted(

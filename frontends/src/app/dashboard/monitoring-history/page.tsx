@@ -49,6 +49,8 @@ interface MonitoringRecord {
   first_emergency_type_within_3_days: string | null;
   first_emergency_lead_days: number | null;
   recorded_by: string;
+  data_origin: string;
+  independent_validation_eligible: boolean;
   created_at: string;
 }
 
@@ -63,6 +65,8 @@ interface ReadinessResponse {
   total_records: number;
   verified_records: number;
   pending_verification_records: number;
+  independent_validation_eligible_records: number;
+  retrospective_training_reuse_records: number;
   stable_records: number;
   emergency_records: number;
   detected_stable_records: number;
@@ -71,6 +75,7 @@ interface ReadinessResponse {
   label_status_counts: Record<LabelStatus, number>;
   three_day_target: {
     ready_rows: number;
+    retrospective_ready_rows_excluded: number;
     positive_rows: number;
     negative_rows: number;
     positive_orders: number;
@@ -120,6 +125,87 @@ interface TrainingExportAudit {
   decision: string;
 }
 
+interface HistoricalMasterConflict {
+  field: string;
+  component2_value: string | number | null;
+  component3_value: string | number | null;
+}
+
+interface HistoricalImportOrder {
+  bulk_order_id: string;
+  style_id: string;
+  source_rows: number;
+  production_date_from: string;
+  production_date_to: string;
+  recorded_emergency_days: number;
+  importable_rows: number;
+  existing_matching_rows: number;
+  existing_conflicting_rows: number;
+  component2_master: {
+    status: 'matched' | 'matched_with_conflicts' | 'not_found' | 'ambiguous';
+    matching_fields: string[];
+    conflicting_fields: HistoricalMasterConflict[];
+  };
+}
+
+interface HistoricalImportPreview {
+  import_version: string;
+  status: 'preview';
+  mode: 'retrospective_demo';
+  independent_validation: false;
+  production_approved: false;
+  sources: {
+    component3_daily: {
+      filename: string;
+      sha256: string;
+      rows: number;
+      orders: number;
+      generated_or_augmented_rows_excluded: number;
+      already_used_for_model_training: boolean;
+    };
+    component2_master: {
+      filename: string;
+      sha256: string;
+      rows: number;
+      matched_component3_orders: number;
+      authority: 'audit_only';
+    };
+  };
+  summary: {
+    source_rows: number;
+    source_orders: number;
+    importable_rows: number;
+    existing_matching_rows: number;
+    existing_conflicting_rows: number;
+  };
+  orders: HistoricalImportOrder[];
+  rules: string[];
+  limitations: string[];
+}
+
+interface HistoricalImportResult {
+  status: 'success' | 'partial';
+  mode: 'retrospective_demo';
+  independent_validation: false;
+  bulk_order_id: string;
+  source_rows: number;
+  imported_rows: number;
+  existing_matching_rows: number;
+  verified_rows: number;
+  already_verified_rows: number;
+  conflicts: Array<{
+    working_day_no: number;
+    production_date: string;
+    reason: string;
+  }>;
+  processing_errors: Array<{
+    working_day_no: number;
+    production_date: string;
+    error: string;
+  }>;
+  limitations: string[];
+}
+
 const ACTUAL_EMERGENCY_TYPES: ActualEmergencyType[] = [
   'Worker Shortage',
   'Machine Breakdown',
@@ -154,6 +240,8 @@ export default function MonitoringHistoryPage() {
   const [exportAudit, setExportAudit] = useState<TrainingExportAudit | null>(
     null,
   );
+  const [importPreview, setImportPreview] =
+    useState<HistoricalImportPreview | null>(null);
   const [total, setTotal] = useState(0);
   const [orderFilter, setOrderFilter] = useState('');
   const [riskFilter, setRiskFilter] = useState('');
@@ -172,6 +260,19 @@ export default function MonitoringHistoryPage() {
   const [savingVerification, setSavingVerification] = useState(false);
   const [verificationError, setVerificationError] = useState('');
   const [verificationMessage, setVerificationMessage] = useState('');
+  const [historicalOrderId, setHistoricalOrderId] = useState('');
+  const [historicalImportedBy, setHistoricalImportedBy] = useState('');
+  const [confirmRetrospectiveReuse, setConfirmRetrospectiveReuse] =
+    useState(false);
+  const [verifyHistoricalOutcomes, setVerifyHistoricalOutcomes] =
+    useState(false);
+  const [confirmHistoricalOutcomes, setConfirmHistoricalOutcomes] =
+    useState(false);
+  const [historicalVerifiedBy, setHistoricalVerifiedBy] = useState('');
+  const [importingHistory, setImportingHistory] = useState(false);
+  const [historicalImportError, setHistoricalImportError] = useState('');
+  const [historicalImportMessage, setHistoricalImportMessage] = useState('');
+  const [historicalPreviewError, setHistoricalPreviewError] = useState('');
 
   const requestJson = useCallback(async (path: string) => {
     const response = await fetch(`${API_BASE_URL}${path}`);
@@ -200,20 +301,62 @@ export default function MonitoringHistoryPage() {
 
   useEffect(() => {
     let cancelled = false;
+    const historicalPreviewRequest = requestJson('/historical-import/preview')
+      .then((payload) => ({ payload, error: '' }))
+      .catch((previewError: unknown) => ({
+        payload: null,
+        error:
+          previewError instanceof Error
+            ? previewError.message
+            : 'Historical import preview is unavailable.',
+      }));
     Promise.all([
       requestJson(`/monitoring-records?${query}`),
       requestJson('/monitoring-readiness'),
       requestJson('/training-dataset-audit'),
+      historicalPreviewRequest,
     ])
-      .then(([listPayload, readinessPayload, exportAuditPayload]) => {
+      .then(
+        ([
+          listPayload,
+          readinessPayload,
+          exportAuditPayload,
+          historicalPreviewResult,
+        ]) => {
         if (cancelled) return;
         const list = listPayload as MonitoringListResponse;
         setRecords(list.items);
         setTotal(list.total);
         setReadiness(readinessPayload as ReadinessResponse);
         setExportAudit(exportAuditPayload as TrainingExportAudit);
+        setHistoricalPreviewError(historicalPreviewResult.error);
+        if (historicalPreviewResult.payload) {
+          const historicalPreview =
+            historicalPreviewResult.payload as HistoricalImportPreview;
+          setImportPreview(historicalPreview);
+          setHistoricalOrderId((current) => {
+            if (
+              current &&
+              historicalPreview.orders.some(
+                (order) => order.bulk_order_id === current,
+              )
+            ) {
+              return current;
+            }
+            return (
+              historicalPreview.orders.find(
+                (order) => order.importable_rows > 0,
+              )?.bulk_order_id ??
+              historicalPreview.orders[0]?.bulk_order_id ??
+              ''
+            );
+          });
+        } else {
+          setImportPreview(null);
+        }
         setError('');
-      })
+      },
+      )
       .catch((requestError: unknown) => {
         if (cancelled) return;
         setError(
@@ -235,6 +378,9 @@ export default function MonitoringHistoryPage() {
     exportAudit &&
       exportAudit.dataset.exported_rows > 0 &&
       exportAudit.leakage_controls.passed,
+  );
+  const selectedHistoricalOrder = importPreview?.orders.find(
+    (order) => order.bulk_order_id === historicalOrderId,
   );
 
   const openVerification = (record: MonitoringRecord) => {
@@ -304,6 +450,61 @@ export default function MonitoringHistoryPage() {
     }
   };
 
+  const handleHistoricalImport = async (
+    event: React.FormEvent<HTMLFormElement>,
+  ) => {
+    event.preventDefault();
+    setImportingHistory(true);
+    setHistoricalImportError('');
+    setHistoricalImportMessage('');
+    try {
+      const response = await fetch(`${API_BASE_URL}/historical-import`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          bulk_order_id: historicalOrderId,
+          confirm_retrospective_training_data_reuse:
+            confirmRetrospectiveReuse,
+          imported_by: historicalImportedBy.trim(),
+          verify_historical_outcomes: verifyHistoricalOutcomes,
+          confirm_historical_outcomes_are_actual:
+            verifyHistoricalOutcomes && confirmHistoricalOutcomes,
+          verified_by: verifyHistoricalOutcomes
+            ? historicalVerifiedBy.trim()
+            : undefined,
+        }),
+      });
+      const payload: unknown = await response.json();
+      if (!response.ok) {
+        const apiError = payload as { error?: unknown };
+        throw new Error(
+          typeof apiError.error === 'string'
+            ? apiError.error
+            : 'The historical order could not be imported.',
+        );
+      }
+      const result = payload as HistoricalImportResult;
+      const conflictText = result.conflicts.length
+        ? ` ${result.conflicts.length} conflict(s) were left unchanged.`
+        : '';
+      setHistoricalImportMessage(
+        `${result.bulk_order_id}: ${result.imported_rows} row(s) imported, ` +
+          `${result.existing_matching_rows} already present, and ` +
+          `${result.verified_rows} verified.${conflictText}`,
+      );
+      setLoading(true);
+      setRefreshVersion((value) => value + 1);
+    } catch (requestError: unknown) {
+      setHistoricalImportError(
+        requestError instanceof Error
+          ? requestError.message
+          : 'Unable to import the historical order.',
+      );
+    } finally {
+      setImportingHistory(false);
+    }
+  };
+
   return (
     <div className={styles.container}>
       <section className={styles.hero}>
@@ -341,7 +542,11 @@ export default function MonitoringHistoryPage() {
         <article>
           <span>Ready labels</span>
           <strong>{NUMBER_FORMATTER.format(target?.ready_rows ?? 0)}</strong>
-          <small>Complete next-three-day windows</small>
+          <small>
+            Independent windows;{' '}
+            {target?.retrospective_ready_rows_excluded ?? 0} retrospective
+            excluded
+          </small>
         </article>
       </section>
 
@@ -457,6 +662,192 @@ export default function MonitoringHistoryPage() {
         </div>
       </section>
 
+      <section className={styles.importCard}>
+        <div className={styles.importHeader}>
+          <div>
+            <span className={styles.kicker}>Retrospective data loader</span>
+            <h2>Import one historical Component 3 order</h2>
+            <p>
+              Replays each day in chronological order so the API prediction is
+              created before its recorded outcome is attached. Component 2 is
+              used only to audit order-master values; Component 3 remains the
+              authority when fields disagree.
+            </p>
+          </div>
+          <span className={styles.researchBadge}>
+            Demo only · not independent validation
+          </span>
+        </div>
+
+        <div className={styles.importMetrics}>
+          <div>
+            <span>Source rows</span>
+            <strong>{importPreview?.summary.source_rows ?? 0}</strong>
+          </div>
+          <div>
+            <span>Source orders</span>
+            <strong>{importPreview?.summary.source_orders ?? 0}</strong>
+          </div>
+          <div>
+            <span>Importable now</span>
+            <strong>{importPreview?.summary.importable_rows ?? 0}</strong>
+          </div>
+          <div>
+            <span>Already present</span>
+            <strong>
+              {importPreview?.summary.existing_matching_rows ?? 0}
+            </strong>
+          </div>
+        </div>
+
+        <form className={styles.importForm} onSubmit={handleHistoricalImport}>
+          {historicalPreviewError && (
+            <div className={styles.formError} role="alert">
+              Import preview unavailable: {historicalPreviewError}
+            </div>
+          )}
+          <label>
+            Historical bulk order
+            <select
+              value={historicalOrderId}
+              onChange={(event) => setHistoricalOrderId(event.target.value)}
+              required
+            >
+              {importPreview?.orders.map((order) => (
+                <option key={order.bulk_order_id} value={order.bulk_order_id}>
+                  {order.bulk_order_id} · {order.style_id} · {order.source_rows}{' '}
+                  days
+                </option>
+              ))}
+            </select>
+          </label>
+          <label>
+            Imported by
+            <input
+              value={historicalImportedBy}
+              onChange={(event) => setHistoricalImportedBy(event.target.value)}
+              placeholder="Researcher name or ID"
+              maxLength={100}
+              required
+            />
+          </label>
+
+          {selectedHistoricalOrder && (
+            <div className={styles.selectedOrderAudit}>
+              <span>
+                {selectedHistoricalOrder.production_date_from} to{' '}
+                {selectedHistoricalOrder.production_date_to}
+              </span>
+              <span>
+                {selectedHistoricalOrder.importable_rows} importable ·{' '}
+                {selectedHistoricalOrder.recorded_emergency_days} recorded
+                emergency day(s)
+              </span>
+              <span>
+                Component 2 audit:{' '}
+                {selectedHistoricalOrder.component2_master.conflicting_fields
+                  .length
+                  ? `${selectedHistoricalOrder.component2_master.conflicting_fields.length} field conflict(s); Component 3 values will be kept`
+                  : 'all compared fields match'}
+              </span>
+            </div>
+          )}
+
+          <label className={styles.importCheck}>
+            <input
+              type="checkbox"
+              checked={confirmRetrospectiveReuse}
+              onChange={(event) =>
+                setConfirmRetrospectiveReuse(event.target.checked)
+              }
+            />
+            <span>
+              I understand this Component 3 workbook trained the current models,
+              so the import is a retrospective workflow demo and cannot be
+              reported as new independent validation.
+            </span>
+          </label>
+
+          <label className={styles.importCheck}>
+            <input
+              type="checkbox"
+              checked={verifyHistoricalOutcomes}
+              onChange={(event) => {
+                setVerifyHistoricalOutcomes(event.target.checked);
+                if (!event.target.checked) setConfirmHistoricalOutcomes(false);
+              }}
+            />
+            <span>
+              Automatically verify each imported day from the recorded historical
+              risk and operational fields.
+            </span>
+          </label>
+
+          {verifyHistoricalOutcomes && (
+            <div className={styles.verificationConsent}>
+              <label>
+                Historical outcomes reviewed by
+                <input
+                  value={historicalVerifiedBy}
+                  onChange={(event) =>
+                    setHistoricalVerifiedBy(event.target.value)
+                  }
+                  placeholder="Reviewer name or ID"
+                  maxLength={120}
+                  required
+                />
+              </label>
+              <label className={styles.importCheck}>
+                <input
+                  type="checkbox"
+                  checked={confirmHistoricalOutcomes}
+                  onChange={(event) =>
+                    setConfirmHistoricalOutcomes(event.target.checked)
+                  }
+                />
+                <span>
+                  I confirm the source risk fields are recorded actual historical
+                  outcomes and approve their use as retrospective verification.
+                </span>
+              </label>
+            </div>
+          )}
+
+          <div className={styles.importActions}>
+            <span>
+              Existing matching rows are skipped. Conflicting rows are never
+              overwritten.
+            </span>
+            <button
+              type="submit"
+              disabled={
+                importingHistory ||
+                !importPreview ||
+                !historicalOrderId ||
+                !historicalImportedBy.trim() ||
+                !confirmRetrospectiveReuse ||
+                (verifyHistoricalOutcomes &&
+                  (!historicalVerifiedBy.trim() ||
+                    !confirmHistoricalOutcomes))
+              }
+            >
+              {importingHistory ? 'Importing order...' : 'Import selected order'}
+            </button>
+          </div>
+
+          {historicalImportMessage && (
+            <div className={styles.success} role="status">
+              {historicalImportMessage}
+            </div>
+          )}
+          {historicalImportError && (
+            <div className={styles.formError} role="alert">
+              {historicalImportError}
+            </div>
+          )}
+        </form>
+      </section>
+
       {selectedRecord && (
         <section className={styles.verificationCard}>
           <div className={styles.verificationHeader}>
@@ -473,6 +864,12 @@ export default function MonitoringHistoryPage() {
                 <strong>{selectedRecord.risk_type}</strong>; confirm what actually
                 happened in the factory.
               </p>
+              {!selectedRecord.independent_validation_eligible && (
+                <p>
+                  This is a retrospective training-data reuse record. Corrections
+                  remain auditable but do not count as independent validation.
+                </p>
+              )}
             </div>
             <button type="button" onClick={closeVerification}>
               Cancel
@@ -722,6 +1119,11 @@ export default function MonitoringHistoryPage() {
                     <td>
                       <strong>{record.recorded_by}</strong>
                       <span>{new Date(record.created_at).toLocaleString()}</span>
+                      {!record.independent_validation_eligible && (
+                        <small className={styles.retrospectiveTag}>
+                          Retrospective · excluded from independent validation
+                        </small>
+                      )}
                     </td>
                   </tr>
                 ))}

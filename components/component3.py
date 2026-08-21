@@ -42,6 +42,11 @@ from datetime import datetime, timedelta
 from flask import Blueprint, current_app, request, jsonify, send_file
 
 from components.component3_features import FEATURES, build_feature_row
+from components.component3_historical_import import (
+    build_historical_import_preview,
+    load_historical_order,
+    prediction_inputs_match,
+)
 from components.component3_early_warning_inference import (
     EarlyWarningModelError,
     MODEL_SPECS as EARLY_WARNING_MODEL_SPECS,
@@ -622,6 +627,32 @@ def _early_warning_models_directory() -> str:
     return str(configured_path or MODELS_DIR)
 
 
+def _historical_component3_source_path() -> str:
+    configured_path = current_app.config.get(
+        "COMPONENT3_HISTORICAL_IMPORT_SOURCE"
+    )
+    return str(
+        configured_path
+        or os.environ.get(
+            "COMPONENT3_HISTORICAL_IMPORT_SOURCE",
+            os.path.join(BASE_DIR, "component3_final_preprossed dataset.xlsx"),
+        )
+    )
+
+
+def _historical_component2_source_path() -> str:
+    configured_path = current_app.config.get(
+        "COMPONENT3_COMPONENT2_MASTER_SOURCE"
+    )
+    return str(
+        configured_path
+        or os.environ.get(
+            "COMPONENT3_COMPONENT2_MASTER_SOURCE",
+            os.path.join(BASE_DIR, "component2_bulk_order_aligned_to.xlsx"),
+        )
+    )
+
+
 def _attach_early_warning(data: dict, analysis: dict) -> dict:
     """Add optional research warnings without breaking current detection."""
     risk_type = str(analysis["risk_detection"]["risk_type"])
@@ -915,6 +946,188 @@ def verify_monitoring_record(record_id: str):
         "status": "success",
         "monitoring_record": monitoring_record,
     }), 200
+
+
+@component3_bp.route("/historical-import/preview", methods=["GET"])
+def historical_import_preview():
+    """Audit the bundled retrospective sources without changing the DB."""
+    try:
+        preview = build_historical_import_preview(
+            _historical_component3_source_path(),
+            _historical_component2_source_path(),
+            _monitoring_store().training_export_snapshot(),
+        )
+    except (FileNotFoundError, OSError, ValueError) as error:
+        return jsonify({"error": str(error)}), 503
+    return jsonify(preview), 200
+
+
+@component3_bp.route("/historical-import", methods=["POST"])
+def import_historical_order():
+    """Import one historical order after explicit retrospective consent."""
+    raw_data = request.get_json(force=True, silent=True)
+    if not isinstance(raw_data, dict) or not raw_data:
+        return jsonify({"error": "Request body must be valid JSON"}), 400
+
+    try:
+        bulk_order_id = _required_text(raw_data, "bulk_order_id")
+        if raw_data.get("confirm_retrospective_training_data_reuse") is not True:
+            raise ValueError(
+                "confirm_retrospective_training_data_reuse must be true"
+            )
+        verify_outcomes = raw_data.get("verify_historical_outcomes", False)
+        if not isinstance(verify_outcomes, bool):
+            raise ValueError("verify_historical_outcomes must be true or false")
+        imported_by = _required_text(
+            {"imported_by": raw_data.get("imported_by", "System User")},
+            "imported_by",
+        )
+        if len(imported_by) > 100:
+            raise ValueError("imported_by must be 100 characters or fewer")
+        verified_by = None
+        if verify_outcomes:
+            if raw_data.get("confirm_historical_outcomes_are_actual") is not True:
+                raise ValueError(
+                    "confirm_historical_outcomes_are_actual must be true "
+                    "when automatic verification is requested"
+                )
+            verified_by = _required_text(raw_data, "verified_by")
+            if len(verified_by) > 120:
+                raise ValueError("verified_by must be 120 characters or fewer")
+        source_records = load_historical_order(
+            _historical_component3_source_path(),
+            _historical_component2_source_path(),
+            bulk_order_id,
+        )
+    except (FileNotFoundError, OSError) as error:
+        return jsonify({"error": str(error)}), 503
+    except ValueError as error:
+        return jsonify({"error": str(error)}), 400
+
+    try:
+        models = _load_models()
+    except RuntimeError as error:
+        return jsonify({"error": str(error)}), 503
+
+    store = _monitoring_store()
+    existing_records = store.training_export_snapshot()
+    existing_by_day = {
+        (str(record["bulk_order_id"]), int(record["working_day_no"])): record
+        for record in existing_records
+    }
+    existing_by_date = {
+        (str(record["bulk_order_id"]), str(record["production_date"])): record
+        for record in existing_records
+    }
+    result = {
+        "status": "success",
+        "mode": "retrospective_demo",
+        "independent_validation": False,
+        "bulk_order_id": bulk_order_id,
+        "source_rows": len(source_records),
+        "imported_rows": 0,
+        "existing_matching_rows": 0,
+        "verified_rows": 0,
+        "already_verified_rows": 0,
+        "conflicts": [],
+        "processing_errors": [],
+    }
+    recorded_by = f"Historical Import - {imported_by}"
+
+    for source in source_records:
+        payload = source["prediction_input"]
+        day_key = (bulk_order_id, int(payload["working_day_no"]))
+        date_key = (bulk_order_id, str(payload["production_date"]))
+        existing = existing_by_day.get(day_key) or existing_by_date.get(date_key)
+
+        if existing is not None:
+            if not prediction_inputs_match(payload, existing["prediction_input"]):
+                result["conflicts"].append({
+                    "working_day_no": payload["working_day_no"],
+                    "production_date": payload["production_date"],
+                    "reason": "Existing record has different monitoring values",
+                })
+                continue
+            result["existing_matching_rows"] += 1
+            if verify_outcomes:
+                if existing["actual_outcome_status"] == "Verified":
+                    result["already_verified_rows"] += 1
+                elif existing.get("data_origin") == "historical_training_reuse":
+                    store.verify_record(
+                        existing["record_id"],
+                        actual_emergency=source["actual_emergency"],
+                        actual_emergency_type=source["actual_emergency_type"],
+                        verified_by=str(verified_by),
+                        verification_notes=(
+                            "Retrospective source outcome from the original "
+                            "Component 3 workbook; not independent validation. "
+                            f"Recorded source risk: {source['source_risk_type']}."
+                        ),
+                    )
+                    result["verified_rows"] += 1
+                else:
+                    result["conflicts"].append({
+                        "working_day_no": payload["working_day_no"],
+                        "production_date": payload["production_date"],
+                        "reason": (
+                            "Matching record was not created by the historical "
+                            "importer and was not auto-verified"
+                        ),
+                    })
+            continue
+
+        try:
+            validated = _validate_prediction_payload(payload)
+            analysis = _build_complete_response(validated, models)
+            analysis["historical_import"] = {
+                "mode": "retrospective_demo",
+                "independent_validation": False,
+                "source_risk_type": source["source_risk_type"],
+                "outcome_used_during_prediction": False,
+            }
+            created = store.create_record(
+                validated,
+                analysis,
+                recorded_by=recorded_by,
+                data_origin="historical_training_reuse",
+                independent_validation_eligible=False,
+            )
+            result["imported_rows"] += 1
+            existing_by_day[day_key] = created
+            existing_by_date[date_key] = created
+            if verify_outcomes:
+                store.verify_record(
+                    created["record_id"],
+                    actual_emergency=source["actual_emergency"],
+                    actual_emergency_type=source["actual_emergency_type"],
+                    verified_by=str(verified_by),
+                    verification_notes=(
+                        "Retrospective source outcome from the original "
+                        "Component 3 workbook; not independent validation. "
+                        f"Recorded source risk: {source['source_risk_type']}."
+                    ),
+                )
+                result["verified_rows"] += 1
+        except TrackingConflictError as error:
+            result["conflicts"].append({
+                "working_day_no": payload["working_day_no"],
+                "production_date": payload["production_date"],
+                "reason": str(error),
+            })
+        except Exception as error:
+            result["processing_errors"].append({
+                "working_day_no": payload["working_day_no"],
+                "production_date": payload["production_date"],
+                "error": str(error),
+            })
+
+    if result["processing_errors"]:
+        result["status"] = "partial"
+    result["limitations"] = [
+        "The imported source was used to train the current model artifacts.",
+        "This import is a retrospective workflow demo, not independent validation.",
+    ]
+    return jsonify(result), 200
 
 
 def _verified_training_export():
