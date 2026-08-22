@@ -273,6 +273,12 @@
   box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.12);
 }
 
+.formGroup input:read-only {
+  cursor: not-allowed;
+  color: var(--primary);
+  background: rgba(99, 102, 241, 0.06);
+}
+
 .fieldHelper {
   color: var(--secondary);
   font-size: 0.68rem;

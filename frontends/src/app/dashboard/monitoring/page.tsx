@@ -223,6 +223,7 @@ interface FieldDefinition {
   min?: number;
   step?: number;
   helper?: string;
+  readOnly?: boolean;
 }
 
 interface RecoveryFieldDefinition {
@@ -238,6 +239,29 @@ const API_BASE_URL = (
   'http://127.0.0.1:5001/api/component3'
 ).replace(/\/$/, '');
 
+function countWorkingDaysInclusive(start: string, end: string): NumericValue {
+  if (!start || !end) return '';
+
+  const startDate = new Date(`${start}T00:00:00Z`);
+  const endDate = new Date(`${end}T00:00:00Z`);
+  if (
+    Number.isNaN(startDate.getTime()) ||
+    Number.isNaN(endDate.getTime()) ||
+    endDate < startDate
+  ) {
+    return '';
+  }
+
+  let workingDays = 0;
+  const cursor = new Date(startDate);
+  while (cursor <= endDate) {
+    const day = cursor.getUTCDay();
+    if (day !== 0 && day !== 6) workingDays += 1;
+    cursor.setUTCDate(cursor.getUTCDate() + 1);
+  }
+  return workingDays;
+}
+
 const INITIAL_FORM: MonitoringFormData = {
   bulk_order_id: 'BULK0015',
   style_id: 'KM327296',
@@ -247,7 +271,7 @@ const INITIAL_FORM: MonitoringFormData = {
   full_order_qty: 26_499,
   bulk_order_approved_date: '2024-07-12',
   buyer_required_date: '2024-10-20',
-  total_working_days: 35,
+  total_working_days: 71,
   cutting_days: 14,
   sewing_days: 20,
   daily_commitment: 750,
@@ -402,7 +426,15 @@ const PRODUCTION_FIELDS: FieldDefinition[] = [
 ];
 
 const TIMELINE_FIELDS: FieldDefinition[] = [
-  { name: 'total_working_days', label: 'Total working days', type: 'number', min: 1 },
+  {
+    name: 'total_working_days',
+    label: 'Total working days',
+    type: 'number',
+    min: 1,
+    readOnly: true,
+    helper:
+      'Automatically calculated from the approved date through the buyer-required date (Monday-Friday, inclusive; public holidays are not excluded).',
+  },
   { name: 'working_day_no', label: 'Current working day', type: 'number', min: 1 },
   { name: 'cutting_days', label: 'Cutting days', type: 'number', min: 0 },
   { name: 'sewing_days', label: 'Sewing days', type: 'number', min: 0 },
@@ -667,7 +699,19 @@ export default function MonitoringPage() {
     const field = name as keyof MonitoringFormData;
     const nextValue = type === 'number' ? (value === '' ? '' : Number(value)) : value;
 
-    setFormData((previous) => ({ ...previous, [field]: nextValue }));
+    setFormData((previous) => {
+      const next = { ...previous, [field]: nextValue } as MonitoringFormData;
+      if (
+        field === 'bulk_order_approved_date' ||
+        field === 'buyer_required_date'
+      ) {
+        next.total_working_days = countWorkingDaysInclusive(
+          next.bulk_order_approved_date,
+          next.buyer_required_date,
+        );
+      }
+      return next;
+    });
   };
 
   const handleRecoveryChange = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -847,6 +891,7 @@ export default function MonitoringPage() {
           min={field.min}
           step={field.step}
           onChange={handleChange}
+          readOnly={field.readOnly}
           required
         />
         {field.helper && <span className={styles.fieldHelper}>{field.helper}</span>}
