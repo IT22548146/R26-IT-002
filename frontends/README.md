@@ -41,6 +41,12 @@ calendar. See
 [`COMPONENT3_DEMO_GUIDE.md`](../COMPONENT3_DEMO_GUIDE.md) for the complete
 demonstration sequence.
 
+After a Bulk Order ID is entered in current-order mode, the screen checks its
+saved monitoring history. A new ID starts at working day 1. An existing ID is
+set to the latest saved working day plus one and the next Monday-Friday date;
+the suggested date remains editable so a missed historical daily record can be
+entered. Unsaved field values cannot be recovered from the database.
+
 In current-order mode, **Cumulative completed** is read-only and calculated
 automatically. On working day 1 it equals that day's actual output. From day 2
 onward it equals the previous saved working day's cumulative quantity plus the

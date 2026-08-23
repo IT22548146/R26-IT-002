@@ -268,6 +268,32 @@ class Component3MonitoringStoreTests(unittest.TestCase):
                 working_day_no=0,
             )
 
+    def test_next_entry_context_advances_day_and_skips_weekend(self):
+        new_order = self.store.next_entry_context("ORDER_NEXT_ENTRY")
+        self.assertEqual(new_order["status"], "new_order")
+        self.assertEqual(new_order["suggested_working_day_no"], 1)
+        self.assertIsNone(new_order["suggested_production_date"])
+
+        friday = self.prediction_input(
+            1,
+            order_id="ORDER_NEXT_ENTRY",
+            cumulative=120,
+        )
+        friday["production_date"] = "2026-08-21"
+        saved = self.save(friday)
+
+        continuation = self.store.next_entry_context("ORDER_NEXT_ENTRY")
+        self.assertEqual(continuation["status"], "continue_order")
+        self.assertEqual(continuation["suggested_working_day_no"], 2)
+        self.assertEqual(
+            continuation["suggested_production_date"],
+            "2026-08-24",
+        )
+        self.assertEqual(
+            continuation["latest_record"]["record_id"],
+            saved["record_id"],
+        )
+
     def test_unverified_predictions_never_create_training_labels(self):
         source = self.save(self.prediction_input(1, order_id="ORDER_PENDING"))
         for day in (2, 3, 4):
@@ -578,6 +604,33 @@ class Component3MonitoringApiTests(unittest.TestCase):
                 + suffix
             )
             self.assertEqual(response.status_code, 400, response.get_json())
+
+    def test_next_entry_context_endpoint_uses_latest_saved_order_day(self):
+        response = self.client.get(
+            "/api/component3/orders/MONITORING001/next-entry-context"
+        )
+        self.assertEqual(response.status_code, 200, response.get_json())
+        self.assertEqual(response.get_json()["status"], "new_order")
+        self.assertEqual(
+            response.get_json()["suggested_working_day_no"],
+            1,
+        )
+
+        created = self.client.post(
+            "/api/component3/monitoring-records",
+            json=self.payload(),
+        )
+        self.assertEqual(created.status_code, 201, created.get_json())
+
+        response = self.client.get(
+            "/api/component3/orders/MONITORING001/next-entry-context"
+        )
+        self.assertEqual(response.status_code, 200, response.get_json())
+        context = response.get_json()
+        self.assertEqual(context["status"], "continue_order")
+        self.assertEqual(context["latest_record"]["working_day_no"], 1)
+        self.assertEqual(context["suggested_working_day_no"], 2)
+        self.assertEqual(context["suggested_production_date"], "2024-07-22")
 
     def test_supervisor_can_verify_and_correct_actual_outcome(self):
         created = self.client.post(

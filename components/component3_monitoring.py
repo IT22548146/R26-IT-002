@@ -7,6 +7,7 @@ import os
 import sqlite3
 import uuid
 from contextlib import contextmanager
+from datetime import datetime, timedelta
 from typing import Any, Iterator
 
 from components.component3_tracking import (
@@ -705,6 +706,51 @@ class Component3MonitoringStore:
                 if current_row is not None
                 else None
             ),
+        }
+
+    def next_entry_context(self, bulk_order_id: str) -> dict[str, Any]:
+        """Suggest the next chronological daily entry for an order."""
+        order_id = str(bulk_order_id).strip()
+        if not order_id:
+            raise ValueError("bulk_order_id is required")
+
+        with self._connection() as connection:
+            latest_row = connection.execute(
+                """
+                SELECT * FROM component3_daily_monitoring
+                WHERE bulk_order_id = ?
+                ORDER BY working_day_no DESC, production_date DESC
+                LIMIT 1
+                """,
+                (order_id,),
+            ).fetchone()
+
+        if latest_row is None:
+            return {
+                "status": "new_order",
+                "bulk_order_id": order_id,
+                "latest_record": None,
+                "suggested_working_day_no": 1,
+                "suggested_production_date": None,
+            }
+
+        latest_record = self._cumulative_record(latest_row)
+        latest_date = datetime.strptime(
+            str(latest_record["production_date"]),
+            "%Y-%m-%d",
+        ).date()
+        next_date = latest_date + timedelta(days=1)
+        while next_date.weekday() >= 5:
+            next_date += timedelta(days=1)
+
+        return {
+            "status": "continue_order",
+            "bulk_order_id": order_id,
+            "latest_record": latest_record,
+            "suggested_working_day_no": (
+                int(latest_record["working_day_no"]) + 1
+            ),
+            "suggested_production_date": next_date.isoformat(),
         }
 
     def get_record(self, record_id: str) -> dict[str, Any]:

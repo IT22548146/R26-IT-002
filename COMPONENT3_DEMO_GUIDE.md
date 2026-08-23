@@ -54,6 +54,13 @@ plant-capacity fields for entry. The total working days are calculated from the
 approved date through the buyer-required date using an inclusive Monday-Friday
 calendar.
 
+Enter the Bulk Order ID first. The screen checks saved daily monitoring
+history after a short pause. If records exist, it suggests the latest saved
+working day plus one and the next Monday-Friday production date. If no records
+exist, it keeps working day 1 and the current working date. The date remains
+editable, allowing a missed older record to be entered in sequence; values
+that were never saved still need to be entered again.
+
 **Cumulative completed** is automatic and read-only in this mode. For working
 day 1, enter the actual daily output and the cumulative quantity becomes the
 same value. For each later day, use the same Bulk Order ID and save the

@@ -947,6 +947,19 @@ def order_cumulative_context(bulk_order_id: str):
     return jsonify(result), 200
 
 
+@component3_bp.route(
+    "/orders/<bulk_order_id>/next-entry-context",
+    methods=["GET"],
+)
+def order_next_entry_context(bulk_order_id: str):
+    """Suggest the next working day and date after the latest saved record."""
+    try:
+        result = _monitoring_store().next_entry_context(bulk_order_id)
+    except ValueError as error:
+        return jsonify({"error": str(error)}), 400
+    return jsonify(result), 200
+
+
 @component3_bp.route("/monitoring-records/<record_id>", methods=["GET"])
 def get_monitoring_record(record_id: str):
     """Return one monitoring record with its canonical input and analysis."""

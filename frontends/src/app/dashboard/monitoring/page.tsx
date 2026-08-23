@@ -261,6 +261,19 @@ interface CumulativeFeedback {
   blocking: boolean;
 }
 
+interface NextEntryContextResponse {
+  status: 'new_order' | 'continue_order';
+  bulk_order_id: string;
+  latest_record: CumulativeContextRecord | null;
+  suggested_working_day_no: number;
+  suggested_production_date: string | null;
+}
+
+interface OrderEntryFeedback {
+  status: 'idle' | 'loading' | 'ready' | 'error';
+  message: string;
+}
+
 const API_BASE_URL = (
   process.env.NEXT_PUBLIC_COMPONENT3_API_URL ??
   'http://127.0.0.1:5001/api/component3'
@@ -815,6 +828,32 @@ export default function MonitoringPage() {
     });
   const cumulativeRequestId = useRef(0);
   const cumulativeRequestController = useRef<AbortController | null>(null);
+  const [orderEntryFeedback, setOrderEntryFeedback] =
+    useState<OrderEntryFeedback>({
+      status: 'idle',
+      message: 'Enter the Bulk order ID to check its saved daily history.',
+    });
+  const orderEntryRequestId = useRef(0);
+  const orderEntryRequestController = useRef<AbortController | null>(null);
+  const orderEntryLookupTimer = useRef<ReturnType<typeof setTimeout> | null>(
+    null,
+  );
+  const formDataRef = useRef<MonitoringFormData>(INITIAL_FORM);
+
+  const replaceFormData = (next: MonitoringFormData) => {
+    formDataRef.current = next;
+    setFormData(next);
+  };
+
+  const updateFormData = (
+    updater: (previous: MonitoringFormData) => MonitoringFormData,
+  ) => {
+    setFormData((previous) => {
+      const next = updater(previous);
+      formDataRef.current = next;
+      return next;
+    });
+  };
 
   const invalidateAnalysis = () => {
     if (result) setAnalysisInvalidated(true);
@@ -838,7 +877,7 @@ export default function MonitoringPage() {
     const output = next.plant_daily_output;
     const workingDay = next.working_day_no;
     if (output === '') {
-      setFormData((previous) => ({
+      updateFormData((previous) => ({
         ...previous,
         cumulative_completed_qty: '',
       }));
@@ -850,7 +889,7 @@ export default function MonitoringPage() {
       return;
     }
     if (workingDay === '' || workingDay < 1 || !Number.isInteger(workingDay)) {
-      setFormData((previous) => ({
+      updateFormData((previous) => ({
         ...previous,
         cumulative_completed_qty: '',
       }));
@@ -865,7 +904,7 @@ export default function MonitoringPage() {
     if (workingDay === 1) {
       const exceedsOrder =
         next.full_order_qty !== '' && output > next.full_order_qty;
-      setFormData((previous) => ({
+      updateFormData((previous) => ({
         ...previous,
         cumulative_completed_qty: output,
       }));
@@ -881,7 +920,7 @@ export default function MonitoringPage() {
 
     const orderId = next.bulk_order_id.trim();
     if (!orderId) {
-      setFormData((previous) => ({
+      updateFormData((previous) => ({
         ...previous,
         cumulative_completed_qty: '',
       }));
@@ -896,7 +935,7 @@ export default function MonitoringPage() {
     const requestId = cumulativeRequestId.current;
     const controller = new AbortController();
     cumulativeRequestController.current = controller;
-    setFormData((previous) => ({
+    updateFormData((previous) => ({
       ...previous,
       cumulative_completed_qty: '',
     }));
@@ -925,7 +964,7 @@ export default function MonitoringPage() {
 
       const context = payload as CumulativeContextResponse;
       if (context.status === 'current_day_exists' && context.current_record) {
-        setFormData((previous) => ({
+        updateFormData((previous) => ({
           ...previous,
           cumulative_completed_qty:
             context.current_record?.cumulative_completed_qty ?? '',
@@ -953,7 +992,7 @@ export default function MonitoringPage() {
       const calculated = previousCumulative + output;
       const exceedsOrder =
         next.full_order_qty !== '' && calculated > next.full_order_qty;
-      setFormData((previous) => ({
+      updateFormData((previous) => ({
         ...previous,
         cumulative_completed_qty: calculated,
       }));
@@ -984,6 +1023,146 @@ export default function MonitoringPage() {
     }
   };
 
+  const cancelOrderEntryLookup = () => {
+    orderEntryRequestId.current += 1;
+    orderEntryRequestController.current?.abort();
+    orderEntryRequestController.current = null;
+    if (orderEntryLookupTimer.current) {
+      clearTimeout(orderEntryLookupTimer.current);
+      orderEntryLookupTimer.current = null;
+    }
+  };
+
+  const scheduleOrderEntryLookup = (next: MonitoringFormData) => {
+    cancelOrderEntryLookup();
+    cancelCumulativeLookup();
+
+    const orderId = next.bulk_order_id.trim();
+    if (!orderId) {
+      const reset = {
+        ...next,
+        production_date: localWorkingIsoDate(),
+        working_day_no: 1,
+        cumulative_completed_qty: '',
+      } as MonitoringFormData;
+      replaceFormData(reset);
+      setOrderEntryFeedback({
+        status: 'idle',
+        message: 'Enter the Bulk order ID to check its saved daily history.',
+      });
+      setCumulativeFeedback({
+        status: 'idle',
+        message: 'Enter today\'s actual output to calculate the cumulative total.',
+        blocking: true,
+      });
+      return;
+    }
+
+    updateFormData((previous) => ({
+      ...previous,
+      cumulative_completed_qty: '',
+    }));
+    setOrderEntryFeedback({
+      status: 'loading',
+      message: `Checking saved daily history for ${orderId}...`,
+    });
+    setCumulativeFeedback({
+      status: 'loading',
+      message: 'Waiting for the saved order history check to finish.',
+      blocking: true,
+    });
+
+    const requestId = orderEntryRequestId.current;
+    orderEntryLookupTimer.current = setTimeout(async () => {
+      const controller = new AbortController();
+      orderEntryRequestController.current = controller;
+
+      try {
+        const response = await fetch(
+          `${API_BASE_URL}/orders/${encodeURIComponent(orderId)}` +
+            '/next-entry-context',
+          { signal: controller.signal },
+        );
+        const payload: unknown = await response.json();
+        if (!response.ok) {
+          const apiError = payload as { error?: unknown };
+          throw new Error(
+            typeof apiError.error === 'string'
+              ? apiError.error
+              : 'Saved order history could not be checked.',
+          );
+        }
+        if (requestId !== orderEntryRequestId.current) return;
+
+        const context = payload as NextEntryContextResponse;
+        const current = formDataRef.current;
+        if (current.bulk_order_id.trim() !== orderId) return;
+
+        const suggestedDate =
+          context.suggested_production_date ?? localWorkingIsoDate();
+        const suggested = {
+          ...current,
+          working_day_no: context.suggested_working_day_no,
+          production_date: suggestedDate,
+          cumulative_completed_qty: '',
+        } as MonitoringFormData;
+        replaceFormData(suggested);
+
+        if (context.status === 'continue_order' && context.latest_record) {
+          setOrderEntryFeedback({
+            status: 'ready',
+            message:
+              `Latest saved record: day ${context.latest_record.working_day_no} ` +
+              `on ${context.latest_record.production_date}. Suggested next entry: ` +
+              `day ${context.suggested_working_day_no} on ${suggestedDate}. ` +
+              'You can edit the suggested date if entering a missed record.',
+          });
+        } else {
+          setOrderEntryFeedback({
+            status: 'ready',
+            message:
+              `No saved history found for ${orderId}. Starting at working day 1 ` +
+              'with an editable current production date.',
+          });
+        }
+
+        if (suggested.plant_daily_output === '') {
+          setCumulativeFeedback({
+            status: 'idle',
+            message:
+              'Enter today\'s actual output to calculate the cumulative total.',
+            blocking: true,
+          });
+        } else {
+          void updateAutomaticCumulative(suggested);
+        }
+      } catch (requestError: unknown) {
+        if (
+          requestError instanceof Error &&
+          requestError.name === 'AbortError'
+        ) {
+          return;
+        }
+        if (requestId !== orderEntryRequestId.current) return;
+        const message =
+          requestError instanceof Error
+            ? requestError.message
+            : 'Unable to check saved order history.';
+        setOrderEntryFeedback({ status: 'error', message });
+        setCumulativeFeedback({
+          status: 'error',
+          message: 'Order history must be checked before automatic calculation.',
+          blocking: true,
+        });
+      } finally {
+        if (requestId === orderEntryRequestId.current) {
+          orderEntryRequestController.current = null;
+          orderEntryLookupTimer.current = null;
+        }
+      }
+    }, 350);
+  };
+
   const handleChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value, type } = event.currentTarget;
     const field = name as keyof MonitoringFormData;
@@ -1000,12 +1179,13 @@ export default function MonitoringPage() {
         next.buyer_required_date,
       );
     }
-    setFormData(next);
+    replaceFormData(next);
 
-    if (
+    if (formMode === 'current' && field === 'bulk_order_id') {
+      scheduleOrderEntryLookup(next);
+    } else if (
       formMode === 'current' &&
-      (field === 'bulk_order_id' ||
-        field === 'working_day_no' ||
+      (field === 'working_day_no' ||
         field === 'plant_daily_output' ||
         field === 'full_order_qty')
     ) {
@@ -1024,10 +1204,15 @@ export default function MonitoringPage() {
   };
 
   const selectScenario = (scenario: (typeof SCENARIOS)[number]) => {
+    cancelOrderEntryLookup();
     cancelCumulativeLookup();
-    setFormData({ ...scenario.values });
+    replaceFormData({ ...scenario.values });
     setRecoveryData({ ...scenario.recoveryValues });
     setFormMode('demo');
+    setOrderEntryFeedback({
+      status: 'idle',
+      message: 'Historical demo preset values are loaded.',
+    });
     setCumulativeFeedback({
       status: 'idle',
       message: 'Historical demo preset value; you can edit it for this scenario.',
@@ -1043,10 +1228,15 @@ export default function MonitoringPage() {
   };
 
   const startCurrentOrder = () => {
+    cancelOrderEntryLookup();
     cancelCumulativeLookup();
-    setFormData(createCurrentOrderForm());
+    replaceFormData(createCurrentOrderForm());
     setRecoveryData({ ...EMPTY_RECOVERY_FORM });
     setFormMode('current');
+    setOrderEntryFeedback({
+      status: 'idle',
+      message: 'Enter the Bulk order ID to check its saved daily history.',
+    });
     setCumulativeFeedback({
       status: 'idle',
       message: 'Enter today\'s actual output to calculate the cumulative total.',
@@ -1229,17 +1419,24 @@ export default function MonitoringPage() {
     fields.map((field) => {
       const isAutomaticCumulative =
         field.name === 'cumulative_completed_qty' && formMode === 'current';
+      const isOrderEntryHistory =
+        field.name === 'bulk_order_id' && formMode === 'current';
       const readOnly = field.readOnly || isAutomaticCumulative;
-      const helper = isAutomaticCumulative
-        ? cumulativeFeedback.message
-        : field.helper;
-      const helperClass = isAutomaticCumulative
-        ? cumulativeFeedback.status === 'ready'
+      let helper = field.helper;
+      let helperStatus: CumulativeFeedback['status'] = 'idle';
+      if (isAutomaticCumulative) {
+        helper = cumulativeFeedback.message;
+        helperStatus = cumulativeFeedback.status;
+      } else if (isOrderEntryHistory) {
+        helper = orderEntryFeedback.message;
+        helperStatus = orderEntryFeedback.status;
+      }
+      const helperClass = isAutomaticCumulative || isOrderEntryHistory
+        ? helperStatus === 'ready'
           ? styles.fieldHelperReady
-          : cumulativeFeedback.status === 'warning' ||
-              cumulativeFeedback.status === 'loading'
+          : helperStatus === 'warning' || helperStatus === 'loading'
             ? styles.fieldHelperWarning
-            : cumulativeFeedback.status === 'error'
+            : helperStatus === 'error'
               ? styles.fieldHelperError
               : styles.fieldHelper
         : styles.fieldHelper;
