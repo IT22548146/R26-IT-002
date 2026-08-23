@@ -273,6 +273,7 @@ class Component3MonitoringStoreTests(unittest.TestCase):
         self.assertEqual(new_order["status"], "new_order")
         self.assertEqual(new_order["suggested_working_day_no"], 1)
         self.assertIsNone(new_order["suggested_production_date"])
+        self.assertIsNone(new_order["saved_order_setup"])
 
         friday = self.prediction_input(
             1,
@@ -292,6 +293,24 @@ class Component3MonitoringStoreTests(unittest.TestCase):
         self.assertEqual(
             continuation["latest_record"]["record_id"],
             saved["record_id"],
+        )
+        self.assertEqual(
+            continuation["saved_order_setup"]["source"],
+            "component3_monitoring_history",
+        )
+        self.assertEqual(
+            continuation["saved_order_setup"]["source_record_id"],
+            saved["record_id"],
+        )
+        self.assertEqual(
+            continuation["saved_order_setup"]["order_fields"]["style_id"],
+            "STYLE_ORDER_NEXT_ENTRY",
+        )
+        self.assertEqual(
+            continuation["saved_order_setup"]["order_fields"][
+                "max_daily_damage_qty"
+            ],
+            3,
         )
 
     def test_unverified_predictions_never_create_training_labels(self):
@@ -631,6 +650,20 @@ class Component3MonitoringApiTests(unittest.TestCase):
         self.assertEqual(context["latest_record"]["working_day_no"], 1)
         self.assertEqual(context["suggested_working_day_no"], 2)
         self.assertEqual(context["suggested_production_date"], "2024-07-22")
+        self.assertEqual(
+            context["saved_order_setup"]["order_fields"]["style_id"],
+            "STYLE001",
+        )
+        self.assertEqual(
+            context["saved_order_setup"]["order_fields"]["cutting_days"],
+            14,
+        )
+        self.assertEqual(
+            context["saved_order_setup"]["recovery_parameters"][
+                "planned_worker_count"
+            ],
+            20,
+        )
 
     def test_supervisor_can_verify_and_correct_actual_outcome(self):
         created = self.client.post(

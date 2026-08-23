@@ -56,10 +56,14 @@ calendar.
 
 Enter the Bulk Order ID first. The screen checks saved daily monitoring
 history after a short pause. If records exist, it suggests the latest saved
-working day plus one and the next Monday-Friday production date. If no records
-exist, it keeps working day 1 and the current working date. The date remains
-editable, allowing a missed older record to be entered in sequence; values
-that were never saved still need to be entered again.
+working day plus one and the next Monday-Friday production date. It also loads
+the order identity, quantity, schedule, damage threshold, and recovery-capacity
+settings from that latest saved record. The helper below Bulk Order ID
+identifies Component 3 monitoring history as the source; this does not claim a
+live Component 2 integration. If no records exist, the form keeps working day
+1 and the current working date. Suggested values remain editable, allowing a
+missed older record to be entered in sequence; values that were never saved
+still need to be entered again.
 
 Once the current-order form is edited, it is auto-saved temporarily in the
 same browser. Refresh the page and select **Restore saved draft** to demonstrate

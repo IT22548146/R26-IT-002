@@ -40,6 +40,26 @@ interface RecoveryFormData {
   expected_machine_repair_hours: NumericValue;
 }
 
+type SavedOrderFields = Pick<
+  MonitoringFormData,
+  | 'style_id'
+  | 'buyer_name'
+  | 'allocated_bulk_plant'
+  | 'plant_location'
+  | 'full_order_qty'
+  | 'bulk_order_approved_date'
+  | 'buyer_required_date'
+  | 'total_working_days'
+  | 'cutting_days'
+  | 'sewing_days'
+  | 'daily_commitment'
+  | 'max_daily_damage_qty'
+>;
+
+type SavedRecoveryParameters = Partial<
+  Record<keyof RecoveryFormData, number | null>
+>;
+
 interface RecoveryOption {
   option_id: string;
   title: string;
@@ -265,6 +285,12 @@ interface NextEntryContextResponse {
   status: 'new_order' | 'continue_order';
   bulk_order_id: string;
   latest_record: CumulativeContextRecord | null;
+  saved_order_setup: {
+    source: 'component3_monitoring_history';
+    source_record_id: string;
+    order_fields: SavedOrderFields;
+    recovery_parameters: SavedRecoveryParameters;
+  } | null;
   suggested_working_day_no: number;
   suggested_production_date: string | null;
 }
@@ -392,6 +418,24 @@ const EMPTY_RECOVERY_FORM: RecoveryFormData = {
   backup_line_daily_capacity: '',
   expected_machine_repair_hours: '',
 };
+
+function recoveryFormFromSaved(
+  parameters: SavedRecoveryParameters,
+): RecoveryFormData {
+  return {
+    planned_worker_count: parameters.planned_worker_count ?? '',
+    planned_machine_count: parameters.planned_machine_count ?? '',
+    normal_shift_hours: parameters.normal_shift_hours ?? '',
+    max_overtime_hours_per_day:
+      parameters.max_overtime_hours_per_day ?? '',
+    max_additional_workers: parameters.max_additional_workers ?? '',
+    available_backup_machines: parameters.available_backup_machines ?? '',
+    backup_line_daily_capacity:
+      parameters.backup_line_daily_capacity ?? '',
+    expected_machine_repair_hours:
+      parameters.expected_machine_repair_hours ?? '',
+  };
+}
 
 const MONITORING_TEXT_FIELDS: Array<keyof MonitoringFormData> = [
   'bulk_order_id',
@@ -953,6 +997,7 @@ export default function MonitoringPage() {
     null,
   );
   const formDataRef = useRef<MonitoringFormData>(INITIAL_FORM);
+  const [loadedOrderSetupRecordId, setLoadedOrderSetupRecordId] = useState('');
   const [availableDraft, setAvailableDraft] =
     useState<MonitoringDraft | null>(null);
   const [draftSessionActive, setDraftSessionActive] = useState(false);
@@ -1284,22 +1329,37 @@ export default function MonitoringPage() {
           context.suggested_production_date ?? localWorkingIsoDate();
         const suggested = {
           ...current,
+          ...(context.saved_order_setup?.order_fields ?? {}),
           working_day_no: context.suggested_working_day_no,
           production_date: suggestedDate,
           cumulative_completed_qty: '',
         } as MonitoringFormData;
         replaceFormData(suggested);
 
-        if (context.status === 'continue_order' && context.latest_record) {
+        if (
+          context.status === 'continue_order' &&
+          context.latest_record &&
+          context.saved_order_setup
+        ) {
+          setRecoveryData(
+            recoveryFormFromSaved(
+              context.saved_order_setup.recovery_parameters,
+            ),
+          );
+          setLoadedOrderSetupRecordId(
+            context.saved_order_setup.source_record_id,
+          );
           setOrderEntryFeedback({
             status: 'ready',
             message:
-              `Latest saved record: day ${context.latest_record.working_day_no} ` +
-              `on ${context.latest_record.production_date}. Suggested next entry: ` +
+              'Order setup auto-filled from the latest saved Component 3 ' +
+              `record (day ${context.latest_record.working_day_no}, ` +
+              `${context.latest_record.production_date}). Suggested next entry: ` +
               `day ${context.suggested_working_day_no} on ${suggestedDate}. ` +
-              'You can edit the suggested date if entering a missed record.',
+              'Review the values before analysis; Component 2 master data is not used by this lookup.',
           });
         } else {
+          setLoadedOrderSetupRecordId('');
           setOrderEntryFeedback({
             status: 'ready',
             message:
@@ -1367,7 +1427,19 @@ export default function MonitoringPage() {
 
     invalidateAnalysis();
     activateDraftAfterEdit();
-    const next = { ...formData, [field]: nextValue } as MonitoringFormData;
+    let next = { ...formData, [field]: nextValue } as MonitoringFormData;
+    if (
+      formMode === 'current' &&
+      field === 'bulk_order_id' &&
+      loadedOrderSetupRecordId
+    ) {
+      next = {
+        ...createCurrentOrderForm(),
+        bulk_order_id: String(nextValue),
+      };
+      setRecoveryData({ ...EMPTY_RECOVERY_FORM });
+      setLoadedOrderSetupRecordId('');
+    }
     if (
       field === 'bulk_order_approved_date' ||
       field === 'buyer_required_date'
@@ -1408,6 +1480,7 @@ export default function MonitoringPage() {
     replaceFormData({ ...scenario.values });
     setRecoveryData({ ...scenario.recoveryValues });
     setFormMode('demo');
+    setLoadedOrderSetupRecordId('');
     setDraftSessionActive(false);
     setOrderEntryFeedback({
       status: 'idle',
@@ -1444,6 +1517,7 @@ export default function MonitoringPage() {
     replaceFormData(createCurrentOrderForm());
     setRecoveryData({ ...EMPTY_RECOVERY_FORM });
     setFormMode('current');
+    setLoadedOrderSetupRecordId('');
     setAvailableDraft(storedDraft);
     setDraftSessionActive(false);
     if (storageUnavailable) {
@@ -1490,6 +1564,7 @@ export default function MonitoringPage() {
     replaceFormData({ ...draft.form_data });
     setRecoveryData({ ...draft.recovery_data });
     setFormMode('current');
+    setLoadedOrderSetupRecordId('');
     setDraftSessionActive(true);
     setAvailableDraft(null);
     setDraftFeedback({
@@ -1536,6 +1611,7 @@ export default function MonitoringPage() {
     setRecoveryData({ ...EMPTY_RECOVERY_FORM });
     setAvailableDraft(null);
     setDraftSessionActive(false);
+    setLoadedOrderSetupRecordId('');
     setDraftFeedback({
       status: storageCleared ? 'cleared' : 'error',
       message: storageCleared
@@ -1752,6 +1828,7 @@ export default function MonitoringPage() {
     setTrackingError('');
     setAvailableDraft(null);
     setDraftSessionActive(true);
+    setLoadedOrderSetupRecordId(savedRecordId);
     setDraftFeedback({
       status: 'idle',
       message:

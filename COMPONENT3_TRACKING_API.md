@@ -202,6 +202,20 @@ recovery gap closed % =
 Only one outcome per incident and date is accepted, which prevents accidental
 duplicate daily records.
 
+### Resume a saved order's daily monitoring
+
+```text
+GET /api/component3/orders/{bulk_order_id}/next-entry-context
+```
+
+For a new order, the response suggests working day 1. For an order with daily
+monitoring history, it returns the next Monday-Friday date, next working-day
+number, and `saved_order_setup`. That setup contains stable order fields and
+recovery-capacity parameters from the latest saved Component 3 monitoring
+record. It does not read Component 2 master data. Current-day output, damage,
+breakdown, shortage, and cumulative values are intentionally excluded so the
+client cannot silently reuse yesterday's observations.
+
 ## Current persistence boundary
 
 SQLite is appropriate for local research execution and one backend process. A

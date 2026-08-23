@@ -952,7 +952,7 @@ def order_cumulative_context(bulk_order_id: str):
     methods=["GET"],
 )
 def order_next_entry_context(bulk_order_id: str):
-    """Suggest the next working day and date after the latest saved record."""
+    """Return saved order setup plus the next chronological daily entry."""
     try:
         result = _monitoring_store().next_entry_context(bulk_order_id)
     except ValueError as error:

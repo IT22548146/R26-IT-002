@@ -36,6 +36,20 @@ ACTUAL_EMERGENCY_TYPES = (
 )
 MIN_ROWS_PER_CLASS = 20
 MIN_ORDERS_PER_CLASS = 3
+ORDER_SETUP_FIELDS = (
+    "style_id",
+    "buyer_name",
+    "allocated_bulk_plant",
+    "plant_location",
+    "full_order_qty",
+    "bulk_order_approved_date",
+    "buyer_required_date",
+    "total_working_days",
+    "cutting_days",
+    "sewing_days",
+    "daily_commitment",
+    "max_daily_damage_qty",
+)
 
 
 def _normalize_choice(value: Any, choices: tuple[str, ...], field: str) -> str:
@@ -730,11 +744,13 @@ class Component3MonitoringStore:
                 "status": "new_order",
                 "bulk_order_id": order_id,
                 "latest_record": None,
+                "saved_order_setup": None,
                 "suggested_working_day_no": 1,
                 "suggested_production_date": None,
             }
 
         latest_record = self._cumulative_record(latest_row)
+        prediction_input = json.loads(latest_row["prediction_input_json"])
         latest_date = datetime.strptime(
             str(latest_record["production_date"]),
             "%Y-%m-%d",
@@ -747,6 +763,17 @@ class Component3MonitoringStore:
             "status": "continue_order",
             "bulk_order_id": order_id,
             "latest_record": latest_record,
+            "saved_order_setup": {
+                "source": "component3_monitoring_history",
+                "source_record_id": latest_record["record_id"],
+                "order_fields": {
+                    field: prediction_input[field]
+                    for field in ORDER_SETUP_FIELDS
+                },
+                "recovery_parameters": prediction_input.get(
+                    "recovery_parameters", {}
+                ),
+            },
             "suggested_working_day_no": (
                 int(latest_record["working_day_no"]) + 1
             ),
