@@ -54,6 +54,15 @@ current actual output. Save each day before entering the next one; the screen
 blocks calculation when the immediately preceding day is missing or when the
 selected day is already saved.
 
+Current-order edits are also auto-saved as a versioned local browser draft
+after a short pause. A refresh or later visit offers **Restore saved draft**;
+the user can restore it or discard it and start a clean entry. This draft is
+not an official monitoring record, early-warning history, or training data.
+Its values reach the models only when **Analyse** is selected. A successful
+**Save daily record** clears the temporary draft. Local drafts are limited to
+the same browser profile and can be lost when site data is cleared or private
+browsing ends.
+
 For a currently stable day, the result also shows the three experimental
 next-three-production-day warnings supported by Step 5C: machine breakdown,
 quality-limit issue, and output/schedule risk. These uncalibrated scores use

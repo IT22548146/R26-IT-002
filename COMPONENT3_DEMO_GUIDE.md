@@ -61,6 +61,13 @@ exist, it keeps working day 1 and the current working date. The date remains
 editable, allowing a missed older record to be entered in sequence; values
 that were never saved still need to be entered again.
 
+Once the current-order form is edited, it is auto-saved temporarily in the
+same browser. Refresh the page and select **Restore saved draft** to demonstrate
+recovery, or choose **Discard & start new**. The draft is not written to the
+monitoring database and is not ML training data. Selecting **Analyse** sends
+the restored values for one prediction; a successful **Save daily record**
+creates the official record and clears the local draft.
+
 **Cumulative completed** is automatic and read-only in this mode. For working
 day 1, enter the actual daily output and the cumulative quantity becomes the
 same value. For each later day, use the same Bulk Order ID and save the

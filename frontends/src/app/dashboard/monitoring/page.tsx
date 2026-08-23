@@ -1,6 +1,6 @@
 'use client';
 
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import styles from './monitoring.module.css';
 
@@ -274,10 +274,24 @@ interface OrderEntryFeedback {
   message: string;
 }
 
+interface MonitoringDraft {
+  version: 1;
+  saved_at: string;
+  form_data: MonitoringFormData;
+  recovery_data: RecoveryFormData;
+}
+
+interface DraftFeedback {
+  status: 'idle' | 'saved' | 'restored' | 'cleared' | 'error';
+  message: string;
+}
+
 const API_BASE_URL = (
   process.env.NEXT_PUBLIC_COMPONENT3_API_URL ??
   'http://127.0.0.1:5001/api/component3'
 ).replace(/\/$/, '');
+
+const MONITORING_DRAFT_STORAGE_KEY = 'component3-current-order-draft-v1';
 
 function countWorkingDaysInclusive(start: string, end: string): NumericValue {
   if (!start || !end) return '';
@@ -378,6 +392,95 @@ const EMPTY_RECOVERY_FORM: RecoveryFormData = {
   backup_line_daily_capacity: '',
   expected_machine_repair_hours: '',
 };
+
+const MONITORING_TEXT_FIELDS: Array<keyof MonitoringFormData> = [
+  'bulk_order_id',
+  'style_id',
+  'buyer_name',
+  'allocated_bulk_plant',
+  'plant_location',
+  'bulk_order_approved_date',
+  'buyer_required_date',
+  'production_date',
+];
+
+const MONITORING_NUMERIC_FIELDS: Array<keyof MonitoringFormData> = [
+  'full_order_qty',
+  'total_working_days',
+  'cutting_days',
+  'sewing_days',
+  'daily_commitment',
+  'working_day_no',
+  'plant_daily_output',
+  'daily_damage_qty',
+  'max_daily_damage_qty',
+  'machine_breakdown_count',
+  'worker_shortage_count',
+  'cumulative_completed_qty',
+];
+
+const RECOVERY_NUMERIC_FIELDS: Array<keyof RecoveryFormData> = [
+  'planned_worker_count',
+  'planned_machine_count',
+  'normal_shift_hours',
+  'max_overtime_hours_per_day',
+  'max_additional_workers',
+  'available_backup_machines',
+  'backup_line_daily_capacity',
+  'expected_machine_repair_hours',
+];
+
+function isObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function parseMonitoringDraft(raw: string | null): MonitoringDraft | null {
+  if (!raw) return null;
+
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    if (
+      !isObject(parsed) ||
+      parsed.version !== 1 ||
+      typeof parsed.saved_at !== 'string' ||
+      Number.isNaN(Date.parse(parsed.saved_at)) ||
+      !isObject(parsed.form_data) ||
+      !isObject(parsed.recovery_data)
+    ) {
+      return null;
+    }
+
+    const draftForm = parsed.form_data as Record<string, unknown>;
+    const draftRecovery = parsed.recovery_data as Record<string, unknown>;
+    const validText = MONITORING_TEXT_FIELDS.every(
+      (field) => typeof draftForm[field] === 'string',
+    );
+    const validMonitoringNumbers = MONITORING_NUMERIC_FIELDS.every(
+      (field) =>
+        draftForm[field] === '' ||
+        (typeof draftForm[field] === 'number' &&
+          Number.isFinite(draftForm[field])),
+    );
+    const validRecoveryNumbers = RECOVERY_NUMERIC_FIELDS.every(
+      (field) =>
+        draftRecovery[field] === '' ||
+        (typeof draftRecovery[field] === 'number' &&
+          Number.isFinite(draftRecovery[field])),
+    );
+    if (!validText || !validMonitoringNumbers || !validRecoveryNumbers) {
+      return null;
+    }
+
+    return parsed as unknown as MonitoringDraft;
+  } catch {
+    return null;
+  }
+}
+
+function formatDraftTimestamp(timestamp: string) {
+  const date = new Date(timestamp);
+  return Number.isNaN(date.getTime()) ? timestamp : date.toLocaleString();
+}
 
 function localWorkingIsoDate() {
   const now = new Date();
@@ -839,6 +942,14 @@ export default function MonitoringPage() {
     null,
   );
   const formDataRef = useRef<MonitoringFormData>(INITIAL_FORM);
+  const [availableDraft, setAvailableDraft] =
+    useState<MonitoringDraft | null>(null);
+  const [draftSessionActive, setDraftSessionActive] = useState(false);
+  const [draftFeedback, setDraftFeedback] = useState<DraftFeedback>({
+    status: 'idle',
+    message:
+      'Draft auto-save starts when you choose Enter current order.',
+  });
 
   const replaceFormData = (next: MonitoringFormData) => {
     formDataRef.current = next;
@@ -854,6 +965,66 @@ export default function MonitoringPage() {
       return next;
     });
   };
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      try {
+        const raw = window.localStorage.getItem(
+          MONITORING_DRAFT_STORAGE_KEY,
+        );
+        const draft = parseMonitoringDraft(raw);
+        if (raw && !draft) {
+          window.localStorage.removeItem(MONITORING_DRAFT_STORAGE_KEY);
+          return;
+        }
+        if (draft) {
+          setAvailableDraft(draft);
+          setDraftFeedback({
+            status: 'idle',
+            message: `Unsaved draft found from ${formatDraftTimestamp(draft.saved_at)}.`,
+          });
+        }
+      } catch {
+        setDraftFeedback({
+          status: 'error',
+          message: 'This browser did not allow access to local draft storage.',
+        });
+      }
+    }, 0);
+
+    return () => window.clearTimeout(timer);
+  }, []);
+
+  useEffect(() => {
+    if (formMode !== 'current' || !draftSessionActive) return;
+
+    const timer = window.setTimeout(() => {
+      const draft: MonitoringDraft = {
+        version: 1,
+        saved_at: new Date().toISOString(),
+        form_data: formData,
+        recovery_data: recoveryData,
+      };
+      try {
+        window.localStorage.setItem(
+          MONITORING_DRAFT_STORAGE_KEY,
+          JSON.stringify(draft),
+        );
+        setAvailableDraft(draft);
+        setDraftFeedback({
+          status: 'saved',
+          message: `Draft saved locally at ${formatDraftTimestamp(draft.saved_at)}.`,
+        });
+      } catch {
+        setDraftFeedback({
+          status: 'error',
+          message: 'Draft could not be saved in this browser.',
+        });
+      }
+    }, 600);
+
+    return () => window.clearTimeout(timer);
+  }, [draftSessionActive, formData, formMode, recoveryData]);
 
   const invalidateAnalysis = () => {
     if (result) setAnalysisInvalidated(true);
@@ -1163,12 +1334,28 @@ export default function MonitoringPage() {
     }, 350);
   };
 
+  const activateDraftAfterEdit = () => {
+    if (formMode !== 'current' || draftSessionActive) return;
+    try {
+      window.localStorage.removeItem(MONITORING_DRAFT_STORAGE_KEY);
+    } catch {
+      // Continue editing even if this browser blocks local storage.
+    }
+    setAvailableDraft(null);
+    setDraftSessionActive(true);
+    setDraftFeedback({
+      status: 'idle',
+      message: 'New local draft started. Auto-save is active.',
+    });
+  };
+
   const handleChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value, type } = event.currentTarget;
     const field = name as keyof MonitoringFormData;
     const nextValue = type === 'number' ? (value === '' ? '' : Number(value)) : value;
 
     invalidateAnalysis();
+    activateDraftAfterEdit();
     const next = { ...formData, [field]: nextValue } as MonitoringFormData;
     if (
       field === 'bulk_order_approved_date' ||
@@ -1197,6 +1384,7 @@ export default function MonitoringPage() {
     const { name, value } = event.currentTarget;
     const field = name as keyof RecoveryFormData;
     invalidateAnalysis();
+    activateDraftAfterEdit();
     setRecoveryData((previous) => ({
       ...previous,
       [field]: value === '' ? '' : Number(value),
@@ -1209,6 +1397,7 @@ export default function MonitoringPage() {
     replaceFormData({ ...scenario.values });
     setRecoveryData({ ...scenario.recoveryValues });
     setFormMode('demo');
+    setDraftSessionActive(false);
     setOrderEntryFeedback({
       status: 'idle',
       message: 'Historical demo preset values are loaded.',
@@ -1230,9 +1419,118 @@ export default function MonitoringPage() {
   const startCurrentOrder = () => {
     cancelOrderEntryLookup();
     cancelCumulativeLookup();
+    let storedDraft = availableDraft;
+    let storageUnavailable = false;
+    try {
+      const raw = window.localStorage.getItem(MONITORING_DRAFT_STORAGE_KEY);
+      storedDraft = parseMonitoringDraft(raw);
+      if (raw && !storedDraft) {
+        window.localStorage.removeItem(MONITORING_DRAFT_STORAGE_KEY);
+      }
+    } catch {
+      storageUnavailable = true;
+    }
     replaceFormData(createCurrentOrderForm());
     setRecoveryData({ ...EMPTY_RECOVERY_FORM });
     setFormMode('current');
+    setAvailableDraft(storedDraft);
+    setDraftSessionActive(false);
+    if (storageUnavailable) {
+      setDraftFeedback({
+        status: 'error',
+        message: 'This browser did not allow access to local draft storage.',
+      });
+    } else if (storedDraft) {
+      setDraftFeedback({
+        status: 'idle',
+        message:
+          `Unsaved draft found from ${formatDraftTimestamp(storedDraft.saved_at)}. ` +
+          'Restore it or discard it before entering a new current order.',
+      });
+    } else {
+      setDraftFeedback({
+        status: 'idle',
+        message: 'Auto-save will start when you edit the new current-order form.',
+      });
+    }
+    setOrderEntryFeedback({
+      status: 'idle',
+      message: 'Enter the Bulk order ID to check its saved daily history.',
+    });
+    setCumulativeFeedback({
+      status: 'idle',
+      message: 'Enter today\'s actual output to calculate the cumulative total.',
+      blocking: true,
+    });
+    setAnalysisInvalidated(false);
+    setResult(null);
+    setError('');
+    setSavedDailyRecordId('');
+    setDailyRecordError('');
+    setSavedIncidentId('');
+    setTrackingError('');
+  };
+
+  const restoreCurrentDraft = () => {
+    if (!availableDraft) return;
+    cancelOrderEntryLookup();
+    cancelCumulativeLookup();
+    const draft = availableDraft;
+    replaceFormData({ ...draft.form_data });
+    setRecoveryData({ ...draft.recovery_data });
+    setFormMode('current');
+    setDraftSessionActive(true);
+    setAvailableDraft(null);
+    setDraftFeedback({
+      status: 'restored',
+      message:
+        `Draft from ${formatDraftTimestamp(draft.saved_at)} restored. ` +
+        'Working day and production date remain editable.',
+    });
+    setOrderEntryFeedback({
+      status: 'ready',
+      message: draft.form_data.bulk_order_id
+        ? `Restored local draft for ${draft.form_data.bulk_order_id}.`
+        : 'Restored an unnamed current-order draft.',
+    });
+    setAnalysisInvalidated(false);
+    setResult(null);
+    setError('');
+    setSavedDailyRecordId('');
+    setDailyRecordError('');
+    setSavedIncidentId('');
+    setTrackingError('');
+
+    if (draft.form_data.plant_daily_output === '') {
+      setCumulativeFeedback({
+        status: 'idle',
+        message: 'Enter today\'s actual output to calculate the cumulative total.',
+        blocking: true,
+      });
+    } else {
+      void updateAutomaticCumulative(draft.form_data);
+    }
+  };
+
+  const discardCurrentDraft = () => {
+    cancelOrderEntryLookup();
+    cancelCumulativeLookup();
+    let storageCleared = true;
+    try {
+      window.localStorage.removeItem(MONITORING_DRAFT_STORAGE_KEY);
+    } catch {
+      storageCleared = false;
+    }
+    replaceFormData(createCurrentOrderForm());
+    setRecoveryData({ ...EMPTY_RECOVERY_FORM });
+    setAvailableDraft(null);
+    setDraftSessionActive(false);
+    setDraftFeedback({
+      status: storageCleared ? 'cleared' : 'error',
+      message: storageCleared
+        ? 'Previous draft discarded. Auto-save will start with the first edit.'
+        : 'The browser could not clear local storage; use the fresh form carefully.',
+    });
     setOrderEntryFeedback({
       status: 'idle',
       message: 'Enter the Bulk order ID to check its saved daily history.',
@@ -1363,6 +1661,22 @@ export default function MonitoringPage() {
       };
       setResult(saved.monitoring_record.analysis);
       setSavedDailyRecordId(saved.monitoring_record.record_id);
+      if (formMode === 'current') {
+        let draftCleared = true;
+        try {
+          window.localStorage.removeItem(MONITORING_DRAFT_STORAGE_KEY);
+        } catch {
+          draftCleared = false;
+        }
+        setAvailableDraft(null);
+        setDraftSessionActive(false);
+        setDraftFeedback({
+          status: draftCleared ? 'cleared' : 'error',
+          message: draftCleared
+            ? 'Official daily record saved. Its temporary local draft was cleared.'
+            : 'Official record saved, but the browser could not clear its local draft.',
+        });
+      }
     } catch (requestError: unknown) {
       setDailyRecordError(
         requestError instanceof Error
@@ -1524,6 +1838,11 @@ export default function MonitoringPage() {
               <button type="button" onClick={startCurrentOrder}>
                 + Enter current order
               </button>
+              {availableDraft && formMode !== 'current' && (
+                <button type="button" onClick={restoreCurrentDraft}>
+                  Restore saved draft
+                </button>
+              )}
               <Link href="/dashboard/monitoring-history#historical-import">
                 Prepare demo history
               </Link>
@@ -1565,6 +1884,49 @@ export default function MonitoringPage() {
               {formMode === 'current' ? 'Current-order entry' : 'Demo preset'}
             </span>
           </div>
+
+          {formMode === 'current' && (
+            <div
+              className={`${styles.draftPanel} ${
+                availableDraft && !draftSessionActive
+                  ? styles.draftRestorePanel
+                  : draftFeedback.status === 'error'
+                    ? styles.draftErrorPanel
+                    : ''
+              }`}
+              role="status"
+              aria-live="polite"
+            >
+              <div className={styles.draftCopy}>
+                <span aria-hidden="true">
+                  {availableDraft && !draftSessionActive ? '↶' : '✓'}
+                </span>
+                <div>
+                  <strong>
+                    {availableDraft && !draftSessionActive
+                      ? 'Unsaved local draft found'
+                      : 'Local draft protection'}
+                  </strong>
+                  <p>{draftFeedback.message}</p>
+                  <small>
+                    Stored only in this browser. It is not monitoring history or
+                    ML training data; values are sent to the models only after
+                    you select Analyse.
+                  </small>
+                </div>
+              </div>
+              {availableDraft && !draftSessionActive && (
+                <div className={styles.draftActions}>
+                  <button type="button" onClick={restoreCurrentDraft}>
+                    Restore draft
+                  </button>
+                  <button type="button" onClick={discardCurrentDraft}>
+                    Discard &amp; start new
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
 
           <form onSubmit={handleSubmit}>
             <fieldset className={styles.fieldset}>

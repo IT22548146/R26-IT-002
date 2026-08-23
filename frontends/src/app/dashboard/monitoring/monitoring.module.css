@@ -255,6 +255,92 @@
   background: rgba(16, 185, 129, 0.09);
 }
 
+.draftPanel {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.8rem;
+  margin: -0.2rem 0 1.25rem;
+  padding: 0.8rem;
+  color: #065f46;
+  border: 1px solid rgba(16, 185, 129, 0.24);
+  border-radius: 10px;
+  background: rgba(16, 185, 129, 0.07);
+}
+
+.draftRestorePanel {
+  color: #92400e;
+  border-color: rgba(217, 119, 6, 0.28);
+  background: rgba(245, 158, 11, 0.08);
+}
+
+.draftErrorPanel {
+  color: #b91c1c;
+  border-color: rgba(239, 68, 68, 0.25);
+  background: rgba(239, 68, 68, 0.08);
+}
+
+.draftCopy {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.65rem;
+}
+
+.draftCopy > span {
+  display: grid;
+  flex: 0 0 auto;
+  width: 25px;
+  height: 25px;
+  place-items: center;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.62);
+  font-weight: 900;
+}
+
+.draftCopy strong,
+.draftCopy p,
+.draftCopy small {
+  display: block;
+}
+
+.draftCopy strong {
+  font-size: 0.72rem;
+}
+
+.draftCopy p {
+  margin-top: 0.12rem;
+  font-size: 0.68rem;
+  line-height: 1.4;
+}
+
+.draftCopy small {
+  margin-top: 0.22rem;
+  opacity: 0.78;
+  font-size: 0.6rem;
+  line-height: 1.4;
+}
+
+.draftActions {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 0.45rem;
+}
+
+.draftActions button {
+  padding: 0.46rem 0.62rem;
+  color: #fff;
+  border-radius: 8px;
+  background: #d97706;
+  font-size: 0.62rem;
+  font-weight: 800;
+}
+
+.draftActions button:last-child {
+  color: #92400e;
+  border: 1px solid rgba(217, 119, 6, 0.28);
+  background: rgba(255, 255, 255, 0.68);
+}
+
 .cardHeading h2 {
   margin-bottom: 0.22rem;
   font-size: 1.08rem;
@@ -1474,7 +1560,8 @@
   }
 
   .scenarioHeadingActions > div,
-  .formCard > .cardHeading {
+  .formCard > .cardHeading,
+  .draftPanel {
     align-items: flex-start;
     flex-direction: column;
   }
