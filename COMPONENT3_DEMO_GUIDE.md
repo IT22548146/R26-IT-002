@@ -65,6 +65,12 @@ live Component 2 integration. If no records exist, the form keeps working day
 missed older record to be entered in sequence; values that were never saved
 still need to be entered again.
 
+To demonstrate the safety guard, enter an order whose saved quantity or
+schedule is complete. The form shows the exact closure reason, disables the
+new daily inputs and analysis action, and leaves Bulk Order ID available so a
+different active order can be selected. Closed-order details are not retained
+as a new browser draft.
+
 Once the current-order form is edited, it is auto-saved temporarily in the
 same browser. Refresh the page and select **Restore saved draft** to demonstrate
 recovery, or choose **Discard & start new**. The draft is not written to the

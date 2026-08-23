@@ -425,6 +425,13 @@
   background: rgba(99, 102, 241, 0.06);
 }
 
+.formGroup input:disabled {
+  cursor: not-allowed;
+  color: var(--secondary);
+  background: rgba(148, 163, 184, 0.12);
+  opacity: 0.72;
+}
+
 .fieldHelper {
   color: var(--secondary);
   font-size: 0.68rem;
@@ -512,6 +519,11 @@
 .submitButton:disabled {
   cursor: wait;
   opacity: 0.7;
+}
+
+.submitButtonClosed:disabled {
+  cursor: not-allowed;
+  background: #64748b;
 }
 
 .spinner {

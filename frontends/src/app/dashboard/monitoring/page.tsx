@@ -291,6 +291,12 @@ interface NextEntryContextResponse {
     order_fields: SavedOrderFields;
     recovery_parameters: SavedRecoveryParameters;
   } | null;
+  can_start_next_entry: boolean;
+  continuation_block_reason:
+    | 'order_complete'
+    | 'schedule_complete'
+    | 'buyer_deadline_reached'
+    | null;
   suggested_working_day_no: number;
   suggested_production_date: string | null;
 }
@@ -435,6 +441,21 @@ function recoveryFormFromSaved(
     expected_machine_repair_hours:
       parameters.expected_machine_repair_hours ?? '',
   };
+}
+
+function continuationBlockMessage(
+  reason: NextEntryContextResponse['continuation_block_reason'],
+) {
+  if (reason === 'order_complete') {
+    return 'The full order quantity is already complete.';
+  }
+  if (reason === 'schedule_complete') {
+    return 'The final planned working day has already been saved.';
+  }
+  if (reason === 'buyer_deadline_reached') {
+    return 'The next production working day falls after the buyer-required date.';
+  }
+  return 'This order cannot accept another daily monitoring entry.';
 }
 
 const MONITORING_TEXT_FIELDS: Array<keyof MonitoringFormData> = [
@@ -998,6 +1019,7 @@ export default function MonitoringPage() {
   );
   const formDataRef = useRef<MonitoringFormData>(INITIAL_FORM);
   const [loadedOrderSetupRecordId, setLoadedOrderSetupRecordId] = useState('');
+  const [orderEntryBlockMessage, setOrderEntryBlockMessage] = useState('');
   const [availableDraft, setAvailableDraft] =
     useState<MonitoringDraft | null>(null);
   const [draftSessionActive, setDraftSessionActive] = useState(false);
@@ -1263,6 +1285,7 @@ export default function MonitoringPage() {
   const scheduleOrderEntryLookup = (next: MonitoringFormData) => {
     cancelOrderEntryLookup();
     cancelCumulativeLookup();
+    setOrderEntryBlockMessage('');
 
     const orderId = next.bulk_order_id.trim();
     if (!orderId) {
@@ -1349,17 +1372,43 @@ export default function MonitoringPage() {
           setLoadedOrderSetupRecordId(
             context.saved_order_setup.source_record_id,
           );
-          setOrderEntryFeedback({
-            status: 'ready',
-            message:
-              'Order setup auto-filled from the latest saved Component 3 ' +
-              `record (day ${context.latest_record.working_day_no}, ` +
-              `${context.latest_record.production_date}). Suggested next entry: ` +
-              `day ${context.suggested_working_day_no} on ${suggestedDate}. ` +
-              'Review the values before analysis; Component 2 master data is not used by this lookup.',
-          });
+          if (context.can_start_next_entry) {
+            setOrderEntryBlockMessage('');
+            setOrderEntryFeedback({
+              status: 'ready',
+              message:
+                'Order setup auto-filled from the latest saved Component 3 ' +
+                `record (day ${context.latest_record.working_day_no}, ` +
+                `${context.latest_record.production_date}). Suggested next entry: ` +
+                `day ${context.suggested_working_day_no} on ${suggestedDate}. ` +
+                'Review the values before analysis; Component 2 master data is not used by this lookup.',
+            });
+          } else {
+            const blockMessage = continuationBlockMessage(
+              context.continuation_block_reason,
+            );
+            setOrderEntryBlockMessage(blockMessage);
+            setOrderEntryFeedback({
+              status: 'error',
+              message:
+                `Order setup loaded from saved Component 3 history. ${blockMessage} ` +
+                'Choose another Bulk Order ID to continue monitoring.',
+            });
+            try {
+              window.localStorage.removeItem(MONITORING_DRAFT_STORAGE_KEY);
+            } catch {
+              // The closed-order guard still applies when storage is unavailable.
+            }
+            setAvailableDraft(null);
+            setDraftSessionActive(false);
+            setDraftFeedback({
+              status: 'cleared',
+              message: 'Closed-order details are not retained as a new draft.',
+            });
+          }
         } else {
           setLoadedOrderSetupRecordId('');
+          setOrderEntryBlockMessage('');
           setOrderEntryFeedback({
             status: 'ready',
             message:
@@ -1368,7 +1417,13 @@ export default function MonitoringPage() {
           });
         }
 
-        if (suggested.plant_daily_output === '') {
+        if (!context.can_start_next_entry) {
+          setCumulativeFeedback({
+            status: 'error',
+            message: 'Automatic cumulative calculation is closed for this order.',
+            blocking: true,
+          });
+        } else if (suggested.plant_daily_output === '') {
           setCumulativeFeedback({
             status: 'idle',
             message:
@@ -1481,6 +1536,7 @@ export default function MonitoringPage() {
     setRecoveryData({ ...scenario.recoveryValues });
     setFormMode('demo');
     setLoadedOrderSetupRecordId('');
+    setOrderEntryBlockMessage('');
     setDraftSessionActive(false);
     setOrderEntryFeedback({
       status: 'idle',
@@ -1518,6 +1574,7 @@ export default function MonitoringPage() {
     setRecoveryData({ ...EMPTY_RECOVERY_FORM });
     setFormMode('current');
     setLoadedOrderSetupRecordId('');
+    setOrderEntryBlockMessage('');
     setAvailableDraft(storedDraft);
     setDraftSessionActive(false);
     if (storageUnavailable) {
@@ -1565,6 +1622,7 @@ export default function MonitoringPage() {
     setRecoveryData({ ...draft.recovery_data });
     setFormMode('current');
     setLoadedOrderSetupRecordId('');
+    setOrderEntryBlockMessage('');
     setDraftSessionActive(true);
     setAvailableDraft(null);
     setDraftFeedback({
@@ -1612,6 +1670,7 @@ export default function MonitoringPage() {
     setAvailableDraft(null);
     setDraftSessionActive(false);
     setLoadedOrderSetupRecordId('');
+    setOrderEntryBlockMessage('');
     setDraftFeedback({
       status: storageCleared ? 'cleared' : 'error',
       message: storageCleared
@@ -1643,6 +1702,11 @@ export default function MonitoringPage() {
     setDailyRecordError('');
     setSavedIncidentId('');
     setTrackingError('');
+
+    if (formMode === 'current' && orderEntryBlockMessage) {
+      setError(orderEntryBlockMessage);
+      return;
+    }
 
     const timelineError = validateTimeline(formData);
     if (timelineError) {
@@ -1829,6 +1893,7 @@ export default function MonitoringPage() {
     setAvailableDraft(null);
     setDraftSessionActive(true);
     setLoadedOrderSetupRecordId(savedRecordId);
+    setOrderEntryBlockMessage('');
     setDraftFeedback({
       status: 'idle',
       message:
@@ -1896,6 +1961,7 @@ export default function MonitoringPage() {
       const isOrderEntryHistory =
         field.name === 'bulk_order_id' && formMode === 'current';
       const readOnly = field.readOnly || isAutomaticCumulative;
+      const disabled = Boolean(orderEntryBlockMessage) && !isOrderEntryHistory;
       let helper = field.helper;
       let helperStatus: CumulativeFeedback['status'] = 'idle';
       if (isAutomaticCumulative) {
@@ -1927,6 +1993,7 @@ export default function MonitoringPage() {
             step={field.step}
             onChange={handleChange}
             readOnly={readOnly}
+            disabled={disabled}
             required={!readOnly}
           />
           {helper && (
@@ -1951,6 +2018,7 @@ export default function MonitoringPage() {
           step={field.step ?? 1}
           onChange={handleRecoveryChange}
           placeholder="Optional"
+          disabled={Boolean(orderEntryBlockMessage)}
         />
         <span className={styles.fieldHelper}>{field.helper}</span>
       </div>
@@ -2136,11 +2204,22 @@ export default function MonitoringPage() {
               <div className={styles.formGrid}>{renderRecoveryFields(RECOVERY_FIELDS)}</div>
             </fieldset>
 
-            <button className={styles.submitButton} disabled={loading} type="submit">
+            <button
+              className={`${styles.submitButton} ${
+                orderEntryBlockMessage ? styles.submitButtonClosed : ''
+              }`}
+              disabled={loading || Boolean(orderEntryBlockMessage)}
+              type="submit"
+            >
               {loading ? (
                 <>
                   <span className={styles.spinner} aria-hidden="true" />
                   Analysing production...
+                </>
+              ) : orderEntryBlockMessage ? (
+                <>
+                  Order monitoring closed
+                  <span aria-hidden="true">×</span>
                 </>
               ) : (
                 <>

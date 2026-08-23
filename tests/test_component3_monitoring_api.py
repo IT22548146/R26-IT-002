@@ -274,6 +274,8 @@ class Component3MonitoringStoreTests(unittest.TestCase):
         self.assertEqual(new_order["suggested_working_day_no"], 1)
         self.assertIsNone(new_order["suggested_production_date"])
         self.assertIsNone(new_order["saved_order_setup"])
+        self.assertTrue(new_order["can_start_next_entry"])
+        self.assertIsNone(new_order["continuation_block_reason"])
 
         friday = self.prediction_input(
             1,
@@ -311,6 +313,62 @@ class Component3MonitoringStoreTests(unittest.TestCase):
                 "max_daily_damage_qty"
             ],
             3,
+        )
+        self.assertTrue(continuation["can_start_next_entry"])
+        self.assertIsNone(continuation["continuation_block_reason"])
+
+    def test_next_entry_context_blocks_closed_orders(self):
+        completed = self.prediction_input(
+            1,
+            order_id="ORDER_COMPLETE",
+            cumulative=2_000,
+        )
+        self.save(completed)
+        completed_context = self.store.next_entry_context("ORDER_COMPLETE")
+        self.assertFalse(completed_context["can_start_next_entry"])
+        self.assertEqual(
+            completed_context["continuation_block_reason"],
+            "order_complete",
+        )
+        with self.assertRaisesRegex(
+            TrackingConflictError,
+            "after the full order quantity was completed",
+        ):
+            self.save(
+                self.prediction_input(
+                    2,
+                    order_id="ORDER_COMPLETE",
+                    cumulative=2_000,
+                )
+            )
+
+        final_day = self.prediction_input(
+            1,
+            order_id="ORDER_FINAL_DAY",
+            cumulative=100,
+        )
+        final_day["total_working_days"] = 1
+        self.save(final_day)
+        final_day_context = self.store.next_entry_context("ORDER_FINAL_DAY")
+        self.assertFalse(final_day_context["can_start_next_entry"])
+        self.assertEqual(
+            final_day_context["continuation_block_reason"],
+            "schedule_complete",
+        )
+
+        deadline = self.prediction_input(
+            1,
+            order_id="ORDER_DEADLINE",
+            cumulative=100,
+        )
+        deadline["production_date"] = "2026-08-21"
+        deadline["buyer_required_date"] = "2026-08-21"
+        self.save(deadline)
+        deadline_context = self.store.next_entry_context("ORDER_DEADLINE")
+        self.assertFalse(deadline_context["can_start_next_entry"])
+        self.assertEqual(
+            deadline_context["continuation_block_reason"],
+            "buyer_deadline_reached",
         )
 
     def test_unverified_predictions_never_create_training_labels(self):
@@ -650,6 +708,8 @@ class Component3MonitoringApiTests(unittest.TestCase):
         self.assertEqual(context["latest_record"]["working_day_no"], 1)
         self.assertEqual(context["suggested_working_day_no"], 2)
         self.assertEqual(context["suggested_production_date"], "2024-07-22")
+        self.assertTrue(context["can_start_next_entry"])
+        self.assertIsNone(context["continuation_block_reason"])
         self.assertEqual(
             context["saved_order_setup"]["order_fields"]["style_id"],
             "STYLE001",

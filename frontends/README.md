@@ -51,6 +51,12 @@ missed historical entry. This lookup uses Component 3 monitoring history, not
 Component 2 master data; values that were never saved cannot be
 recovered from the database.
 
+The same lookup prevents an invalid continuation when the saved cumulative
+quantity already completes the order, the final planned working day has been
+saved, or the next Monday-Friday date falls after the buyer deadline. The form
+keeps Bulk Order ID editable, locks the remaining fields, and explains why
+monitoring is closed so the user can select another order.
+
 In current-order mode, **Cumulative completed** is read-only and calculated
 automatically. On working day 1 it equals that day's actual output. From day 2
 onward it equals the previous saved working day's cumulative quantity plus the

@@ -216,6 +216,14 @@ record. It does not read Component 2 master data. Current-day output, damage,
 breakdown, shortage, and cumulative values are intentionally excluded so the
 client cannot silently reuse yesterday's observations.
 
+The response also contains `can_start_next_entry` and
+`continuation_block_reason`. Continuation is blocked when the order quantity is
+complete, the final working-day number is already saved, or the next working
+date would exceed the buyer deadline. Clients must not submit a new daily row
+when `can_start_next_entry` is `false`. The monitoring store also rejects any
+attempt to append a later row after a saved row has completed the full order
+quantity.
+
 ## Current persistence boundary
 
 SQLite is appropriate for local research execution and one backend process. A

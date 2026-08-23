@@ -311,6 +311,13 @@ class Component3MonitoringStore:
                 existing_input["cumulative_completed_qty"]
             )
             if existing_day < new_day:
+                if existing_cumulative >= int(
+                    existing_input["full_order_qty"]
+                ):
+                    raise TrackingConflictError(
+                        "A daily record cannot be added after the full order "
+                        "quantity was completed"
+                    )
                 if existing_date >= new_date:
                     raise TrackingConflictError(
                         "production_date must increase with working_day_no"
@@ -745,6 +752,8 @@ class Component3MonitoringStore:
                 "bulk_order_id": order_id,
                 "latest_record": None,
                 "saved_order_setup": None,
+                "can_start_next_entry": True,
+                "continuation_block_reason": None,
                 "suggested_working_day_no": 1,
                 "suggested_production_date": None,
             }
@@ -758,6 +767,21 @@ class Component3MonitoringStore:
         next_date = latest_date + timedelta(days=1)
         while next_date.weekday() >= 5:
             next_date += timedelta(days=1)
+
+        continuation_block_reason = None
+        if int(prediction_input["cumulative_completed_qty"]) >= int(
+            prediction_input["full_order_qty"]
+        ):
+            continuation_block_reason = "order_complete"
+        elif int(latest_record["working_day_no"]) >= int(
+            prediction_input["total_working_days"]
+        ):
+            continuation_block_reason = "schedule_complete"
+        elif next_date > datetime.strptime(
+            str(prediction_input["buyer_required_date"]),
+            "%Y-%m-%d",
+        ).date():
+            continuation_block_reason = "buyer_deadline_reached"
 
         return {
             "status": "continue_order",
@@ -774,6 +798,8 @@ class Component3MonitoringStore:
                     "recovery_parameters", {}
                 ),
             },
+            "can_start_next_entry": continuation_block_reason is None,
+            "continuation_block_reason": continuation_block_reason,
             "suggested_working_day_no": (
                 int(latest_record["working_day_no"]) + 1
             ),
