@@ -566,9 +566,15 @@ def _validate_prediction_payload(raw_data: object) -> dict:
     try:
         for field in PREDICTION_INTEGER_FIELDS:
             data[field] = int(data[field])
-        datetime.strptime(data["production_date"], "%Y-%m-%d")
-        datetime.strptime(data["buyer_required_date"], "%Y-%m-%d")
-        datetime.strptime(data["bulk_order_approved_date"], "%Y-%m-%d")
+        production_date = datetime.strptime(
+            data["production_date"], "%Y-%m-%d"
+        ).date()
+        buyer_required_date = datetime.strptime(
+            data["buyer_required_date"], "%Y-%m-%d"
+        ).date()
+        bulk_order_approved_date = datetime.strptime(
+            data["bulk_order_approved_date"], "%Y-%m-%d"
+        ).date()
     except (ValueError, TypeError) as error:
         raise ValueError(f"Invalid field value: {error}") from error
 
@@ -578,6 +584,19 @@ def _validate_prediction_payload(raw_data: object) -> dict:
         raise ValueError("full_order_qty must be > 0")
     if data["total_working_days"] <= 0:
         raise ValueError("total_working_days must be > 0")
+    if buyer_required_date < bulk_order_approved_date:
+        raise ValueError(
+            "buyer_required_date cannot be before bulk_order_approved_date"
+        )
+    if not bulk_order_approved_date <= production_date <= buyer_required_date:
+        raise ValueError(
+            "production_date must be between bulk_order_approved_date and "
+            "buyer_required_date"
+        )
+    if production_date.weekday() >= 5:
+        raise ValueError(
+            "production_date must be a Monday-Friday working day"
+        )
     if data["cumulative_completed_qty"] > data["full_order_qty"]:
         raise ValueError("cumulative_completed_qty cannot exceed full_order_qty")
 
@@ -589,6 +608,12 @@ def _validate_prediction_payload(raw_data: object) -> dict:
     negative_fields = [field for field in non_negative_fields if data[field] < 0]
     if negative_fields:
         raise ValueError(f"Fields must be >= 0: {negative_fields}")
+
+    for phase_field in ("cutting_days", "sewing_days"):
+        if data[phase_field] > data["total_working_days"]:
+            raise ValueError(
+                f"{phase_field} cannot exceed total_working_days"
+            )
 
     if not (1 <= data["working_day_no"] <= data["total_working_days"]):
         raise ValueError(

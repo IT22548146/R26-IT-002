@@ -32,6 +32,15 @@ The screen contains both parts of Component 3:
 The recovery-capacity values in the demo presets are examples. Replace them
 with the actual limits of the selected plant before using a recommendation.
 
+Select **Enter current order** to clear the historical preset values and start
+a present-day factory entry. The production date defaults to the browser's
+current local Monday-Friday working date, using the most recent Friday when
+opened on a weekend. Total working days are calculated automatically from the
+approved date through the buyer-required date using an inclusive Monday-Friday
+calendar. See
+[`COMPONENT3_DEMO_GUIDE.md`](../COMPONENT3_DEMO_GUIDE.md) for the complete
+demonstration sequence.
+
 For a currently stable day, the result also shows the three experimental
 next-three-production-day warnings supported by Step 5C: machine breakdown,
 quality-limit issue, and output/schedule risk. These uncalibrated scores use

@@ -739,7 +739,7 @@ export default function MonitoringHistoryPage() {
         </div>
       </section>
 
-      <section className={styles.importCard}>
+      <section className={styles.importCard} id="historical-import">
         <div className={styles.importHeader}>
           <div>
             <span className={styles.kicker}>Retrospective data loader</span>

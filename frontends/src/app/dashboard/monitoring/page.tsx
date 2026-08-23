@@ -262,6 +262,38 @@ function countWorkingDaysInclusive(start: string, end: string): NumericValue {
   return workingDays;
 }
 
+function validateTimeline(data: MonitoringFormData): string | null {
+  const approved = new Date(`${data.bulk_order_approved_date}T00:00:00Z`);
+  const production = new Date(`${data.production_date}T00:00:00Z`);
+  const required = new Date(`${data.buyer_required_date}T00:00:00Z`);
+  if (
+    Number.isNaN(approved.getTime()) ||
+    Number.isNaN(production.getTime()) ||
+    Number.isNaN(required.getTime())
+  ) {
+    return 'Enter all three timeline dates.';
+  }
+  if (required < approved) {
+    return 'Buyer-required date cannot be before the order-approved date.';
+  }
+  if (production < approved || production > required) {
+    return 'Production date must be between the approved and buyer-required dates.';
+  }
+  if (production.getUTCDay() === 0 || production.getUTCDay() === 6) {
+    return 'Production date must be a Monday-Friday factory working day.';
+  }
+  if (data.total_working_days === '' || data.total_working_days < 1) {
+    return 'The selected date range contains no Monday-Friday working days.';
+  }
+  if (data.cutting_days !== '' && data.cutting_days > data.total_working_days) {
+    return 'Cutting days cannot exceed total working days.';
+  }
+  if (data.sewing_days !== '' && data.sewing_days > data.total_working_days) {
+    return 'Sewing days cannot exceed total working days.';
+  }
+  return null;
+}
+
 const INITIAL_FORM: MonitoringFormData = {
   bulk_order_id: 'BULK0015',
   style_id: 'KM327296',
@@ -295,6 +327,53 @@ const INITIAL_RECOVERY_FORM: RecoveryFormData = {
   backup_line_daily_capacity: 150,
   expected_machine_repair_hours: 4,
 };
+
+const EMPTY_RECOVERY_FORM: RecoveryFormData = {
+  planned_worker_count: '',
+  planned_machine_count: '',
+  normal_shift_hours: '',
+  max_overtime_hours_per_day: '',
+  max_additional_workers: '',
+  available_backup_machines: '',
+  backup_line_daily_capacity: '',
+  expected_machine_repair_hours: '',
+};
+
+function localWorkingIsoDate() {
+  const now = new Date();
+  const localTime = new Date(now.getTime() - now.getTimezoneOffset() * 60_000);
+  if (localTime.getUTCDay() === 6) {
+    localTime.setUTCDate(localTime.getUTCDate() - 1);
+  } else if (localTime.getUTCDay() === 0) {
+    localTime.setUTCDate(localTime.getUTCDate() - 2);
+  }
+  return localTime.toISOString().slice(0, 10);
+}
+
+function createCurrentOrderForm(): MonitoringFormData {
+  return {
+    bulk_order_id: '',
+    style_id: '',
+    buyer_name: '',
+    allocated_bulk_plant: '',
+    plant_location: '',
+    full_order_qty: '',
+    bulk_order_approved_date: '',
+    buyer_required_date: '',
+    total_working_days: '',
+    cutting_days: '',
+    sewing_days: '',
+    daily_commitment: '',
+    production_date: localWorkingIsoDate(),
+    working_day_no: 1,
+    plant_daily_output: '',
+    daily_damage_qty: 0,
+    max_daily_damage_qty: '',
+    machine_breakdown_count: 0,
+    worker_shortage_count: 0,
+    cumulative_completed_qty: '',
+  };
+}
 
 const BULK_1_ORDER = {
   bulk_order_id: 'BULK0001',
@@ -693,12 +772,25 @@ export default function MonitoringPage() {
   const [savingIncident, setSavingIncident] = useState(false);
   const [savedIncidentId, setSavedIncidentId] = useState('');
   const [trackingError, setTrackingError] = useState('');
+  const [formMode, setFormMode] = useState<'demo' | 'current'>('demo');
+  const [analysisInvalidated, setAnalysisInvalidated] = useState(false);
+
+  const invalidateAnalysis = () => {
+    if (result) setAnalysisInvalidated(true);
+    setResult(null);
+    setError('');
+    setSavedDailyRecordId('');
+    setDailyRecordError('');
+    setSavedIncidentId('');
+    setTrackingError('');
+  };
 
   const handleChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value, type } = event.currentTarget;
     const field = name as keyof MonitoringFormData;
     const nextValue = type === 'number' ? (value === '' ? '' : Number(value)) : value;
 
+    invalidateAnalysis();
     setFormData((previous) => {
       const next = { ...previous, [field]: nextValue } as MonitoringFormData;
       if (
@@ -717,6 +809,7 @@ export default function MonitoringPage() {
   const handleRecoveryChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = event.currentTarget;
     const field = name as keyof RecoveryFormData;
+    invalidateAnalysis();
     setRecoveryData((previous) => ({
       ...previous,
       [field]: value === '' ? '' : Number(value),
@@ -726,6 +819,21 @@ export default function MonitoringPage() {
   const selectScenario = (scenario: (typeof SCENARIOS)[number]) => {
     setFormData({ ...scenario.values });
     setRecoveryData({ ...scenario.recoveryValues });
+    setFormMode('demo');
+    setAnalysisInvalidated(false);
+    setResult(null);
+    setError('');
+    setSavedDailyRecordId('');
+    setDailyRecordError('');
+    setSavedIncidentId('');
+    setTrackingError('');
+  };
+
+  const startCurrentOrder = () => {
+    setFormData(createCurrentOrderForm());
+    setRecoveryData({ ...EMPTY_RECOVERY_FORM });
+    setFormMode('current');
+    setAnalysisInvalidated(false);
     setResult(null);
     setError('');
     setSavedDailyRecordId('');
@@ -741,6 +849,12 @@ export default function MonitoringPage() {
     setDailyRecordError('');
     setSavedIncidentId('');
     setTrackingError('');
+
+    const timelineError = validateTimeline(formData);
+    if (timelineError) {
+      setError(timelineError);
+      return;
+    }
 
     if (
       recoveryData.planned_worker_count !== '' &&
@@ -782,6 +896,7 @@ export default function MonitoringPage() {
       }
 
       setResult(payload as MonitoringResponse);
+      setAnalysisInvalidated(false);
     } catch (requestError: unknown) {
       setResult(null);
       setError(
@@ -892,7 +1007,7 @@ export default function MonitoringPage() {
           step={field.step}
           onChange={handleChange}
           readOnly={field.readOnly}
-          required
+          required={!field.readOnly}
         />
         {field.helper && <span className={styles.fieldHelper}>{field.helper}</span>}
       </div>
@@ -949,7 +1064,20 @@ export default function MonitoringPage() {
             <span className={styles.sectionKicker}>Demo presets</span>
             <h2 id="scenario-title">Choose a production situation</h2>
           </div>
-          <p>Presets update operational values; you can edit every field before analysis.</p>
+          <div className={styles.scenarioHeadingActions}>
+            <p>
+              Presets use historical example values. Start a current order to
+              enter live factory data.
+            </p>
+            <div>
+              <button type="button" onClick={startCurrentOrder}>
+                + Enter current order
+              </button>
+              <Link href="/dashboard/monitoring-history#historical-import">
+                Prepare demo history
+              </Link>
+            </div>
+          </div>
         </div>
         <div className={styles.scenarioGrid}>
           {SCENARIOS.map((scenario) => (
@@ -976,6 +1104,15 @@ export default function MonitoringPage() {
                 <p>Enter today&apos;s order, output, resource and schedule information.</p>
               </div>
             </div>
+            <span
+              className={`${styles.formModeBadge} ${
+                formMode === 'current'
+                  ? styles.currentModeBadge
+                  : styles.demoModeBadge
+              }`}
+            >
+              {formMode === 'current' ? 'Current-order entry' : 'Demo preset'}
+            </span>
           </div>
 
           <form onSubmit={handleSubmit}>
@@ -1049,8 +1186,16 @@ export default function MonitoringPage() {
               <div className={styles.radar} aria-hidden="true">
                 <span />
               </div>
-              <h3>Ready to monitor an order</h3>
-              <p>Select a preset or enter today&apos;s production log, then run the analysis.</p>
+              <h3>
+                {analysisInvalidated
+                  ? 'Inputs changed'
+                  : 'Ready to monitor an order'}
+              </h3>
+              <p>
+                {analysisInvalidated
+                  ? 'The previous result was cleared. Run the analysis again to use the updated values.'
+                  : 'Select a preset or enter today\'s production log, then run the analysis.'}
+              </p>
               <div className={styles.emptyLegend}>
                 <span><i className={styles.legendSafe} /> Low</span>
                 <span><i className={styles.legendMinor} /> Medium</span>
@@ -1059,15 +1204,46 @@ export default function MonitoringPage() {
             </div>
           ) : (
             <div className={styles.results}>
-              <div className={`${styles.riskBanner} ${riskTone(result.risk_detection.order_risk_level)}`}>
+              <div
+                className={`${styles.riskBanner} ${riskTone(
+                  result.risk_detection.severity ??
+                    result.risk_detection.risk_status,
+                )}`}
+              >
                 <div>
-                  <span className={styles.bannerLabel}>Detected situation</span>
+                  <span className={styles.bannerLabel}>
+                    Current-day operational status
+                  </span>
                   <h3>{result.risk_detection.risk_type}</h3>
+                  <p>{result.risk_detection.recommendation}</p>
+                </div>
+                <div className={styles.bannerBadges}>
+                  <span>{result.risk_detection.risk_status}</span>
+                  <span>{result.risk_detection.severity ?? 'No Risk'} severity</span>
+                </div>
+              </div>
+
+              <div
+                className={`${styles.scheduleBanner} ${riskTone(
+                  result.risk_detection.order_risk_level,
+                )}`}
+              >
+                <div>
+                  <span className={styles.bannerLabel}>
+                    Order delivery outlook
+                  </span>
+                  <h3>
+                    {result.risk_detection.order_risk_level} schedule risk
+                  </h3>
                   <p>{result.order_progress.progress_summary}</p>
                 </div>
                 <div className={styles.bannerBadges}>
-                  <span>{result.risk_detection.order_risk_level} order risk</span>
-                  <span>{result.risk_detection.severity ?? 'No Risk'} severity</span>
+                  <span>
+                    Schedule: {result.risk_detection.schedule_order_risk_level}
+                  </span>
+                  <span>
+                    Combined: {result.risk_detection.order_risk_level}
+                  </span>
                 </div>
               </div>
 
@@ -1169,7 +1345,7 @@ export default function MonitoringPage() {
                 </div>
                 <div className={styles.confidenceCard}>
                   <div className={styles.metricHeader}>
-                    <span>High-risk probability</span>
+                    <span>ML high-risk probability</span>
                     <strong>{orderRiskProbability.toFixed(1)}%</strong>
                   </div>
                   <div className={`${styles.meter} ${styles.riskMeter}`}>
@@ -1392,10 +1568,12 @@ export default function MonitoringPage() {
                   )}
                 </div>
 
-                {result.risk_detection.risk_status === 'Risk' && (
+                {(result.risk_detection.risk_status === 'Risk' ||
+                  result.recovery_plan.status === 'recovery_required' ||
+                  result.recovery_plan.manual_escalation_required) && (
                   <div className={styles.trackingCard}>
                     <div>
-                      <strong>Track this recovery incident</strong>
+                      <strong>Track this recovery case</strong>
                       <span>
                         Save the analysis before approving an action or recording
                         actual production results.

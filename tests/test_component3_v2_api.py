@@ -242,6 +242,51 @@ class Component3V2ApiTests(unittest.TestCase):
         self.assertEqual(response.status_code, 400)
         self.assertIn("Invalid field value", response.get_json()["error"])
 
+    def test_timeline_date_order_is_validated(self):
+        cases = (
+            (
+                {"buyer_required_date": "2024-06-28"},
+                "buyer_required_date cannot be before",
+            ),
+            (
+                {"production_date": "2024-06-28"},
+                "production_date must be between",
+            ),
+            (
+                {"production_date": "2024-11-28"},
+                "production_date must be between",
+            ),
+            (
+                {"production_date": "2024-07-06"},
+                "Monday-Friday working day",
+            ),
+        )
+        for changes, expected_error in cases:
+            with self.subTest(changes=changes):
+                payload = self.payload()
+                payload.update(changes)
+                response = self.client.post(
+                    "/api/component3/predict",
+                    json=payload,
+                )
+                self.assertEqual(response.status_code, 400)
+                self.assertIn(expected_error, response.get_json()["error"])
+
+    def test_process_phase_days_must_fit_inside_total_working_days(self):
+        for field in ("cutting_days", "sewing_days"):
+            with self.subTest(field=field):
+                payload = self.payload()
+                payload[field] = payload["total_working_days"] + 1
+                response = self.client.post(
+                    "/api/component3/predict",
+                    json=payload,
+                )
+                self.assertEqual(response.status_code, 400)
+                self.assertIn(
+                    f"{field} cannot exceed total_working_days",
+                    response.get_json()["error"],
+                )
+
     def test_positive_quantities_are_required(self):
         for field in ("daily_commitment", "full_order_qty", "total_working_days"):
             with self.subTest(field=field):
