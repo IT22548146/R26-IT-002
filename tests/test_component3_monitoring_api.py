@@ -222,6 +222,52 @@ class Component3MonitoringStoreTests(unittest.TestCase):
         with self.assertRaisesRegex(TrackingConflictError, "production_date"):
             self.save(inconsistent)
 
+    def test_cumulative_context_requires_the_exact_previous_day(self):
+        day_one_context = self.store.cumulative_context(
+            "ORDER_CUMULATIVE",
+            working_day_no=1,
+        )
+        self.assertEqual(day_one_context["status"], "day_one")
+        self.assertIsNone(day_one_context["previous_record"])
+
+        day_one = self.save(
+            self.prediction_input(
+                1,
+                order_id="ORDER_CUMULATIVE",
+                cumulative=120,
+            )
+        )
+        day_two_context = self.store.cumulative_context(
+            "ORDER_CUMULATIVE",
+            working_day_no=2,
+        )
+        self.assertEqual(day_two_context["status"], "ready")
+        self.assertEqual(
+            day_two_context["previous_record"]["record_id"],
+            day_one["record_id"],
+        )
+        self.assertEqual(
+            day_two_context["previous_record"][
+                "cumulative_completed_qty"
+            ],
+            120,
+        )
+
+        missing_context = self.store.cumulative_context(
+            "ORDER_CUMULATIVE",
+            working_day_no=3,
+        )
+        self.assertEqual(
+            missing_context["status"],
+            "missing_previous_day",
+        )
+
+        with self.assertRaisesRegex(ValueError, "must be >= 1"):
+            self.store.cumulative_context(
+                "ORDER_CUMULATIVE",
+                working_day_no=0,
+            )
+
     def test_unverified_predictions_never_create_training_labels(self):
         source = self.save(self.prediction_input(1, order_id="ORDER_PENDING"))
         for day in (2, 3, 4):
@@ -484,6 +530,54 @@ class Component3MonitoringApiTests(unittest.TestCase):
             warning["history"]["future_or_current_saved_rows_used"],
             0,
         )
+
+    def test_cumulative_context_endpoint_supports_safe_auto_calculation(self):
+        response = self.client.get(
+            "/api/component3/orders/MONITORING001/cumulative-context"
+            "?working_day_no=1"
+        )
+        self.assertEqual(response.status_code, 200, response.get_json())
+        self.assertEqual(response.get_json()["status"], "day_one")
+
+        created = self.client.post(
+            "/api/component3/monitoring-records",
+            json=self.payload(),
+        )
+        self.assertEqual(created.status_code, 201, created.get_json())
+
+        response = self.client.get(
+            "/api/component3/orders/MONITORING001/cumulative-context"
+            "?working_day_no=2"
+        )
+        self.assertEqual(response.status_code, 200, response.get_json())
+        context = response.get_json()
+        self.assertEqual(context["status"], "ready")
+        self.assertEqual(context["previous_working_day_no"], 1)
+        self.assertEqual(
+            context["previous_record"]["cumulative_completed_qty"],
+            105,
+        )
+        self.assertEqual(context["previous_record"]["plant_daily_output"], 105)
+
+        response = self.client.get(
+            "/api/component3/orders/MONITORING001/cumulative-context"
+            "?working_day_no=1"
+        )
+        self.assertEqual(response.status_code, 200, response.get_json())
+        self.assertEqual(response.get_json()["status"], "current_day_exists")
+        self.assertEqual(
+            response.get_json()["current_record"][
+                "cumulative_completed_qty"
+            ],
+            105,
+        )
+
+        for suffix in ("", "?working_day_no=0", "?working_day_no=bad"):
+            response = self.client.get(
+                "/api/component3/orders/MONITORING001/cumulative-context"
+                + suffix
+            )
+            self.assertEqual(response.status_code, 400, response.get_json())
 
     def test_supervisor_can_verify_and_correct_actual_outcome(self):
         created = self.client.post(

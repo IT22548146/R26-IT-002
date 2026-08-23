@@ -54,6 +54,14 @@ plant-capacity fields for entry. The total working days are calculated from the
 approved date through the buyer-required date using an inclusive Monday-Friday
 calendar.
 
+**Cumulative completed** is automatic and read-only in this mode. For working
+day 1, enter the actual daily output and the cumulative quantity becomes the
+same value. For each later day, use the same Bulk Order ID and save the
+preceding working day's daily record first; the form then adds today's actual
+output to that saved cumulative quantity. A missing preceding day or an
+already-saved current day is shown as a blocking warning instead of silently
+creating an unreliable total.
+
 The form and API reject:
 
 - a buyer-required date before approval;

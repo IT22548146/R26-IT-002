@@ -643,6 +643,70 @@ class Component3MonitoringStore:
             "offset": offset,
         }
 
+    def cumulative_context(
+        self,
+        bulk_order_id: str,
+        *,
+        working_day_no: int,
+    ) -> dict[str, Any]:
+        """Return the saved context needed for a safe cumulative total."""
+        order_id = str(bulk_order_id).strip()
+        if not order_id:
+            raise ValueError("bulk_order_id is required")
+        if isinstance(working_day_no, bool) or not isinstance(
+            working_day_no, int
+        ):
+            raise ValueError("working_day_no must be an integer")
+        if working_day_no < 1:
+            raise ValueError("working_day_no must be >= 1")
+
+        previous_day = working_day_no - 1
+        with self._connection() as connection:
+            current_row = connection.execute(
+                """
+                SELECT * FROM component3_daily_monitoring
+                WHERE bulk_order_id = ? AND working_day_no = ?
+                """,
+                (order_id, working_day_no),
+            ).fetchone()
+            previous_row = None
+            if previous_day >= 1:
+                previous_row = connection.execute(
+                    """
+                    SELECT * FROM component3_daily_monitoring
+                    WHERE bulk_order_id = ? AND working_day_no = ?
+                    """,
+                    (order_id, previous_day),
+                ).fetchone()
+
+        if current_row is not None:
+            status = "current_day_exists"
+        elif working_day_no == 1:
+            status = "day_one"
+        elif previous_row is not None:
+            status = "ready"
+        else:
+            status = "missing_previous_day"
+
+        return {
+            "status": status,
+            "bulk_order_id": order_id,
+            "working_day_no": working_day_no,
+            "previous_working_day_no": (
+                previous_day if previous_day >= 1 else None
+            ),
+            "previous_record": (
+                self._cumulative_record(previous_row)
+                if previous_row is not None
+                else None
+            ),
+            "current_record": (
+                self._cumulative_record(current_row)
+                if current_row is not None
+                else None
+            ),
+        }
+
     def get_record(self, record_id: str) -> dict[str, Any]:
         with self._connection() as connection:
             row = connection.execute(
@@ -878,4 +942,17 @@ class Component3MonitoringStore:
             ),
             "created_at": row["created_at"],
             "updated_at": row["updated_at"],
+        }
+
+    @staticmethod
+    def _cumulative_record(row: sqlite3.Row) -> dict[str, Any]:
+        prediction_input = json.loads(row["prediction_input_json"])
+        return {
+            "record_id": row["record_id"],
+            "production_date": row["production_date"],
+            "working_day_no": row["working_day_no"],
+            "plant_daily_output": prediction_input["plant_daily_output"],
+            "cumulative_completed_qty": prediction_input[
+                "cumulative_completed_qty"
+            ],
         }

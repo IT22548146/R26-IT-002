@@ -344,6 +344,25 @@
   font-size: 0.68rem;
 }
 
+.fieldHelperReady,
+.fieldHelperWarning,
+.fieldHelperError {
+  font-size: 0.68rem;
+  font-weight: 600;
+}
+
+.fieldHelperReady {
+  color: #047857;
+}
+
+.fieldHelperWarning {
+  color: #b45309;
+}
+
+.fieldHelperError {
+  color: #b91c1c;
+}
+
 .recoveryFieldset {
   margin-top: 1.5rem;
   padding: 1rem;

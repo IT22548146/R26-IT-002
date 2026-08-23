@@ -925,6 +925,28 @@ def order_monitoring_history(bulk_order_id: str):
     return jsonify(result), 200
 
 
+@component3_bp.route(
+    "/orders/<bulk_order_id>/cumulative-context",
+    methods=["GET"],
+)
+def order_cumulative_context(bulk_order_id: str):
+    """Return the prior saved day used to calculate today's cumulative."""
+    try:
+        working_day_no = _non_negative_integer(
+            {"working_day_no": request.args.get("working_day_no")},
+            "working_day_no",
+        )
+        if working_day_no is None or working_day_no < 1:
+            raise ValueError("working_day_no must be >= 1")
+        result = _monitoring_store().cumulative_context(
+            bulk_order_id,
+            working_day_no=working_day_no,
+        )
+    except ValueError as error:
+        return jsonify({"error": str(error)}), 400
+    return jsonify(result), 200
+
+
 @component3_bp.route("/monitoring-records/<record_id>", methods=["GET"])
 def get_monitoring_record(record_id: str):
     """Return one monitoring record with its canonical input and analysis."""

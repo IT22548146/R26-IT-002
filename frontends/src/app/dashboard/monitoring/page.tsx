@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import Link from 'next/link';
 import styles from './monitoring.module.css';
 
@@ -232,6 +232,33 @@ interface RecoveryFieldDefinition {
   min: number;
   step?: number;
   helper: string;
+}
+
+interface CumulativeContextRecord {
+  record_id: string;
+  production_date: string;
+  working_day_no: number;
+  plant_daily_output: number;
+  cumulative_completed_qty: number;
+}
+
+interface CumulativeContextResponse {
+  status:
+    | 'day_one'
+    | 'ready'
+    | 'missing_previous_day'
+    | 'current_day_exists';
+  bulk_order_id: string;
+  working_day_no: number;
+  previous_working_day_no: number | null;
+  previous_record: CumulativeContextRecord | null;
+  current_record: CumulativeContextRecord | null;
+}
+
+interface CumulativeFeedback {
+  status: 'idle' | 'loading' | 'ready' | 'warning' | 'error';
+  message: string;
+  blocking: boolean;
 }
 
 const API_BASE_URL = (
@@ -497,7 +524,13 @@ const PRODUCTION_FIELDS: FieldDefinition[] = [
   { name: 'full_order_qty', label: 'Full order quantity', type: 'number', min: 1 },
   { name: 'daily_commitment', label: 'Daily commitment', type: 'number', min: 1 },
   { name: 'plant_daily_output', label: 'Actual daily output', type: 'number', min: 0 },
-  { name: 'cumulative_completed_qty', label: 'Cumulative completed', type: 'number', min: 0 },
+  {
+    name: 'cumulative_completed_qty',
+    label: 'Cumulative completed',
+    type: 'number',
+    min: 0,
+    helper: 'Historical demo presets keep their supplied cumulative value.',
+  },
   { name: 'daily_damage_qty', label: 'Daily damage quantity', type: 'number', min: 0 },
   { name: 'max_daily_damage_qty', label: 'Maximum allowed damage', type: 'number', min: 0 },
   { name: 'machine_breakdown_count', label: 'Machine breakdowns', type: 'number', min: 0 },
@@ -774,6 +807,14 @@ export default function MonitoringPage() {
   const [trackingError, setTrackingError] = useState('');
   const [formMode, setFormMode] = useState<'demo' | 'current'>('demo');
   const [analysisInvalidated, setAnalysisInvalidated] = useState(false);
+  const [cumulativeFeedback, setCumulativeFeedback] =
+    useState<CumulativeFeedback>({
+      status: 'idle',
+      message: 'Historical demo preset value; you can edit it for this scenario.',
+      blocking: false,
+    });
+  const cumulativeRequestId = useRef(0);
+  const cumulativeRequestController = useRef<AbortController | null>(null);
 
   const invalidateAnalysis = () => {
     if (result) setAnalysisInvalidated(true);
@@ -785,25 +826,191 @@ export default function MonitoringPage() {
     setTrackingError('');
   };
 
+  const cancelCumulativeLookup = () => {
+    cumulativeRequestId.current += 1;
+    cumulativeRequestController.current?.abort();
+    cumulativeRequestController.current = null;
+  };
+
+  const updateAutomaticCumulative = async (next: MonitoringFormData) => {
+    cancelCumulativeLookup();
+
+    const output = next.plant_daily_output;
+    const workingDay = next.working_day_no;
+    if (output === '') {
+      setFormData((previous) => ({
+        ...previous,
+        cumulative_completed_qty: '',
+      }));
+      setCumulativeFeedback({
+        status: 'idle',
+        message: 'Enter today\'s actual output to calculate the cumulative total.',
+        blocking: true,
+      });
+      return;
+    }
+    if (workingDay === '' || workingDay < 1 || !Number.isInteger(workingDay)) {
+      setFormData((previous) => ({
+        ...previous,
+        cumulative_completed_qty: '',
+      }));
+      setCumulativeFeedback({
+        status: 'error',
+        message: 'Enter a valid current working day first.',
+        blocking: true,
+      });
+      return;
+    }
+
+    if (workingDay === 1) {
+      const exceedsOrder =
+        next.full_order_qty !== '' && output > next.full_order_qty;
+      setFormData((previous) => ({
+        ...previous,
+        cumulative_completed_qty: output,
+      }));
+      setCumulativeFeedback({
+        status: exceedsOrder ? 'error' : 'ready',
+        message: exceedsOrder
+          ? `Calculated ${output}, but it exceeds the full order quantity.`
+          : `Day 1: cumulative automatically equals today's output (${output}).`,
+        blocking: exceedsOrder,
+      });
+      return;
+    }
+
+    const orderId = next.bulk_order_id.trim();
+    if (!orderId) {
+      setFormData((previous) => ({
+        ...previous,
+        cumulative_completed_qty: '',
+      }));
+      setCumulativeFeedback({
+        status: 'warning',
+        message: 'Enter the Bulk order ID to find the previous saved day.',
+        blocking: true,
+      });
+      return;
+    }
+
+    const requestId = cumulativeRequestId.current;
+    const controller = new AbortController();
+    cumulativeRequestController.current = controller;
+    setFormData((previous) => ({
+      ...previous,
+      cumulative_completed_qty: '',
+    }));
+    setCumulativeFeedback({
+      status: 'loading',
+      message: `Loading saved working day ${workingDay - 1}...`,
+      blocking: true,
+    });
+
+    try {
+      const response = await fetch(
+        `${API_BASE_URL}/orders/${encodeURIComponent(orderId)}` +
+          `/cumulative-context?working_day_no=${workingDay}`,
+        { signal: controller.signal },
+      );
+      const payload: unknown = await response.json();
+      if (!response.ok) {
+        const apiError = payload as { error?: unknown };
+        throw new Error(
+          typeof apiError.error === 'string'
+            ? apiError.error
+            : 'Previous-day production could not be loaded.',
+        );
+      }
+      if (requestId !== cumulativeRequestId.current) return;
+
+      const context = payload as CumulativeContextResponse;
+      if (context.status === 'current_day_exists' && context.current_record) {
+        setFormData((previous) => ({
+          ...previous,
+          cumulative_completed_qty:
+            context.current_record?.cumulative_completed_qty ?? '',
+        }));
+        setCumulativeFeedback({
+          status: 'error',
+          message:
+            `Working day ${workingDay} is already saved (cumulative ` +
+            `${context.current_record.cumulative_completed_qty}). Choose the next day.`,
+          blocking: true,
+        });
+        return;
+      }
+      if (context.status === 'missing_previous_day' || !context.previous_record) {
+        setCumulativeFeedback({
+          status: 'warning',
+          message: `Save working day ${workingDay - 1} for ${orderId} before entering day ${workingDay}.`,
+          blocking: true,
+        });
+        return;
+      }
+
+      const previousCumulative =
+        context.previous_record.cumulative_completed_qty;
+      const calculated = previousCumulative + output;
+      const exceedsOrder =
+        next.full_order_qty !== '' && calculated > next.full_order_qty;
+      setFormData((previous) => ({
+        ...previous,
+        cumulative_completed_qty: calculated,
+      }));
+      setCumulativeFeedback({
+        status: exceedsOrder ? 'error' : 'ready',
+        message: exceedsOrder
+          ? `Calculated ${previousCumulative} + ${output} = ${calculated}, which exceeds the full order quantity.`
+          : `Auto-calculated: day ${workingDay - 1} cumulative ${previousCumulative} + today's output ${output} = ${calculated}.`,
+        blocking: exceedsOrder,
+      });
+    } catch (requestError: unknown) {
+      if (requestError instanceof Error && requestError.name === 'AbortError') {
+        return;
+      }
+      if (requestId !== cumulativeRequestId.current) return;
+      setCumulativeFeedback({
+        status: 'error',
+        message:
+          requestError instanceof Error
+            ? requestError.message
+            : 'Unable to load the previous saved production day.',
+        blocking: true,
+      });
+    } finally {
+      if (requestId === cumulativeRequestId.current) {
+        cumulativeRequestController.current = null;
+      }
+    }
+  };
+
   const handleChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value, type } = event.currentTarget;
     const field = name as keyof MonitoringFormData;
     const nextValue = type === 'number' ? (value === '' ? '' : Number(value)) : value;
 
     invalidateAnalysis();
-    setFormData((previous) => {
-      const next = { ...previous, [field]: nextValue } as MonitoringFormData;
-      if (
-        field === 'bulk_order_approved_date' ||
-        field === 'buyer_required_date'
-      ) {
-        next.total_working_days = countWorkingDaysInclusive(
-          next.bulk_order_approved_date,
-          next.buyer_required_date,
-        );
-      }
-      return next;
-    });
+    const next = { ...formData, [field]: nextValue } as MonitoringFormData;
+    if (
+      field === 'bulk_order_approved_date' ||
+      field === 'buyer_required_date'
+    ) {
+      next.total_working_days = countWorkingDaysInclusive(
+        next.bulk_order_approved_date,
+        next.buyer_required_date,
+      );
+    }
+    setFormData(next);
+
+    if (
+      formMode === 'current' &&
+      (field === 'bulk_order_id' ||
+        field === 'working_day_no' ||
+        field === 'plant_daily_output' ||
+        field === 'full_order_qty')
+    ) {
+      void updateAutomaticCumulative(next);
+    }
   };
 
   const handleRecoveryChange = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -817,9 +1024,15 @@ export default function MonitoringPage() {
   };
 
   const selectScenario = (scenario: (typeof SCENARIOS)[number]) => {
+    cancelCumulativeLookup();
     setFormData({ ...scenario.values });
     setRecoveryData({ ...scenario.recoveryValues });
     setFormMode('demo');
+    setCumulativeFeedback({
+      status: 'idle',
+      message: 'Historical demo preset value; you can edit it for this scenario.',
+      blocking: false,
+    });
     setAnalysisInvalidated(false);
     setResult(null);
     setError('');
@@ -830,9 +1043,15 @@ export default function MonitoringPage() {
   };
 
   const startCurrentOrder = () => {
+    cancelCumulativeLookup();
     setFormData(createCurrentOrderForm());
     setRecoveryData({ ...EMPTY_RECOVERY_FORM });
     setFormMode('current');
+    setCumulativeFeedback({
+      status: 'idle',
+      message: 'Enter today\'s actual output to calculate the cumulative total.',
+      blocking: true,
+    });
     setAnalysisInvalidated(false);
     setResult(null);
     setError('');
@@ -853,6 +1072,18 @@ export default function MonitoringPage() {
     const timelineError = validateTimeline(formData);
     if (timelineError) {
       setError(timelineError);
+      return;
+    }
+
+    if (
+      formMode === 'current' &&
+      (cumulativeFeedback.blocking || formData.cumulative_completed_qty === '')
+    ) {
+      setError(
+        cumulativeFeedback.status === 'loading'
+          ? 'Wait until the cumulative total finishes loading.'
+          : cumulativeFeedback.message,
+      );
       return;
     }
 
@@ -995,23 +1226,46 @@ export default function MonitoringPage() {
   };
 
   const renderFields = (fields: FieldDefinition[]) =>
-    fields.map((field) => (
-      <div className={styles.formGroup} key={field.name}>
-        <label htmlFor={field.name}>{field.label}</label>
-        <input
-          id={field.name}
-          name={field.name}
-          type={field.type ?? 'text'}
-          value={formData[field.name]}
-          min={field.min}
-          step={field.step}
-          onChange={handleChange}
-          readOnly={field.readOnly}
-          required={!field.readOnly}
-        />
-        {field.helper && <span className={styles.fieldHelper}>{field.helper}</span>}
-      </div>
-    ));
+    fields.map((field) => {
+      const isAutomaticCumulative =
+        field.name === 'cumulative_completed_qty' && formMode === 'current';
+      const readOnly = field.readOnly || isAutomaticCumulative;
+      const helper = isAutomaticCumulative
+        ? cumulativeFeedback.message
+        : field.helper;
+      const helperClass = isAutomaticCumulative
+        ? cumulativeFeedback.status === 'ready'
+          ? styles.fieldHelperReady
+          : cumulativeFeedback.status === 'warning' ||
+              cumulativeFeedback.status === 'loading'
+            ? styles.fieldHelperWarning
+            : cumulativeFeedback.status === 'error'
+              ? styles.fieldHelperError
+              : styles.fieldHelper
+        : styles.fieldHelper;
+
+      return (
+        <div className={styles.formGroup} key={field.name}>
+          <label htmlFor={field.name}>{field.label}</label>
+          <input
+            id={field.name}
+            name={field.name}
+            type={field.type ?? 'text'}
+            value={formData[field.name]}
+            min={field.min}
+            step={field.step}
+            onChange={handleChange}
+            readOnly={readOnly}
+            required={!readOnly}
+          />
+          {helper && (
+            <span className={helperClass} aria-live="polite">
+              {helper}
+            </span>
+          )}
+        </div>
+      );
+    });
 
   const renderRecoveryFields = (fields: RecoveryFieldDefinition[]) =>
     fields.map((field) => (

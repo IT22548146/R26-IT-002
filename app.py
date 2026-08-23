@@ -55,6 +55,10 @@ def index():
                 "incident_detail": "GET /api/component3/incidents/{incident_id}",
                 "save_daily_monitoring": "POST /api/component3/monitoring-records",
                 "daily_monitoring_history": "GET /api/component3/monitoring-records",
+                "cumulative_context": (
+                    "GET /api/component3/orders/{bulk_order_id}/"
+                    "cumulative-context?working_day_no={day}"
+                ),
                 "verify_daily_outcome": "PUT /api/component3/monitoring-records/{record_id}/verification",
                 "historical_import_preview": "GET /api/component3/historical-import/preview",
                 "import_historical_order": "POST /api/component3/historical-import",

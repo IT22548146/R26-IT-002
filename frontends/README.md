@@ -41,6 +41,13 @@ calendar. See
 [`COMPONENT3_DEMO_GUIDE.md`](../COMPONENT3_DEMO_GUIDE.md) for the complete
 demonstration sequence.
 
+In current-order mode, **Cumulative completed** is read-only and calculated
+automatically. On working day 1 it equals that day's actual output. From day 2
+onward it equals the previous saved working day's cumulative quantity plus the
+current actual output. Save each day before entering the next one; the screen
+blocks calculation when the immediately preceding day is missing or when the
+selected day is already saved.
+
 For a currently stable day, the result also shows the three experimental
 next-three-production-day warnings supported by Step 5C: machine breakdown,
 quality-limit issue, and output/schedule risk. These uncalibrated scores use
