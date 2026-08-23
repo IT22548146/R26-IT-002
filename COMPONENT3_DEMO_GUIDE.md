@@ -94,9 +94,15 @@ After analysis:
 1. enter the recorder identity and select **Save daily record**;
 2. for an operational or schedule recovery case, select
    **Save & track incident**;
-3. open Recovery History;
-4. approve a recovery option, start it, record actual output, review its
+3. for a continuing current order, select **Start next working day** to retain
+   order and capacity details, advance to the next Monday-Friday date, and
+   clear the new day's measurements;
+4. open Recovery History for a tracked incident;
+5. approve a recovery option, start it, record actual output, review its
    effectiveness, and complete the case.
+
+The next-day action is hidden once the order quantity is complete or its final
+scheduled working day has been saved.
 
 ## 5. Prepare monitoring-history evidence
 

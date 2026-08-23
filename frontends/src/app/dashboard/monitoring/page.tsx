@@ -493,6 +493,17 @@ function localWorkingIsoDate() {
   return localTime.toISOString().slice(0, 10);
 }
 
+function nextWorkingIsoDate(currentDate: string) {
+  const date = new Date(`${currentDate}T00:00:00Z`);
+  if (Number.isNaN(date.getTime())) return null;
+
+  do {
+    date.setUTCDate(date.getUTCDate() + 1);
+  } while (date.getUTCDay() === 0 || date.getUTCDay() === 6);
+
+  return date.toISOString().slice(0, 10);
+}
+
 function createCurrentOrderForm(): MonitoringFormData {
   return {
     bulk_order_id: '',
@@ -1688,6 +1699,78 @@ export default function MonitoringPage() {
     }
   };
 
+  const handleStartNextWorkingDay = () => {
+    if (!savedDailyRecordId || formMode !== 'current') return;
+
+    const currentWorkingDay = formData.working_day_no;
+    const nextProductionDate = nextWorkingIsoDate(formData.production_date);
+    if (
+      currentWorkingDay === '' ||
+      formData.total_working_days === '' ||
+      !nextProductionDate ||
+      currentWorkingDay >= formData.total_working_days ||
+      nextProductionDate > formData.buyer_required_date
+    ) {
+      setDailyRecordError(
+        'The order has reached its final scheduled working day. A new daily entry was not prepared.',
+      );
+      return;
+    }
+    if (
+      formData.cumulative_completed_qty !== '' &&
+      formData.full_order_qty !== '' &&
+      formData.cumulative_completed_qty >= formData.full_order_qty
+    ) {
+      setDailyRecordError(
+        'The full order quantity is complete. A new daily entry was not prepared.',
+      );
+      return;
+    }
+
+    const savedWorkingDay = currentWorkingDay;
+    const savedRecordId = savedDailyRecordId;
+    const next: MonitoringFormData = {
+      ...formData,
+      production_date: nextProductionDate,
+      working_day_no: currentWorkingDay + 1,
+      plant_daily_output: '',
+      daily_damage_qty: 0,
+      machine_breakdown_count: 0,
+      worker_shortage_count: 0,
+      cumulative_completed_qty: '',
+    };
+
+    cancelOrderEntryLookup();
+    cancelCumulativeLookup();
+    replaceFormData(next);
+    setResult(null);
+    setAnalysisInvalidated(false);
+    setError('');
+    setSavedDailyRecordId('');
+    setDailyRecordError('');
+    setSavedIncidentId('');
+    setTrackingError('');
+    setAvailableDraft(null);
+    setDraftSessionActive(true);
+    setDraftFeedback({
+      status: 'idle',
+      message:
+        `Working day ${currentWorkingDay + 1} was prepared from saved record ` +
+        `${savedRecordId}. Draft auto-save is active.`,
+    });
+    setOrderEntryFeedback({
+      status: 'ready',
+      message:
+        `Working day ${savedWorkingDay} is saved. The next entry is day ` +
+        `${currentWorkingDay + 1} on ${nextProductionDate}.`,
+    });
+    setCumulativeFeedback({
+      status: 'idle',
+      message: 'Enter today\'s actual output to calculate the cumulative total.',
+      blocking: true,
+    });
+  };
+
   const handleSaveIncident = async () => {
     if (!result || !trackingActor.trim()) return;
     setSavingIncident(true);
@@ -1805,6 +1888,26 @@ export default function MonitoringPage() {
   const orderRiskProbability = result
     ? clampPercentage(result.risk_detection.order_risk_probability * 100)
     : 0;
+  const nextSavedProductionDate = savedDailyRecordId
+    ? nextWorkingIsoDate(formData.production_date)
+    : null;
+  const savedOrderIsComplete =
+    savedDailyRecordId !== '' &&
+    formData.cumulative_completed_qty !== '' &&
+    formData.full_order_qty !== '' &&
+    formData.cumulative_completed_qty >= formData.full_order_qty;
+  const savedScheduleIsComplete =
+    savedDailyRecordId !== '' &&
+    (formData.working_day_no === '' ||
+      formData.total_working_days === '' ||
+      formData.working_day_no >= formData.total_working_days ||
+      !nextSavedProductionDate ||
+      nextSavedProductionDate > formData.buyer_required_date);
+  const canStartNextWorkingDay =
+    formMode === 'current' &&
+    savedDailyRecordId !== '' &&
+    !savedOrderIsComplete &&
+    !savedScheduleIsComplete;
 
   return (
     <div className={styles.container}>
@@ -2372,11 +2475,30 @@ export default function MonitoringPage() {
                     </span>
                   )}
                   {savedDailyRecordId && (
-                    <div className={styles.trackingSuccess} role="status">
-                      <span>Daily record saved for early-warning data collection.</span>
-                      <Link href="/dashboard/monitoring-history">
-                        Open daily history →
-                      </Link>
+                    <div className={styles.trackingSuccess}>
+                      <div className={styles.trackingSuccessCopy} role="status">
+                        <span>Daily record saved for early-warning data collection.</span>
+                        {formMode === 'current' && savedOrderIsComplete && (
+                          <small>The full order quantity is now complete.</small>
+                        )}
+                        {formMode === 'current' &&
+                          !savedOrderIsComplete &&
+                          savedScheduleIsComplete && (
+                            <small>
+                              The order has reached its final scheduled working day.
+                            </small>
+                          )}
+                      </div>
+                      <div className={styles.trackingSuccessActions}>
+                        {canStartNextWorkingDay && (
+                          <button type="button" onClick={handleStartNextWorkingDay}>
+                            Start next working day →
+                          </button>
+                        )}
+                        <Link href="/dashboard/monitoring-history">
+                          Open daily history →
+                        </Link>
+                      </div>
                     </div>
                   )}
                 </div>

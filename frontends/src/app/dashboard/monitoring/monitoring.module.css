@@ -1365,6 +1365,35 @@
   font-size: 0.62rem;
 }
 
+.trackingSuccessCopy {
+  display: flex;
+  align-items: flex-start;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.trackingSuccess small {
+  color: #fde68a;
+  font-size: 0.58rem;
+}
+
+.trackingSuccessActions {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+  gap: 0.65rem;
+}
+
+.trackingSuccessActions button {
+  padding: 0;
+  border: 0;
+  color: #fff;
+  background: transparent;
+  font: inherit;
+  font-weight: 800;
+  cursor: pointer;
+}
+
 .trackingSuccess a {
   color: #fff;
   font-weight: 700;
@@ -1609,6 +1638,11 @@
   }
 
   .trackingSuccess {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .trackingSuccessActions {
     align-items: flex-start;
     flex-direction: column;
   }

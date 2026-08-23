@@ -63,6 +63,14 @@ Its values reach the models only when **Analyse** is selected. A successful
 the same browser profile and can be lost when site data is cleared or private
 browsing ends.
 
+After a current-order record is saved, **Start next working day** prepares the
+next Monday-Friday entry without retyping the order, schedule, threshold, or
+recovery-capacity values. It advances the working-day number and production
+date, then clears only the new day's output, damage, breakdown, shortage, and
+cumulative fields. The prepared entry is protected by local draft auto-save.
+The action is not offered when the full order quantity is complete or the last
+scheduled working day has been reached.
+
 For a currently stable day, the result also shows the three experimental
 next-three-production-day warnings supported by Step 5C: machine breakdown,
 quality-limit issue, and output/schedule risk. These uncalibrated scores use
