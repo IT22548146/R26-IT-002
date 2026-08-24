@@ -955,12 +955,32 @@ export default function MonitoringHistoryPage() {
                 note: 'New unseen real orders',
                 className: styles.scopeIndependent,
                 report: validationReport.independent_validation,
+                emptyTitle: 'Independent validation pending',
+                emptyDescription:
+                  'No new unseen order has completed the verified three-day evaluation window yet.',
+                emptySteps: [
+                  'Save consecutive daily records from a new order',
+                  'Verify the recorded actual outcomes',
+                  'Collect both risk and no-risk target outcomes',
+                ],
+                emptyNote:
+                  'Historical imports remain in the retrospective panel and cannot fill independent validation.',
               },
               {
                 title: 'Retrospective workflow evidence',
                 note: 'Previously used model-development data',
                 className: styles.scopeRetrospective,
                 report: validationReport.retrospective_training_reuse,
+                emptyTitle: 'Retrospective evaluation pending',
+                emptyDescription:
+                  'No imported historical source day currently has a verified three-day outcome window.',
+                emptySteps: [
+                  'Import one historical order chronologically',
+                  'Verify its recorded historical outcomes',
+                  'Complete an eligible three-day label window',
+                ],
+                emptyNote:
+                  'This evidence demonstrates the workflow only and never counts as independent validation.',
               },
             ].map((scope) => (
               <article
@@ -997,46 +1017,64 @@ export default function MonitoringHistoryPage() {
                   </div>
                 </div>
 
-                <div className={styles.validationTableWrap}>
-                  <table>
-                    <thead>
-                      <tr>
-                        <th>Target</th>
-                        <th>Actual + / −</th>
-                        <th>Accuracy</th>
-                        <th>Macro-F1</th>
-                        <th>F1</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {scope.report.targets.map((targetResult) => (
-                        <tr key={targetResult.target}>
-                          <td>
-                            <strong>{targetResult.display_name}</strong>
-                            <small>{targetResult.rows_evaluated} rows</small>
-                          </td>
-                          <td>
-                            {targetResult.positive_actual_rows} /{' '}
-                            {targetResult.negative_actual_rows}
-                            {!targetResult.class_coverage_complete &&
-                              targetResult.rows_evaluated > 0 && (
-                                <small className={styles.classWarning}>
-                                  One actual class only
-                                </small>
-                              )}
-                          </td>
-                          <td>
-                            {formatMetric(targetResult.metrics?.accuracy)}
-                          </td>
-                          <td>
-                            {formatMetric(targetResult.metrics?.macro_f1)}
-                          </td>
-                          <td>{formatMetric(targetResult.metrics?.f1)}</td>
-                        </tr>
+                {scope.report.ready_warning_rows === 0 ? (
+                  <div className={styles.validationEmptyState} role="status">
+                    <div className={styles.validationEmptyHeading}>
+                      <span aria-hidden="true">○</span>
+                      <div>
+                        <h4>{scope.emptyTitle}</h4>
+                        <p>{scope.emptyDescription}</p>
+                      </div>
+                    </div>
+                    <ol>
+                      {scope.emptySteps.map((step) => (
+                        <li key={step}>{step}</li>
                       ))}
-                    </tbody>
-                  </table>
-                </div>
+                    </ol>
+                    <small>{scope.emptyNote}</small>
+                  </div>
+                ) : (
+                  <div className={styles.validationTableWrap}>
+                    <table>
+                      <thead>
+                        <tr>
+                          <th>Target</th>
+                          <th>Actual + / −</th>
+                          <th>Accuracy</th>
+                          <th>Macro-F1</th>
+                          <th>F1</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {scope.report.targets.map((targetResult) => (
+                          <tr key={targetResult.target}>
+                            <td>
+                              <strong>{targetResult.display_name}</strong>
+                              <small>{targetResult.rows_evaluated} rows</small>
+                            </td>
+                            <td>
+                              {targetResult.positive_actual_rows} /{' '}
+                              {targetResult.negative_actual_rows}
+                              {!targetResult.class_coverage_complete &&
+                                targetResult.rows_evaluated > 0 && (
+                                  <small className={styles.classWarning}>
+                                    One actual class only
+                                  </small>
+                                )}
+                            </td>
+                            <td>
+                              {formatMetric(targetResult.metrics?.accuracy)}
+                            </td>
+                            <td>
+                              {formatMetric(targetResult.metrics?.macro_f1)}
+                            </td>
+                            <td>{formatMetric(targetResult.metrics?.f1)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
               </article>
             ))}
           </div>

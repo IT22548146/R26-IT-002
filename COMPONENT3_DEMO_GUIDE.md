@@ -125,6 +125,11 @@ new demonstration computer. The resulting Step 5D.1 card shows Accuracy,
 Macro-F1, and F1 while clearly separating retrospective training-data reuse
 from independent validation.
 
+When no independent rows are evaluable, the report shows an intentional
+**Independent validation pending** state with the three evidence-collection
+requirements instead of an empty metric table. Historical imports never fill
+that independent panel.
+
 ## Evidence statement
 
 The recommended presentation wording is:
