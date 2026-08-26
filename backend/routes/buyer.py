@@ -9,27 +9,56 @@ Buyer portal endpoints:
 
 import os
 import json
-from datetime import datetime, date
+from datetime import datetime, date, timedelta
 from werkzeug.utils import secure_filename
 from flask import Blueprint, request, jsonify, g, current_app, send_file, abort
 from database.db import get_db
 from middleware.auth_middleware import require_role
 from services.email_service import send_new_sample_order_to_admin, send_new_bulk_order_to_admin
 from services.notification_service import create_notification
-from services.capacity_service import get_all_plants_monthly_capacity
+from services.capacity_service import get_all_plants_monthly_capacity, get_all_plants_window_capacity
 
 buyer_bp = Blueprint("buyer", __name__)
 
-# Style PDFs are stored on disk under <project_root>/uploads/style_pdfs and only
-# the relative path is persisted in the DB.
+
+MIN_LEAD_DAYS = 20
+MIN_BULK_QTY = 500
+MAX_BULK_QTY = 20000
+
+
+def _check_min_lead(required_date_str):
+    """Return an error message when the required date is inside the lead-time window."""
+    try:
+        d = datetime.strptime(str(required_date_str)[:10], "%Y-%m-%d").date()
+    except (TypeError, ValueError):
+        return "Required date must be a valid date (YYYY-MM-DD)."
+    earliest = date.today() + timedelta(days=MIN_LEAD_DAYS)
+    if d < earliest:
+        return ("Required date must be at least %d days from today "
+                "(earliest %s)." % (MIN_LEAD_DAYS, earliest.isoformat()))
+    return None
+
+
+def _check_bulk_qty(value):
+    """Return (qty, error). qty is None when the value could not be parsed."""
+    try:
+        qty = int(value)
+    except (TypeError, ValueError):
+        return None, "Quantity must be a whole number."
+    if qty < MIN_BULK_QTY or qty > MAX_BULK_QTY:
+        return None, ("Total quantity must be between %s and %s pcs."
+                      % (f"{MIN_BULK_QTY:,}", f"{MAX_BULK_QTY:,}"))
+    return qty, None
+
+
+
 _UPLOAD_SUBDIR = os.path.join("uploads", "style_pdfs")
 _MAX_PDF_BYTES = 10 * 1024 * 1024   # 10 MB
 
-# Daily commitment is no longer entered by the buyer. It is meant to come from
-# C4 (prior-year plant output) and is plant-specific. Hardcoded for now — the
-# real derivation drops into this one place later.
-# TODO(Phase 4 follow-up): derive from C4 per assigned plant instead of a constant.
-DEFAULT_DAILY_COMMITMENT = 500
+
+DEFAULT_DAILY_COMMITMENT = 714
+
+MIN_TRAINED_DAILY_COMMITMENT = 504
 
 
 def _save_style_pdf(pdf_file):
@@ -108,6 +137,9 @@ def submit_sample_order():
         return jsonify({"error": "Required date must be a valid date (YYYY-MM-DD)."}), 400
     if required_date < date.today():
         return jsonify({"error": "Required date cannot be in the past."}), 400
+    lead_err = _check_min_lead(data["buyer_required_date"])
+    if lead_err:
+        return jsonify({"error": lead_err}), 400
 
     # Persist the optional style PDF (validated) before touching the DB.
     try:
@@ -281,6 +313,9 @@ def update_sample_order(order_id):
             return jsonify({"error": "Required date must be a valid date (YYYY-MM-DD)."}), 400
         if req_date < date.today():
             return jsonify({"error": "Required date cannot be in the past."}), 400
+        lead_err = _check_min_lead(data["buyer_required_date"])
+        if lead_err:
+            return jsonify({"error": lead_err}), 400
         buyer_required_date = data["buyer_required_date"]
 
     if "notes" in data:
@@ -427,6 +462,14 @@ def submit_bulk_order():
         return jsonify({"error": "Required date must be a valid date (YYYY-MM-DD)."}), 400
     if req_date < date.today():
         return jsonify({"error": "Required date cannot be in the past."}), 400
+    lead_err = _check_min_lead(data["buyer_required_date"])
+    if lead_err:
+        return jsonify({"error": lead_err}), 400
+
+    qty, qty_err = _check_bulk_qty(data["bulk_order_quantity"])
+    if qty_err:
+        return jsonify({"error": qty_err}), 400
+    data["bulk_order_quantity"] = qty
 
     # Daily commitment is derived server-side (not a buyer input).
     daily_commitment = int(data.get("daily_commitment") or DEFAULT_DAILY_COMMITMENT)
@@ -438,8 +481,10 @@ def submit_bulk_order():
     buyer_name = user_org["name"]
 
     # Get live monthly capacity from DB
+    # Judge the order against every month it will actually be produced in, not
+    # just the approval month - a bulk order spans several months.
     month_year     = str(data["bulk_order_approved_date"])[:7]
-    monthly_cap    = get_all_plants_monthly_capacity(month_year)
+    monthly_cap    = get_all_plants_window_capacity(month_year, str(data["buyer_required_date"])[:7])
 
     # Determine sample plant (use top-capacity plant as default)
     sample_plant    = data.get("sample_plant") or max(monthly_cap, key=monthly_cap.get)
@@ -554,7 +599,9 @@ def list_bulk_orders():
         """SELECT bo.id, bo.style_number, bo.bulk_order_quantity, bo.style_priority,
                   bo.approved_date, bo.buyer_required_date, bo.status,
                   bo.customer_response, bo.customer_message, bo.extension_days_requested,
-                  bo.timeline_email_sent_at, bo.assigned_at,
+                  bo.timeline_email_sent_at, bo.timeline_decision, bo.timeline_given_days,
+                  bo.timeline_needed_days, bo.timeline_gap_days, bo.proposed_required_date,
+                  bo.assigned_at,
                   bo.plant_approved_at, bo.ready_at, bo.shipped_at, bo.created_at,
                   bo.style_pdf_path, bo.production_stage, bo.notes
            FROM bulk_orders bo
@@ -634,12 +681,9 @@ def update_bulk_order(order_id):
     notes    = data["notes"] if "notes" in data else order["notes"]
 
     if "bulk_order_quantity" in data:
-        try:
-            qty = int(data["bulk_order_quantity"])
-        except (TypeError, ValueError):
-            return jsonify({"error": "Quantity must be a whole number."}), 400
-        if qty <= 0:
-            return jsonify({"error": "Quantity must be greater than zero."}), 400
+        qty, qty_err = _check_bulk_qty(data["bulk_order_quantity"])
+        if qty_err:
+            return jsonify({"error": qty_err}), 400
     if "style_priority" in data:
         if data["style_priority"] not in ("High", "Normal", "Low", "No Urgency"):
             return jsonify({"error": "Invalid priority."}), 400
@@ -651,6 +695,9 @@ def update_bulk_order(order_id):
             return jsonify({"error": "Required date must be a valid date (YYYY-MM-DD)."}), 400
         if d < date.today():
             return jsonify({"error": "Required date cannot be in the past."}), 400
+        lead_err = _check_min_lead(data["buyer_required_date"])
+        if lead_err:
+            return jsonify({"error": lead_err}), 400
         req_date = data["buyer_required_date"]
 
     # Re-run C2 with the updated values and the order's stored specs.
@@ -661,7 +708,7 @@ def update_bulk_order(order_id):
     from components.component2 import KNOWN_BUYERS
     c2_model_buyer = user_org["name"] if user_org and user_org["name"] in KNOWN_BUYERS else KNOWN_BUYERS[0]
     month_year  = str(order["approved_date"])[:7]
-    monthly_cap = get_all_plants_monthly_capacity(month_year)
+    monthly_cap = get_all_plants_window_capacity(month_year, str(req_date)[:7])
     sample_plant = max(monthly_cap, key=monthly_cap.get)
 
     c2_payload = {
@@ -746,12 +793,21 @@ def respond_to_timeline(order_id):
     message   = (data.get("message") or "").strip() or None
     new_status = "CustomerPending" if response == "Approved" else "Hold"
 
+    # Approving the proposal accepts the new date too - otherwise the buyer agrees
+    # to a timeline that never reaches the order.
+    applied_date = None
+    if response == "Approved" and order["proposed_required_date"]:
+        applied_date = str(order["proposed_required_date"])[:10]
+
     db.execute(
         """UPDATE bulk_orders
            SET customer_response=?, status=?, customer_message=?,
-               extension_days_requested=?, customer_responded_at=?
+               extension_days_requested=?, customer_responded_at=?,
+               buyer_required_date=COALESCE(?, buyer_required_date),
+               proposed_required_date=CASE WHEN ? IS NULL THEN proposed_required_date ELSE NULL END
            WHERE id=? AND buyer_id=?""",
-        (response, new_status, message, ext_days, datetime.utcnow(), order_id, g.user_id),
+        (response, new_status, message, ext_days, datetime.utcnow(),
+         applied_date, applied_date, order_id, g.user_id),
     )
     db.commit()
 
@@ -767,7 +823,8 @@ def respond_to_timeline(order_id):
             admin["id"], f"Customer Reply — Bulk Order #{order_id}", body,
             notif_type="info", related_order_type="bulk_order", related_order_id=order_id,
         )
-    return jsonify({"message": "Response recorded", "status": new_status}), 200
+    return jsonify({"message": "Response recorded", "status": new_status,
+                    "buyer_required_date": applied_date}), 200
 
 
 # ── Notifications ─────────────────────────────────────────────────────────

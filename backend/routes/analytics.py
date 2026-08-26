@@ -11,6 +11,7 @@ Endpoints:
   GET  /analytics/delay-damage            delay + damage analysis (3% rule)
   GET  /analytics/workload                utilisation / workload classification
   GET  /analytics/recommendations         resource-optimization suggestions
+  GET  /analytics/sub-plants              external sub plants, reported separately
   GET  /analytics/plants/<id>/trend       month-by-month trend for one plant
 """
 import json
@@ -56,16 +57,27 @@ def _damage_band(rate):
     return "Needs Improvement"
 
 
-def _rows_for_month(month_year):
+# Registered plants and external sub plants are reported separately. Mixing them
+# into the same ranking compared plants we own against plants we only subcontract
+# to, and Component 4 was never trained on sub plant ids (plant_enc falls back to
+# 0), so their scores are indicative rather than trained.
+SCOPE_SQL = {
+    "registered": "(p.plant_type IS NULL OR p.plant_type = 'Registered')",
+    "sub":        "p.plant_type = 'SubPlant'",
+    "all":        "1=1",
+}
+
+
+def _rows_for_month(month_year, scope="registered"):
     """Stored plant_performance rows joined to plant details, best score first."""
     db = get_db()
     return db.execute(
         """SELECT pp.*, p.name AS plant_name, p.location, p.quality_rating,
-                  p.total_machines, p.employee_count
+                  p.total_machines, p.employee_count, p.contact_no, p.contact_email
            FROM plant_performance pp
            JOIN plants p ON p.id = pp.plant_id
-           WHERE pp.month_year = ?
-           ORDER BY pp.performance_score DESC""",
+           WHERE pp.month_year = ? AND %s
+           ORDER BY pp.performance_score DESC""" % SCOPE_SQL.get(scope, SCOPE_SQL["registered"]),
         (month_year,),
     ).fetchall()
 
@@ -326,6 +338,113 @@ def recommendations():
                                 % (worst["plant_name"], worst["performance_score"] or 0)})
 
     return jsonify({"month_year": month_year, "recommendations": recs}), 200
+
+
+# ── External sub plants (reported apart from the owned network) ───────────
+
+@analytics_bp.route("/sub-plants", methods=["GET"])
+@require_role("Admin", "Manager")
+def sub_plants():
+    """
+    Component 4 results for external sub plants only.
+
+    Kept out of the main tabs because these plants are not part of the owned
+    network: they have their own portal, their own capacity, and C4 has no trained
+    embedding for them. Every item carries the model's own warnings so the score is
+    read with that caveat.
+    """
+    month_year = _month_arg()
+    db = get_db()
+
+    # Every registered sub plant, whether or not it has been analysed this month -
+    # an unanalysed sub plant is itself worth seeing.
+    plants = db.execute(
+        """SELECT id, name, location, quality_rating, total_machines,
+                  employee_count, contact_no, contact_email
+           FROM plants WHERE plant_type = 'SubPlant' ORDER BY name"""
+    ).fetchall()
+    scored = {r["plant_id"]: r for r in _rows_for_month(month_year, scope="sub")}
+
+    start, end = month_year + "-01", month_year + "-31"
+    items = []
+    for p in plants:
+        r = scored.get(p["id"])
+        logged_days = db.execute(
+            """SELECT COUNT(*) AS c FROM plant_daily_logs
+               WHERE plant_id=? AND log_date BETWEEN ? AND ?""",
+            (p["id"], start, end),
+        ).fetchone()["c"]
+
+        item = {
+            "plant_id":       p["id"],
+            "plant_name":     p["name"],
+            "location":       p["location"],
+            "contact_no":     p["contact_no"],
+            "contact_email":  p["contact_email"],
+            "total_machines": p["total_machines"],
+            "employee_count": p["employee_count"],
+            "quality_rating": p["quality_rating"],
+            "logged_days":    logged_days,
+            "analysed":       r is not None,
+        }
+        if r is None:
+            item.update({"reason": "No Component 4 result for %s." % month_year
+                         if logged_days else "No daily logs submitted for %s." % month_year})
+            items.append(item)
+            continue
+
+        load = r["efficiency"] or 0
+        util = r["utilization"] or 0
+        if load < UNDER_UTILISED:
+            status = "Underutilized"
+        elif util > OVERLOADED:
+            status = "Overloaded"
+        else:
+            status = "Optimal"
+
+        try:
+            c4 = json.loads(r["c4_result_json"] or "{}")
+        except (TypeError, ValueError):
+            c4 = {}
+
+        item.update({
+            "overall_score":    r["performance_score"],
+            "star_rating_num":  r["star_rating_num"],
+            "on_time_rate":     r["on_time_rate"],
+            "efficiency":       r["efficiency"],
+            "utilization":      r["utilization"],
+            "damage_rate":      r["damage_rate"],
+            "damage_band":      _damage_band(r["damage_rate"]),
+            "within_limit":     (r["damage_rate"] is not None and r["damage_rate"] <= DAMAGE_THRESHOLD),
+            "delay_ratio":      r["delay_ratio"],
+            "daily_commitment": r["daily_commitment"],
+            "total_workload":   r["total_workload"],
+            "urgent_handled":   r["urgent_handled"],
+            "category":         r["best_plant_category"],
+            "workload_status":  status,
+            "confidence":       c4.get("confidence"),
+            "warnings":         c4.get("warnings") or [],
+            "untrained":        any("not seen during training" in w for w in (c4.get("warnings") or [])),
+        })
+        items.append(item)
+
+    # `items` is name-ordered so the table reads consistently; rank separately.
+    analysed = sorted((i for i in items if i["analysed"]),
+                      key=lambda i: i["overall_score"] or 0, reverse=True)
+    scores   = [i["overall_score"] or 0 for i in analysed]
+    damages  = [i["damage_rate"] for i in analysed if i.get("damage_rate") is not None]
+    summary  = {
+        "total":          len(items),
+        "analysed":       len(analysed),
+        "avg_score":      round(sum(scores) / len(scores), 2) if scores else None,
+        "avg_damage_rate": round(sum(damages) / len(damages), 2) if damages else None,
+        "total_output":   sum(i.get("total_workload") or 0 for i in analysed),
+        "breaching":      sum(1 for i in analysed if not i.get("within_limit")),
+        "best": ({"plant_id": analysed[0]["plant_id"], "plant_name": analysed[0]["plant_name"],
+                  "score": analysed[0]["overall_score"]} if analysed else None),
+    }
+    return jsonify({"month_year": month_year, "threshold": DAMAGE_THRESHOLD,
+                    "summary": summary, "items": items}), 200
 
 
 # ── Per-plant trend ───────────────────────────────────────────────────────

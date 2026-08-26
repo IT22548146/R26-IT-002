@@ -10,8 +10,9 @@ Admin portal endpoints:
 
 import os
 import json
-from datetime import datetime
-from flask import Blueprint, request, jsonify, g, send_file, abort
+import math
+from datetime import datetime, timedelta
+from flask import Blueprint, request, jsonify, g, send_file, abort, current_app
 from database.db import get_db
 from middleware.auth_middleware import require_role
 from services.upload_service import resolve_upload_path
@@ -23,11 +24,16 @@ from services.email_service import (
     send_order_approved_to_buyer,
 )
 from services.notification_service import create_notification
-from services.capacity_service import deduct_capacity, get_all_plants_monthly_capacity
+from services.capacity_service import (deduct_capacity, get_all_plants_monthly_capacity,
+                                       get_all_plants_window_capacity, months_between)
 
 admin_bp = Blueprint("admin", __name__)
 
 ADMIN_EMAIL = os.environ.get("ADMIN_EMAIL", "admin@fabricflow.com")
+
+# A proposed date that lands exactly on the deadline fails the moment the model
+# re-predicts even slightly higher, so proposals clear it by this many days.
+DEADLINE_MARGIN_DAYS = 5
 
 PRODUCTION_STAGES = ["Pending", "Cutting", "Embroidery", "Sewing", "Packing", "Shipping", "Delivery"]
 
@@ -379,7 +385,9 @@ def assign_sample_order(order_id):
     # Assigning to a plant moves the buyer-facing status to Processing.
     db.execute(
         """UPDATE sample_orders
-           SET status='Processing', assigned_plant_id=?, assigned_by=?, assigned_at=?
+           SET status='Processing', assigned_plant_id=?, assigned_by=?, assigned_at=?,
+               production_stage=CASE WHEN production_stage='Pending' OR production_stage IS NULL
+                                     THEN 'Cutting' ELSE production_stage END
            WHERE id=?""",
         (plant_id, g.user_id, now, order_id),
     )
@@ -740,13 +748,42 @@ def assign_bulk_order(order_id):
     if len(set(plant_ids)) != len(plant_ids):
         return jsonify({"error": "The same plant is listed more than once in the split."}), 400
 
+    # Refuse an assignment the plant cannot physically absorb, rather than letting
+    # its available capacity go negative.
+    _months = months_between(str(order["approved_date"])[:7], str(order["buyer_required_date"])[:7])
+    for a in allocations:
+        prow = db.execute("SELECT id, name FROM plants WHERE id=? OR name=?",
+                          (a.get("plant_id"), a.get("plant_id"))).fetchone()
+        if not prow:
+            continue
+        have = 0
+        for mth in _months:
+            cr = db.execute(
+                "SELECT total_capacity, used_capacity FROM plant_monthly_capacity WHERE plant_id=? AND month_year=?",
+                (prow["id"], mth),
+            ).fetchone()
+            have += (cr["total_capacity"] - cr["used_capacity"]) if cr else 0
+        want = int(a.get("allocated_qty", 0))
+        if want > have:
+            return jsonify({
+                "error": "%s has only %s units free between %s and %s, but %s pcs were allocated. "
+                         "Reduce the amount, split across more plants, or extend the timeline."
+                         % (prow["name"], f"{have:,}", _months[0], _months[-1], f"{want:,}")
+            }), 400
+
     now = datetime.utcnow()
     month_year = str(order["approved_date"])[:7]
 
     # Assigning a plant moves the order into Processing; the production-day
     # countdown starts from this assignment date (assigned_at).
+    # Assignment starts production, so move the stage off 'Pending' to the first
+    # real stage - otherwise the tracker keeps showing Pending after assignment.
     db.execute(
-        "UPDATE bulk_orders SET status='Processing', assigned_by=?, assigned_at=? WHERE id=?",
+        """UPDATE bulk_orders
+           SET status='Processing', assigned_by=?, assigned_at=?,
+               production_stage=CASE WHEN production_stage='Pending' OR production_stage IS NULL
+                                     THEN 'Cutting' ELSE production_stage END
+           WHERE id=?""",
         (g.user_id, now, order_id),
     )
 
@@ -783,18 +820,28 @@ def assign_bulk_order(order_id):
         except Exception:
             current_date = datetime.utcnow()
             
-        while qty_remaining > 0:
+        # Fill month by month at the plant's daily rate, but never take more than a
+        # month actually has left - the overflow rolls into the next month. Capped
+        # at 36 months so a bad daily_commitment cannot spin forever.
+        guard = 0
+        while qty_remaining > 0 and guard < 36:
+            guard += 1
             current_month_str = current_date.strftime("%Y-%m")
-            monthly_allowance = min(qty_remaining, daily_commit * 25) # 25 working days
-            
-            deduct_capacity(actual_plant_id, current_month_str, monthly_allowance)
-            qty_remaining -= monthly_allowance
-            
-            # Advance to next month
+            monthly_allowance = min(qty_remaining, daily_commit * 25)  # 25 working days
+
+            res = deduct_capacity(actual_plant_id, current_month_str, monthly_allowance)
+            qty_remaining -= res.get("deducted", monthly_allowance)
+
             if current_date.month == 12:
                 current_date = current_date.replace(year=current_date.year + 1, month=1)
             else:
                 current_date = current_date.replace(month=current_date.month + 1)
+
+        if qty_remaining > 0:
+            current_app.logger.warning(
+                "Order %s: %s pcs could not be placed against %s capacity within 36 months",
+                order_id, qty_remaining, actual_plant_id,
+            )
 
         if actual_plant_id not in notified_plants:
             plant = db.execute("SELECT * FROM plants WHERE id = ?", (actual_plant_id,)).fetchone()
@@ -862,7 +909,7 @@ def reevaluate_bulk_order(order_id):
     ).fetchone()
     c2_buyer = org["name"] if org and org["name"] in KNOWN_BUYERS else KNOWN_BUYERS[0]
     month_year  = str(order["approved_date"])[:7]
-    monthly_cap = get_all_plants_monthly_capacity(month_year)
+    monthly_cap = get_all_plants_window_capacity(month_year, str(order["buyer_required_date"])[:7])
     sample_plant = max(monthly_cap, key=monthly_cap.get) if monthly_cap else None
 
     c2_payload = {
@@ -997,15 +1044,53 @@ def send_bulk_timeline_email(order_id):
         f"<p>Best regards,<br/>FabricFlow International</p>")
     send_email(buyer["email"], f"[Order #{order_id}] {subject}", html)
 
+    # Persist what was proposed so the buyer can SEE it in the app, not just in
+    # the email. When we need longer, the proposed date is the current required
+    # date pushed out by the gap.
+    proposed_date = None
+    if decision == "cannot_complete" and gap > 0:
+        try:
+            current_req = datetime.strptime(str(order["buyer_required_date"])[:10], "%Y-%m-%d").date()
+            approved    = datetime.strptime(str(order["approved_date"])[:10], "%Y-%m-%d").date()
+
+            # Adding exactly `gap` lands the new date ON the deadline boundary, so
+            # the smallest drift in the prediction leaves it a day short and the
+            # order still reads "No Match" after re-evaluating. Derive the date
+            # from the model's own lead time and clear it by a margin.
+            lead_needed = None
+            try:
+                if order["c2_result_json"]:
+                    lead_needed = (json.loads(order["c2_result_json"])
+                                   .get("production_days", {}).get("total_lead_days"))
+            except Exception:
+                lead_needed = None
+
+            candidates = [current_req + timedelta(days=gap)]
+            if lead_needed:
+                candidates.append(
+                    approved + timedelta(days=int(math.ceil(float(lead_needed))) + DEADLINE_MARGIN_DAYS)
+                )
+            proposed_date = max(candidates).isoformat()
+        except (TypeError, ValueError):
+            proposed_date = None
+
     db.execute(
-        "UPDATE bulk_orders SET status='CustomerPending', timeline_email_sent_at=?, customer_response=NULL WHERE id=?",
-        (datetime.utcnow(), order_id),
+        """UPDATE bulk_orders
+           SET status='CustomerPending', timeline_email_sent_at=?, customer_response=NULL,
+               timeline_decision=?, timeline_given_days=?, timeline_needed_days=?,
+               timeline_gap_days=?, proposed_required_date=?
+           WHERE id=?""",
+        (datetime.utcnow(), decision, given, needed, gap, proposed_date, order_id),
     )
     db.commit()
     create_notification(
         order["buyer_id"],
         f"Action needed — Bulk Order #{order_id}",
-        f"We've sent you a completion-timeline message for style {order['style_number']}. Please review and respond.",
+        (f"We need {gap} more day(s) for style {order['style_number']}"
+         + (f" — proposed new date {proposed_date}." if proposed_date else ".")
+         + " Please review and respond.")
+        if decision == "cannot_complete" else
+        (f"We can complete style {order['style_number']} within your schedule. Please confirm."),
         notif_type="info", related_order_type="bulk_order", related_order_id=order_id,
     )
     return jsonify({"message": "Timeline email sent", "status": "CustomerPending"}), 200
@@ -1033,13 +1118,126 @@ def record_customer_response(order_id):
         return jsonify({"error": "Order is not awaiting a customer response."}), 400
 
     new_status = "CustomerPending" if response == "Approved" else "Hold"
+
+    # Approving accepts the proposed timeline, so the required date must move -
+    # otherwise the order is "approved" against a date nobody agreed to.
+    applied_date = None
+    if response == "Approved" and order["proposed_required_date"]:
+        applied_date = str(order["proposed_required_date"])[:10]
+
     db.execute(
-        "UPDATE bulk_orders SET customer_response=?, status=? WHERE id=?",
-        (response, new_status, order_id),
+        """UPDATE bulk_orders
+           SET customer_response=?, status=?, customer_responded_at=?,
+               buyer_required_date=COALESCE(?, buyer_required_date),
+               proposed_required_date=CASE WHEN ? IS NULL THEN proposed_required_date ELSE NULL END
+           WHERE id=?""",
+        (response, new_status, datetime.utcnow(), applied_date, applied_date, order_id),
     )
     db.commit()
     return jsonify({"message": f"Customer response recorded: {response}",
-                    "status": new_status, "assignable": response == "Approved"}), 200
+                    "status": new_status, "assignable": response == "Approved",
+                    "buyer_required_date": applied_date}), 200
+
+
+@admin_bp.route("/orders/bulk/<int:order_id>/apply-extension", methods=["POST"])
+@require_role("Admin", "Manager")
+def apply_bulk_extension(order_id):
+    """
+    Accept the buyer's requested extension: move buyer_required_date out, re-run
+    Component 2 against the new deadline, and clear the negotiation so the order
+    is assignable again.
+
+    Body: { extension_days?: int, new_date?: 'YYYY-MM-DD' }
+    Falls back to the extension the buyer asked for when neither is supplied.
+    """
+    from flask import current_app
+    from components.component2 import KNOWN_BUYERS
+
+    data = request.get_json(force=True, silent=True) or {}
+    db = get_db()
+    order = db.execute("SELECT * FROM bulk_orders WHERE id=?", (order_id,)).fetchone()
+    if not order:
+        return jsonify({"error": "Bulk order not found"}), 404
+    if order["status"] in ("Completed", "Shipped"):
+        return jsonify({"error": "Cannot change the date of a %s order." % order["status"]}), 400
+
+    current_required = datetime.strptime(str(order["buyer_required_date"])[:10], "%Y-%m-%d").date()
+
+    new_date_raw = (data.get("new_date") or "").strip()
+    if new_date_raw:
+        try:
+            new_required = datetime.strptime(new_date_raw[:10], "%Y-%m-%d").date()
+        except ValueError:
+            return jsonify({"error": "new_date must be YYYY-MM-DD."}), 400
+    else:
+        days = data.get("extension_days")
+        if days in (None, ""):
+            days = order["extension_days_requested"]
+        try:
+            days = int(days)
+        except (TypeError, ValueError):
+            return jsonify({"error": "Provide extension_days or new_date."}), 400
+        if days <= 0:
+            return jsonify({"error": "Extension days must be greater than zero."}), 400
+        new_required = current_required + timedelta(days=days)
+
+    if new_required <= current_required:
+        return jsonify({"error": "The new required date must be later than the current one."}), 400
+
+    # Re-run Component 2 so the timeline / feasibility reflect the new deadline.
+    org = db.execute(
+        "SELECT o.name FROM users u JOIN organizations o ON u.org_id=o.id WHERE u.id=?",
+        (order["buyer_id"],),
+    ).fetchone()
+    c2_buyer = org["name"] if org and org["name"] in KNOWN_BUYERS else KNOWN_BUYERS[0]
+    month_year = str(order["approved_date"])[:7]
+    monthly_cap = get_all_plants_window_capacity(month_year, new_required.strftime("%Y-%m"))
+    sample_plant = max(monthly_cap, key=monthly_cap.get) if monthly_cap else None
+
+    with current_app.test_client() as client:
+        resp = client.post("/api/component2/predict", json={
+            "buyer_name": c2_buyer, "style_id": order["style_number"],
+            "bulk_order_quantity": order["bulk_order_quantity"],
+            "daily_commitment": order["daily_commitment"],
+            "style_priority": order["style_priority"],
+            "design_width": float(order["design_width"] or 0),
+            "design_length": float(order["design_length"] or 0),
+            "color_count": int(order["color_count"] or 0),
+            "stitch_count": int(order["stitch_count"] or 0),
+            "sample_plant": sample_plant, "sp_cap_util_pct": 85.0,
+            "bulk_order_approved_date": str(order["approved_date"])[:10],
+            "buyer_required_date": new_required.isoformat(),
+            "damage_pct": float(order["damage_pct"] or 0.0),
+            "shipment_days": int(order["shipment_days"] or 18),
+            "monthly_capacity": monthly_cap,
+        }, headers={"Content-Type": "application/json"})
+        c2 = resp.get_json()
+
+    c2_ok = bool(c2) and "error" not in c2
+    db.execute(
+        """UPDATE bulk_orders
+           SET buyer_required_date=?, status='Pending', customer_response=NULL,
+               extension_days_requested=NULL, customer_message=NULL,
+               timeline_email_sent_at=NULL, customer_responded_at=NULL,
+               c2_result_json=COALESCE(?, c2_result_json)
+           WHERE id=?""",
+        (new_required.isoformat(), json.dumps(c2) if c2_ok else None, order_id),
+    )
+    db.commit()
+
+    create_notification(
+        order["buyer_id"],
+        f"Date Updated - Bulk Order #{order_id}",
+        f"The required date for style {order['style_number']} is now {new_required.isoformat()}.",
+        notif_type="success", related_order_type="bulk_order", related_order_id=order_id,
+    )
+    return jsonify({
+        "message": "Required date updated",
+        "buyer_required_date": new_required.isoformat(),
+        "previous_required_date": current_required.isoformat(),
+        "deadline_match": (c2.get("deadline") or {}).get("deadline_match") if c2_ok else None,
+        "status": "Pending",
+    }), 200
 
 
 @admin_bp.route("/orders/bulk/<int:order_id>/hold", methods=["POST"])
@@ -1196,10 +1394,17 @@ def performance_list():
 @admin_bp.route("/capacity", methods=["GET"])
 @require_role("Admin", "Manager")
 def capacity_overview():
-    """Current capacity across all plants for a given month."""
+    """Current capacity for a given month - registered plants only.
+
+    External sub plants run their own capacity in the sub plant portal, so listing
+    them here mixed capacity we do not own into the admin's planning view.
+    """
     month_year = request.args.get("month", datetime.utcnow().strftime("%Y-%m"))
     db = get_db()
-    plants = db.execute("SELECT id, name, location FROM plants").fetchall()
+    plants = db.execute(
+        """SELECT id, name, location FROM plants
+           WHERE plant_type IS NULL OR plant_type='Registered'"""
+    ).fetchall()
     result = []
     for p in plants:
         cap = db.execute(
