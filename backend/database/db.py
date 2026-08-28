@@ -145,6 +145,15 @@ def _run_migrations(conn: sqlite3.Connection):
     # Optional buyer note on bulk orders (sample orders already have one).
     _add_column("bulk_orders", "notes", "notes TEXT")
 
+    # The completion timeline the admin proposed (given/needed/gap days and the
+    # resulting date). Previously these lived only in the email body, so the buyer
+    # was asked to approve a timeline they could not see in the app.
+    _add_column("bulk_orders", "timeline_decision",       "timeline_decision TEXT")
+    _add_column("bulk_orders", "timeline_given_days",     "timeline_given_days INTEGER")
+    _add_column("bulk_orders", "timeline_needed_days",    "timeline_needed_days INTEGER")
+    _add_column("bulk_orders", "timeline_gap_days",       "timeline_gap_days INTEGER")
+    _add_column("bulk_orders", "proposed_required_date",  "proposed_required_date DATE")
+
     # Buyer's in-app reply to the completion-timeline email.
     _add_column("bulk_orders", "customer_message", "customer_message TEXT")
     _add_column("bulk_orders", "extension_days_requested", "extension_days_requested INTEGER")
