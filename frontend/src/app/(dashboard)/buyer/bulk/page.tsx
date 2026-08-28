@@ -6,12 +6,18 @@ import { useSearchParams } from "next/navigation";
 import api from "@/lib/api";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
-import { Package, Plus, Sparkles, FileText, Search, Pencil, Trash2 } from "lucide-react";
+import { Package, Plus, Sparkles, FileText, Search, Pencil, Trash2, Clock } from "lucide-react";
 import OrderTracker from "@/components/OrderTracker";
 import StyleAutocomplete from "@/components/StyleAutocomplete";
 
 // <input type="date"> needs YYYY-MM-DD; the API returns HTTP-date strings like
 // "Mon, 31 Aug 2026 00:00:00 GMT", so normalise before prefilling the edit form.
+const fmtDate = (s?: string) => {
+  if (!s) return "—";
+  const d = new Date(s);
+  return isNaN(d.getTime()) ? String(s) : d.toLocaleDateString();
+};
+
 const toDateInput = (s?: string) => {
   if (!s) return "";
   const d = new Date(s);
@@ -56,6 +62,22 @@ export default function BuyerBulkOrders() {
 
   // Today's date (YYYY-MM-DD) — blocks past required dates.
   const today = new Date().toISOString().split("T")[0];
+  // Orders need a realistic lead time - the buyer cannot request a date sooner
+  // than this. Mirrors MIN_LEAD_DAYS on the server.
+  const MIN_LEAD_DAYS = 20;
+  // Bulk order size the mill accepts through the portal. Mirrors MIN_BULK_QTY /
+  // MAX_BULK_QTY in routes/buyer.py - the server rejects anything outside it too.
+  const MIN_BULK_QTY = 500;
+  const MAX_BULK_QTY = 20000;
+  const qtyError = (v: any) => {
+    const n = Number(v);
+    if (!v || !Number.isFinite(n) || !Number.isInteger(n)) return "Enter the total quantity as a whole number.";
+    if (n < MIN_BULK_QTY || n > MAX_BULK_QTY)
+      return `Total quantity must be between ${MIN_BULK_QTY.toLocaleString()} and ${MAX_BULK_QTY.toLocaleString()} pcs.`;
+    return null;
+  };
+  const earliestDate = new Date(Date.now() + MIN_LEAD_DAYS * 86400000)
+    .toISOString().split("T")[0];
 
   const fetchOrders = async () => {
     try {
@@ -151,12 +173,13 @@ export default function BuyerBulkOrders() {
         return;
       }
     }
-    if (Number(formData.bulk_order_quantity) <= 0) {
-      Swal.fire({ icon: 'warning', title: 'Enter a valid total quantity.' });
+    const createQtyErr = qtyError(formData.bulk_order_quantity);
+    if (createQtyErr) {
+      Swal.fire({ icon: 'warning', title: 'Invalid total quantity', text: createQtyErr });
       return;
     }
-    if (formData.buyer_required_date < today) {
-      Swal.fire({ icon: 'warning', title: 'Required date cannot be in the past.' });
+    if (formData.buyer_required_date < earliestDate) {
+      Swal.fire({ icon: 'warning', title: `Required date must be at least ${MIN_LEAD_DAYS} days from today.` });
       return;
     }
     if (styleFile && !styleFile.name.toLowerCase().endsWith(".pdf")) {
@@ -216,11 +239,12 @@ export default function BuyerBulkOrders() {
 
   const handleEditSave = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (Number(editForm.bulk_order_quantity) <= 0) {
-      Swal.fire({ icon: "warning", title: "Enter a valid total quantity." });
+    const editQtyErr = qtyError(editForm.bulk_order_quantity);
+    if (editQtyErr) {
+      Swal.fire({ icon: "warning", title: "Invalid total quantity", text: editQtyErr });
       return;
     }
-    if (editForm.buyer_required_date < today) {
+    if (editForm.buyer_required_date < earliestDate) {
       Swal.fire({ icon: "warning", title: "Required date cannot be in the past." });
       return;
     }
@@ -339,11 +363,22 @@ export default function BuyerBulkOrders() {
               </div>
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">Total Quantity *</label>
-                <Input type="number" min="1" required value={formData.bulk_order_quantity} onChange={e => setFormData({...formData, bulk_order_quantity: e.target.value})} placeholder="e.g. 10000" />
+                <Input type="number" min={MIN_BULK_QTY} max={MAX_BULK_QTY} step="1" required
+                  value={formData.bulk_order_quantity}
+                  onChange={e => setFormData({...formData, bulk_order_quantity: e.target.value})}
+                  placeholder="e.g. 10000" />
+                {(() => {
+                  const err = formData.bulk_order_quantity ? qtyError(formData.bulk_order_quantity) : null;
+                  return (
+                    <p className={`text-xs mt-1 ${err ? "text-red-600" : "text-slate-400"}`}>
+                      {err || `${MIN_BULK_QTY.toLocaleString()} - ${MAX_BULK_QTY.toLocaleString()} pcs`}
+                    </p>
+                  );
+                })()}
               </div>
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">Required Date *</label>
-                <Input type="date" required min={today} value={formData.buyer_required_date} onChange={e => setFormData({...formData, buyer_required_date: e.target.value})} />
+                <Input type="date" required min={earliestDate} value={formData.buyer_required_date} onChange={e => setFormData({...formData, buyer_required_date: e.target.value})} />
               </div>
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">Priority</label>
@@ -499,9 +534,46 @@ export default function BuyerBulkOrders() {
               {/* Timeline reply — buyer approves or requests more time */}
               {order.status === "CustomerPending" && order.customer_response !== "Approved" && (
                 <div className="mt-4 rounded-lg border border-purple-200 bg-purple-50 p-4">
-                  <p className="text-sm text-purple-900 font-medium mb-3">
-                    We've proposed a completion timeline for this order. How would you like to proceed?
-                  </p>
+                  {/* Show WHAT was proposed - days and the resulting date - so the
+                      buyer is not approving a timeline they cannot see. */}
+                  {order.timeline_decision === "cannot_complete" ? (
+                    <div className="mb-3">
+                      <p className="text-sm text-purple-900 font-semibold">
+                        We need {order.timeline_gap_days} more day(s) to complete this order.
+                      </p>
+                      <div className="mt-2 grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs">
+                        <div className="rounded-md bg-white/70 border border-purple-100 px-3 py-2">
+                          <p className="text-purple-500">Your date</p>
+                          <p className="font-semibold text-purple-900">{fmtDate(order.buyer_required_date)}</p>
+                        </div>
+                        <div className="rounded-md bg-white/70 border border-purple-100 px-3 py-2">
+                          <p className="text-purple-500">Days needed</p>
+                          <p className="font-semibold text-purple-900">
+                            {order.timeline_needed_days} vs {order.timeline_given_days} given
+                          </p>
+                        </div>
+                        <div className="rounded-md bg-emerald-50 border border-emerald-200 px-3 py-2">
+                          <p className="text-emerald-600">Proposed new date</p>
+                          <p className="font-bold text-emerald-800">
+                            {order.proposed_required_date ? fmtDate(order.proposed_required_date) : "—"}
+                          </p>
+                        </div>
+                      </div>
+                      <p className="text-xs text-purple-700 mt-2">
+                        Approving moves your required date to the proposed date.
+                      </p>
+                    </div>
+                  ) : order.timeline_decision === "can_complete" ? (
+                    <p className="text-sm text-purple-900 font-medium mb-3">
+                      We can complete this order within your schedule
+                      {order.timeline_gap_days ? ` — with ${order.timeline_gap_days} day(s) to spare` : ""}.
+                      Please confirm to proceed.
+                    </p>
+                  ) : (
+                    <p className="text-sm text-purple-900 font-medium mb-3">
+                      We&apos;ve proposed a completion timeline for this order. How would you like to proceed?
+                    </p>
+                  )}
                   <div className="flex flex-wrap gap-2">
                     <Button className="bg-green-600 hover:bg-green-700" disabled={respondingId === order.id}
                       onClick={() => handleApproveTimeline(order)}>
@@ -515,15 +587,41 @@ export default function BuyerBulkOrders() {
                 </div>
               )}
 
-              {/* Buyer's recorded reply */}
+              {/* Buyer's recorded reply — shown prominently so a pending extension
+                  request stays visible after the status moves to Hold. */}
               {order.customer_response && (
-                <div className="mt-3 text-sm text-slate-500">
-                  Your reply: <span className={`font-medium ${order.customer_response === "Approved" ? "text-green-600" : "text-orange-600"}`}>
-                    {order.customer_response === "Approved" ? "Approved" : "Requested changes"}
-                  </span>
-                  {order.extension_days_requested ? ` · requested +${order.extension_days_requested} day(s)` : ""}
-                  {order.customer_message ? ` · "${order.customer_message}"` : ""}
-                </div>
+                order.customer_response === "Approved" ? (
+                  <div className="mt-4 rounded-lg border border-green-200 bg-green-50 p-4 flex items-start gap-2">
+                    <Sparkles className="w-4 h-4 mt-0.5 shrink-0 text-green-600" />
+                    <div className="text-sm">
+                      <p className="font-medium text-green-900">You approved the proposed timeline.</p>
+                      {order.customer_message && (
+                        <p className="text-green-800 mt-1">&ldquo;{order.customer_message}&rdquo;</p>
+                      )}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="mt-4 rounded-lg border border-amber-300 bg-amber-50 p-4">
+                    <div className="flex items-start gap-2">
+                      <Clock className="w-4 h-4 mt-0.5 shrink-0 text-amber-600" />
+                      <div className="text-sm min-w-0">
+                        <p className="font-semibold text-amber-900">
+                          {order.extension_days_requested
+                            ? `You requested ${order.extension_days_requested} more day(s)`
+                            : "You requested a change to the timeline"}
+                        </p>
+                        {order.customer_message && (
+                          <p className="text-amber-800 mt-1">&ldquo;{order.customer_message}&rdquo;</p>
+                        )}
+                        <p className="text-xs text-amber-700 mt-2">
+                          Awaiting confirmation from FabricFlow. Your required date is currently{" "}
+                          <strong>{fmtDate(order.buyer_required_date)}</strong> — it will update here once the
+                          new date is agreed.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                )
               )}
 
               {/* Show AI Feedback */}
@@ -595,12 +693,21 @@ export default function BuyerBulkOrders() {
             <form onSubmit={handleEditSave} className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">Total Quantity *</label>
-                <Input type="number" min="1" required value={editForm.bulk_order_quantity}
+                <Input type="number" min={MIN_BULK_QTY} max={MAX_BULK_QTY} step="1" required
+                  value={editForm.bulk_order_quantity}
                   onChange={(e) => setEditForm({ ...editForm, bulk_order_quantity: e.target.value })} />
+                {(() => {
+                  const err = editForm.bulk_order_quantity ? qtyError(editForm.bulk_order_quantity) : null;
+                  return (
+                    <p className={`text-xs mt-1 ${err ? "text-red-600" : "text-slate-400"}`}>
+                      {err || `${MIN_BULK_QTY.toLocaleString()} - ${MAX_BULK_QTY.toLocaleString()} pcs`}
+                    </p>
+                  );
+                })()}
               </div>
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">Required Date *</label>
-                <Input type="date" required min={today} value={editForm.buyer_required_date}
+                <Input type="date" required min={earliestDate} value={editForm.buyer_required_date}
                   onChange={(e) => setEditForm({ ...editForm, buyer_required_date: e.target.value })} />
               </div>
               <div>

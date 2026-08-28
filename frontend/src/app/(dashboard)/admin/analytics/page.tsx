@@ -6,14 +6,17 @@ import api from "@/lib/api";
 import { Button } from "@/components/ui/Button";
 import {
   Activity, Trophy, Clock, AlertTriangle, Zap, RefreshCw, Star,
-  TrendingUp, Gauge, Lightbulb, BarChart3,
+  TrendingUp, Gauge, Lightbulb, BarChart3, Factory, Info, Mail, Phone,
 } from "lucide-react";
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   PieChart, Pie, Cell, Legend,
 } from "recharts";
 
-const TABS = ["Overview", "KPI Comparison", "Delay & Damage", "Workload", "Recommendations"] as const;
+// External sub plants get their own tab. They are not part of the owned network -
+// separate capacity, separate portal, and Component 4 has no trained embedding for
+// them - so ranking them alongside our own plants compared unlike things.
+const TABS = ["Overview", "KPI Comparison", "Delay & Damage", "Workload", "Recommendations", "Sub Plants"] as const;
 type Tab = (typeof TABS)[number];
 
 const BAND_STYLE: Record<string, string> = {
@@ -52,6 +55,7 @@ export default function PlantAnalytics() {
   const [delayDamage, setDelayDamage] = useState<any>(null);
   const [workload, setWorkload] = useState<any>(null);
   const [recs, setRecs] = useState<any[]>([]);
+  const [subPlants, setSubPlants] = useState<any>(null);
 
   // Load the list of months that actually have plant logs.
   useEffect(() => {
@@ -68,18 +72,20 @@ export default function PlantAnalytics() {
     if (!m) return;
     setLoading(true);
     try {
-      const [ov, kc, dd, wl, rc] = await Promise.all([
+      const [ov, kc, dd, wl, rc, sp] = await Promise.all([
         api.get(`/analytics/overview?month=${m}`),
         api.get(`/analytics/kpi-comparison?month=${m}`),
         api.get(`/analytics/delay-damage?month=${m}`),
         api.get(`/analytics/workload?month=${m}`),
         api.get(`/analytics/recommendations?month=${m}`),
+        api.get(`/analytics/sub-plants?month=${m}`),
       ]);
       setOverview(ov.data);
       setComparison(kc.data);
       setDelayDamage(dd.data);
       setWorkload(wl.data);
       setRecs(rc.data.recommendations || []);
+      setSubPlants(sp.data);
     } catch (err) {
       console.error("Failed to load analytics", err);
     } finally {
@@ -157,7 +163,7 @@ export default function PlantAnalytics() {
 
       {loading ? (
         <div className="bg-white rounded-xl border border-slate-200 p-8 text-center text-slate-500">Loading analytics…</div>
-      ) : !overview?.analysed ? (
+      ) : !overview?.analysed && tab !== "Sub Plants" ? (
         <div className="bg-white rounded-xl border border-slate-200 p-8 text-center">
           <p className="text-slate-600 font-medium">No analysis for {month} yet.</p>
           <p className="text-sm text-slate-500 mt-1">Click <strong>Run Analysis</strong> to score every plant from its daily logs.</p>
@@ -472,8 +478,135 @@ export default function PlantAnalytics() {
               </div>
             </div>
           )}
+
+          {/* -- Sub Plants -- */}
+          {tab === "Sub Plants" && (
+            <div className="space-y-6">
+              <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 flex items-start gap-3">
+                <Info className="w-4 h-4 text-amber-600 mt-0.5 shrink-0" />
+                <p className="text-sm text-amber-900">
+                  External sub plants are reported here rather than in the tabs above. They run their
+                  own capacity through the sub plant portal, and Component 4 has no trained profile for
+                  them &mdash; their scores are <strong>indicative comparisons</strong>, not trained predictions.
+                </p>
+              </div>
+
+              {!subPlants || subPlants.items.length === 0 ? (
+                <div className="bg-white rounded-xl border border-slate-200 p-8 text-center">
+                  <Factory className="w-8 h-8 mx-auto text-slate-300 mb-2" />
+                  <p className="text-slate-600 font-medium">No sub plants registered.</p>
+                  <p className="text-sm text-slate-500 mt-1">
+                    Sub plants appear here once they register through the sub plant portal.
+                  </p>
+                </div>
+              ) : (
+                <>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                    <KpiCard icon={<Factory className="w-5 h-5" />} tone="indigo" label="Sub Plants"
+                      value={subPlants.summary.total}
+                      sub={`${subPlants.summary.analysed} analysed for ${subPlants.month_year}`} />
+                    <KpiCard icon={<Star className="w-5 h-5" />} tone="violet" label="Avg Score"
+                      value={subPlants.summary.avg_score?.toFixed(2) ?? "-"} sub="out of 5.00" />
+                    <KpiCard icon={<AlertTriangle className="w-5 h-5" />}
+                      tone={subPlants.summary.breaching > 0 ? "red" : "blue"} label="Avg Damage"
+                      value={subPlants.summary.avg_damage_rate != null ? `${subPlants.summary.avg_damage_rate}%` : "-"}
+                      sub={`limit ${subPlants.threshold.toFixed(1)}% · ${subPlants.summary.breaching} over`} />
+                    <KpiCard icon={<TrendingUp className="w-5 h-5" />} tone="emerald" label="Output"
+                      value={subPlants.summary.total_output?.toLocaleString()} sub="pcs this month" />
+                  </div>
+
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                    {subPlants.items.map((i: any) => (
+                      <div key={i.plant_id} className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+                        <div className="px-5 py-4 border-b border-slate-100 bg-slate-50 flex items-start justify-between gap-3">
+                          <div className="min-w-0">
+                            <h3 className="font-semibold text-slate-800 truncate">{i.plant_name}</h3>
+                            <p className="text-xs text-slate-500">
+                              {i.plant_id}{i.location ? ` · ${i.location}` : ""} · {i.total_machines ?? "-"} machines · {i.employee_count ?? "-"} staff
+                            </p>
+                          </div>
+                          {i.analysed ? (
+                            <div className="text-right shrink-0">
+                              <p className="text-lg font-bold text-slate-900 leading-none">{i.overall_score?.toFixed(2)}</p>
+                              <p className="text-amber-500 text-sm leading-tight">{"\u2605".repeat(i.star_rating_num || 0)}</p>
+                            </div>
+                          ) : (
+                            <span className="shrink-0 px-2 py-0.5 rounded-full text-xs font-medium border bg-slate-100 text-slate-600 border-slate-200">
+                              Not analysed
+                            </span>
+                          )}
+                        </div>
+
+                        {!i.analysed ? (
+                          <div className="p-5">
+                            <p className="text-sm text-slate-600">{i.reason}</p>
+                            <p className="text-xs text-slate-400 mt-1">
+                              {i.logged_days} daily log(s) recorded. Run the analysis once the plant submits its logs.
+                            </p>
+                          </div>
+                        ) : (
+                          <div className="p-5 space-y-4">
+                            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-center">
+                              <Metric label="On-Time" value={pct(i.on_time_rate, 0)} />
+                              <Metric label="Efficiency" value={pct(i.efficiency, 0)} />
+                              <Metric label="Utilization" value={pct(i.utilization, 0)} />
+                              <Metric label="Damage" value={i.damage_rate != null ? `${i.damage_rate.toFixed(2)}%` : "-"} />
+                            </div>
+
+                            <div className="flex flex-wrap gap-2">
+                              <span className={`px-2 py-0.5 rounded-full text-xs font-medium border ${BAND_STYLE[i.damage_band]}`}>
+                                {i.damage_band}
+                              </span>
+                              <span className={`px-2 py-0.5 rounded-full text-xs font-medium border ${STATUS_STYLE[i.workload_status]}`}>
+                                {i.workload_status}
+                              </span>
+                              {i.untrained && (
+                                <span className="px-2 py-0.5 rounded-full text-xs font-medium border bg-amber-100 text-amber-700 border-amber-200">
+                                  Untrained plant
+                                </span>
+                              )}
+                            </div>
+
+                            <div className="text-xs text-slate-500 space-y-1">
+                              <p>
+                                {i.total_workload?.toLocaleString()} pcs over {i.logged_days} logged day(s)
+                                {i.daily_commitment ? ` · ${Math.round(i.daily_commitment).toLocaleString()} pcs/day` : ""}
+                              </p>
+                              {i.category && <p className="text-slate-600">{i.category}</p>}
+                            </div>
+
+                            {(i.contact_no || i.contact_email) && (
+                              <div className="flex flex-wrap gap-4 text-xs text-slate-500 pt-1 border-t border-slate-100">
+                                {i.contact_no && <span className="flex items-center gap-1"><Phone className="w-3 h-3" />{i.contact_no}</span>}
+                                {i.contact_email && <span className="flex items-center gap-1"><Mail className="w-3 h-3" />{i.contact_email}</span>}
+                              </div>
+                            )}
+
+                            {i.warnings?.length > 0 && (
+                              <ul className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg p-3 space-y-1 list-disc list-inside">
+                                {i.warnings.map((w: string, n: number) => <li key={n}>{w}</li>)}
+                              </ul>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </>
+              )}
+            </div>
+          )}
         </>
       )}
+    </div>
+  );
+}
+
+function Metric({ label, value }: { label: string; value: any }) {
+  return (
+    <div className="rounded-lg bg-slate-50 border border-slate-100 py-2">
+      <p className="text-sm font-bold text-slate-900">{value}</p>
+      <p className="text-[11px] text-slate-500 uppercase tracking-wide">{label}</p>
     </div>
   );
 }
