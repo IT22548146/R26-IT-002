@@ -1,0 +1,158 @@
+{
+  "artifact_version": "3.0.0",
+  "trained_at_utc": "2026-08-28T09:02:02.928289+00:00",
+  "production_approved": false,
+  "approval_note": "Research-only Model 2: independent real Low Risk order coverage remains below the configured production minimum.",
+  "dataset": {
+    "path": "data/component3_training_balanced_research_v2.xlsx",
+    "sha256": "9f33f6c0eba53e32895603298b217c321fa71b6162ed5ad18a7848a73624edd2",
+    "real_rows": 598,
+    "real_orders": 11,
+    "real_low_risk_orders": 1,
+    "augmented_training_rows": 725,
+    "augmented_training_orders": 20,
+    "augmentation_versions": [
+      "component3_low_risk_v1",
+      "component3_model2_broad_low_risk_v2"
+    ]
+  },
+  "features": [
+    "Daily_Commitment",
+    "Plant_Daily_Output",
+    "Output_Gap",
+    "Gap_Pct",
+    "Machine_Breakdown_Count",
+    "Worker_Shortage_Count",
+    "Daily_Damage_Qty",
+    "Max_Daily_Damage_Qty",
+    "Damage_Ratio",
+    "Working_Day_No",
+    "Total_Working_Days",
+    "Days_Remaining",
+    "Day_Progress_Pct",
+    "Output_vs_Commit_Ratio",
+    "Remaining_Qty",
+    "Full_Order_Qty",
+    "Required_Daily_Rate",
+    "Commitment_Gap_Rate",
+    "Cumulative_Completed_Qty",
+    "Is_Machine_Breakdown",
+    "Is_Worker_Shortage",
+    "Is_Quality_Issue",
+    "Is_Cutting_Phase",
+    "Is_Sewing_Phase",
+    "Deadline_Calendar_Days",
+    "Available_Working_Days_To_Deadline",
+    "Required_Daily_Rate_To_Deadline",
+    "Commitment_Slack_To_Deadline",
+    "Commitment_Slack_Pct_To_Deadline",
+    "Is_Order_Complete"
+  ],
+  "feature_policy": {
+    "known_at_prediction_time_only": true,
+    "actual_completion_date_excluded": true,
+    "augmented_rows_excluded_from_validation": true
+  },
+  "evaluation": "LeaveOneGroupOut on observed real Bulk_Order_ID; controlled augmentation used in training folds only",
+  "selected_model": "random_forest",
+  "selected_metrics": {
+    "accuracy": 0.9983277591973244,
+    "macro_f1": 0.9925133020344288,
+    "weighted_f1": 0.9983387923228707,
+    "roc_auc": 0.9999492514590205,
+    "low_risk_precision": 0.9722222222222222,
+    "low_risk_recall": 1.0,
+    "high_risk_recall": 0.9982238010657194,
+    "false_low_risk_rows": 1,
+    "confusion_matrix": [
+      [
+        35,
+        0
+      ],
+      [
+        1,
+        562
+      ]
+    ],
+    "classification_report": {
+      "Low Risk": {
+        "precision": 0.9722222222222222,
+        "recall": 1.0,
+        "f1-score": 0.9859154929577465,
+        "support": 35.0
+      },
+      "High Risk": {
+        "precision": 1.0,
+        "recall": 0.9982238010657194,
+        "f1-score": 0.9991111111111111,
+        "support": 563.0
+      },
+      "accuracy": 0.9983277591973244,
+      "macro avg": {
+        "precision": 0.9861111111111112,
+        "recall": 0.9991119005328597,
+        "f1-score": 0.9925133020344288,
+        "support": 598.0
+      },
+      "weighted avg": {
+        "precision": 0.9983742103307321,
+        "recall": 0.9983277591973244,
+        "f1-score": 0.9983387923228707,
+        "support": 598.0
+      }
+    },
+    "per_order": {
+      "BULK0001": {
+        "rows": 108,
+        "accuracy": 1.0
+      },
+      "BULK0002": {
+        "rows": 46,
+        "accuracy": 1.0
+      },
+      "BULK0003": {
+        "rows": 78,
+        "accuracy": 1.0
+      },
+      "BULK0004": {
+        "rows": 35,
+        "accuracy": 1.0
+      },
+      "BULK0005": {
+        "rows": 45,
+        "accuracy": 1.0
+      },
+      "BULK0006": {
+        "rows": 53,
+        "accuracy": 1.0
+      },
+      "BULK0007": {
+        "rows": 21,
+        "accuracy": 1.0
+      },
+      "BULK0008": {
+        "rows": 30,
+        "accuracy": 1.0
+      },
+      "BULK0009": {
+        "rows": 117,
+        "accuracy": 1.0
+      },
+      "BULK0010": {
+        "rows": 30,
+        "accuracy": 0.9666666666666667
+      },
+      "BULK0015": {
+        "rows": 35,
+        "accuracy": 1.0
+      }
+    }
+  },
+  "versions": {
+    "python": "3.13.5",
+    "scikit_learn": "1.8.0",
+    "pandas": "3.0.2",
+    "numpy": "2.4.4",
+    "joblib": "1.5.3"
+  }
+}

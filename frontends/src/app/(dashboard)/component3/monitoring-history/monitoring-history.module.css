@@ -1,4 +1,19 @@
 .container {
+  --primary: #6366f1;
+  --primary-hover: #4f46e5;
+  --secondary: #1e293b;
+  --foreground: #020617;
+  --card-bg: #ffffff;
+  --border: #e2e8f0;
+  --input-bg: #f1f5f9;
+  --error: #ef4444;
+  --success: #10b981;
+  --radius-md: 0.75rem;
+  --radius-lg: 1rem;
+  --radius-xl: 1.5rem;
+  --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+  --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+  color: var(--foreground);
   display: flex;
   flex-direction: column;
   gap: 1.35rem;
@@ -91,6 +106,7 @@
 
 .metrics strong {
   margin: 0.28rem 0;
+  color: var(--foreground);
   font-size: 1.45rem;
 }
 
@@ -121,6 +137,7 @@
 
 .readinessCard h2 {
   margin-bottom: 0.35rem;
+  color: var(--foreground);
   font-size: 1rem;
 }
 
@@ -157,6 +174,7 @@
 
 .readinessCard dd {
   margin-top: 0.25rem;
+  color: var(--foreground);
   font-size: 1rem;
   font-weight: 800;
 }
@@ -192,6 +210,7 @@
 
 .exportIntro h2 {
   margin-bottom: 0.3rem;
+  color: var(--foreground);
   font-size: 1rem;
 }
 
@@ -243,6 +262,7 @@
 
 .exportMetrics strong {
   margin-top: 0.2rem;
+  color: var(--foreground);
   font-size: 0.9rem;
 }
 
@@ -298,6 +318,7 @@
 
 .importHeader h2 {
   margin-bottom: 0.3rem;
+  color: var(--foreground);
   font-size: 1rem;
 }
 
@@ -350,6 +371,7 @@
 
 .importMetrics strong {
   margin-top: 0.2rem;
+  color: var(--foreground);
   font-size: 0.95rem;
 }
 

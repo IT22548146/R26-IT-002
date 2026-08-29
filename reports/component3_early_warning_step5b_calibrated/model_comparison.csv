@@ -1,0 +1,13 @@
+Target,Model,Accuracy,Macro_F1,F1,Calibrated,Selected,Baseline
+Machine_Breakdown_Within_3_Days,dummy_prior,0.729885,0.421927,0.0,False,False,True
+Machine_Breakdown_Within_3_Days,logistic_regression,0.810345,0.779586,0.697248,False,False,False
+Machine_Breakdown_Within_3_Days,random_forest,0.856322,0.82563,0.752475,True,True,False
+Machine_Breakdown_Within_3_Days,xgboost,0.833333,0.80004,0.718447,False,False,False
+Quality_Limit_Within_3_Days,dummy_prior,0.770115,0.435065,0.87013,False,False,True
+Quality_Limit_Within_3_Days,logistic_regression,0.637931,0.531278,0.754864,True,True,False
+Quality_Limit_Within_3_Days,random_forest,0.752874,0.489318,0.856187,False,False,False
+Quality_Limit_Within_3_Days,xgboost,0.706897,0.505764,0.821053,False,False,False
+Output_Schedule_Risk_Within_3_Days,dummy_prior,0.856322,0.4613,0.0,False,False,True
+Output_Schedule_Risk_Within_3_Days,logistic_regression,0.729885,0.628188,0.433735,True,True,False
+Output_Schedule_Risk_Within_3_Days,random_forest,0.821839,0.451104,0.0,False,False,False
+Output_Schedule_Risk_Within_3_Days,xgboost,0.758621,0.525208,0.192308,False,False,False

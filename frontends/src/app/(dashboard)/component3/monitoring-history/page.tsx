@@ -593,7 +593,7 @@ export default function MonitoringHistoryPage() {
             track readiness for the three-day early-warning target.
           </p>
         </div>
-        <Link href="/dashboard/monitoring">+ Record another day</Link>
+        <Link href="/component3/monitoring">+ Record another day</Link>
       </section>
 
       <section className={styles.metrics} aria-label="Monitoring readiness summary">

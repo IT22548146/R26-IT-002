@@ -98,6 +98,7 @@ interface RecoveryPlan {
 type EarlyWarningStatus =
   | 'available'
   | 'not_applicable_current_emergency'
+  | 'not_applicable_order_completed'
   | 'unavailable';
 
 interface EarlyWarningItem {
@@ -105,6 +106,10 @@ interface EarlyWarningItem {
   display_name: string;
   probability: number;
   probability_pct: number;
+  probability_calibrated: boolean;
+  calibration_method: string;
+  raw_probability_audit: number;
+  raw_probability_audit_pct: number;
   decision_threshold: number;
   warning_predicted: boolean;
   model_name: string;
@@ -181,12 +186,21 @@ interface MonitoringResponse {
     risk_status: string;
     risk_type: string;
     risk_confidence: number;
+    raw_model_risk_status: string;
+    raw_model_risk_type: string;
+    raw_model_risk_confidence: number;
+    raw_model_severity: string | null;
     severity: string | null;
     alert_colour: string;
     gap_severity_label: string;
     order_risk_level: string;
     ml_order_risk_level: string;
     schedule_order_risk_level: string;
+    raw_schedule_order_risk_level: string;
+    raw_combined_order_risk_level: string;
+    order_completed: boolean;
+    completion_override_applied: boolean;
+    current_day_completion_override_applied: boolean;
     order_risk_probability: number;
     recommendation: string;
   };
@@ -209,6 +223,9 @@ interface MonitoringResponse {
     order_risk_level: string;
     ml_order_risk_level: string;
     schedule_order_risk_level: string;
+    raw_schedule_order_risk_level: string;
+    raw_combined_order_risk_level: string;
+    order_completed: boolean;
     completion_pct: number;
     days_elapsed_pct: number;
     progress_gap_pct: number;
@@ -583,13 +600,13 @@ function createCurrentOrderForm(): MonitoringFormData {
     cutting_days: '',
     sewing_days: '',
     daily_commitment: '',
-    production_date: localWorkingIsoDate(),
-    working_day_no: 1,
+    production_date: '',
+    working_day_no: '',
     plant_daily_output: '',
-    daily_damage_qty: 0,
+    daily_damage_qty: '',
     max_daily_damage_qty: '',
-    machine_breakdown_count: 0,
-    worker_shortage_count: 0,
+    machine_breakdown_count: '',
+    worker_shortage_count: '',
     cumulative_completed_qty: '',
   };
 }
@@ -836,6 +853,9 @@ function recoveryStatusLabel(status: RecoveryPlan['status']) {
 }
 
 function earlyWarningStatusLabel(warning: EarlyWarningResult) {
+  if (warning.status === 'not_applicable_order_completed') {
+    return 'Order completed';
+  }
   if (warning.status === 'not_applicable_current_emergency') {
     return 'Current emergency active';
   }
@@ -983,9 +1003,11 @@ function RecoveryOptionCard({
 }
 
 export default function MonitoringPage() {
-  const [formData, setFormData] = useState<MonitoringFormData>(INITIAL_FORM);
+  const [formData, setFormData] = useState<MonitoringFormData>(() =>
+    createCurrentOrderForm(),
+  );
   const [recoveryData, setRecoveryData] = useState<RecoveryFormData>(
-    INITIAL_RECOVERY_FORM,
+    EMPTY_RECOVERY_FORM,
   );
   const [result, setResult] = useState<MonitoringResponse | null>(null);
   const [loading, setLoading] = useState(false);
@@ -997,13 +1019,13 @@ export default function MonitoringPage() {
   const [savingIncident, setSavingIncident] = useState(false);
   const [savedIncidentId, setSavedIncidentId] = useState('');
   const [trackingError, setTrackingError] = useState('');
-  const [formMode, setFormMode] = useState<'demo' | 'current'>('demo');
+  const [formMode, setFormMode] = useState<'demo' | 'current'>('current');
   const [analysisInvalidated, setAnalysisInvalidated] = useState(false);
   const [cumulativeFeedback, setCumulativeFeedback] =
     useState<CumulativeFeedback>({
       status: 'idle',
-      message: 'Historical demo preset value; you can edit it for this scenario.',
-      blocking: false,
+      message: 'Enter today\'s actual output to calculate the cumulative total.',
+      blocking: true,
     });
   const cumulativeRequestId = useRef(0);
   const cumulativeRequestController = useRef<AbortController | null>(null);
@@ -1017,7 +1039,7 @@ export default function MonitoringPage() {
   const orderEntryLookupTimer = useRef<ReturnType<typeof setTimeout> | null>(
     null,
   );
-  const formDataRef = useRef<MonitoringFormData>(INITIAL_FORM);
+  const formDataRef = useRef<MonitoringFormData>(createCurrentOrderForm());
   const [loadedOrderSetupRecordId, setLoadedOrderSetupRecordId] = useState('');
   const [orderEntryBlockMessage, setOrderEntryBlockMessage] = useState('');
   const [availableDraft, setAvailableDraft] =
@@ -1025,8 +1047,7 @@ export default function MonitoringPage() {
   const [draftSessionActive, setDraftSessionActive] = useState(false);
   const [draftFeedback, setDraftFeedback] = useState<DraftFeedback>({
     status: 'idle',
-    message:
-      'Draft auto-save starts when you choose Enter current order.',
+    message: 'Auto-save will start when you edit the new current-order form.',
   });
 
   const replaceFormData = (next: MonitoringFormData) => {
@@ -2033,6 +2054,15 @@ export default function MonitoringPage() {
   const orderRiskProbability = result
     ? clampPercentage(result.risk_detection.order_risk_probability * 100)
     : 0;
+  const orderCompleted = Boolean(
+    result &&
+      (result.risk_detection.order_completed === true ||
+        result.recovery_plan.status === 'completed' ||
+        result.order_summary.remaining_qty === 0),
+  );
+  const completedWithoutActiveIncident = Boolean(
+    orderCompleted && result?.risk_detection.risk_status === 'No Risk',
+  );
   const nextSavedProductionDate = savedDailyRecordId
     ? nextWorkingIsoDate(formData.production_date)
     : null;
@@ -2091,7 +2121,7 @@ export default function MonitoringPage() {
                   Restore saved draft
                 </button>
               )}
-              <Link href="/dashboard/monitoring-history#historical-import">
+              <Link href="/component3/monitoring-history#historical-import">
                 Prepare demo history
               </Link>
             </div>
@@ -2122,15 +2152,6 @@ export default function MonitoringPage() {
                 <p>Enter today&apos;s order, output, resource and schedule information.</p>
               </div>
             </div>
-            <span
-              className={`${styles.formModeBadge} ${
-                formMode === 'current'
-                  ? styles.currentModeBadge
-                  : styles.demoModeBadge
-              }`}
-            >
-              {formMode === 'current' ? 'Current-order entry' : 'Demo preset'}
-            </span>
           </div>
 
           {formMode === 'current' && (
@@ -2278,44 +2299,76 @@ export default function MonitoringPage() {
             <div className={styles.results}>
               <div
                 className={`${styles.riskBanner} ${riskTone(
-                  result.risk_detection.severity ??
-                    result.risk_detection.risk_status,
+                  completedWithoutActiveIncident
+                    ? 'Low'
+                    : result.risk_detection.severity ??
+                        result.risk_detection.risk_status,
                 )}`}
               >
                 <div>
                   <span className={styles.bannerLabel}>
-                    Current-day operational status
+                    {completedWithoutActiveIncident
+                      ? 'Order completion status'
+                      : 'Current-day operational status'}
                   </span>
-                  <h3>{result.risk_detection.risk_type}</h3>
+                  <h3>
+                    {completedWithoutActiveIncident
+                      ? 'Order Completed'
+                      : result.risk_detection.risk_type}
+                  </h3>
                   <p>{result.risk_detection.recommendation}</p>
                 </div>
                 <div className={styles.bannerBadges}>
-                  <span>{result.risk_detection.risk_status}</span>
-                  <span>{result.risk_detection.severity ?? 'No Risk'} severity</span>
+                  {completedWithoutActiveIncident ? (
+                    <>
+                      <span>No Active Risk</span>
+                      <span>Completed</span>
+                    </>
+                  ) : (
+                    <>
+                      <span>{result.risk_detection.risk_status}</span>
+                      <span>{result.risk_detection.severity ?? 'No Risk'} severity</span>
+                    </>
+                  )}
                 </div>
               </div>
 
               <div
                 className={`${styles.scheduleBanner} ${riskTone(
-                  result.risk_detection.order_risk_level,
+                  orderCompleted
+                    ? 'Low'
+                    : result.risk_detection.order_risk_level,
                 )}`}
               >
                 <div>
                   <span className={styles.bannerLabel}>
-                    Order delivery outlook
+                    {orderCompleted
+                      ? 'Order delivery outcome'
+                      : 'Order delivery outlook'}
                   </span>
                   <h3>
-                    {result.risk_detection.order_risk_level} schedule risk
+                    {orderCompleted
+                      ? 'Order completed on time'
+                      : `${result.risk_detection.order_risk_level} combined order risk`}
                   </h3>
                   <p>{result.order_progress.progress_summary}</p>
                 </div>
                 <div className={styles.bannerBadges}>
-                  <span>
-                    Schedule: {result.risk_detection.schedule_order_risk_level}
-                  </span>
-                  <span>
-                    Combined: {result.risk_detection.order_risk_level}
-                  </span>
+                  {orderCompleted ? (
+                    <>
+                      <span>Delivery: Complete</span>
+                      <span>Remaining risk: None</span>
+                    </>
+                  ) : (
+                    <>
+                      <span>
+                        Schedule: {result.risk_detection.schedule_order_risk_level}
+                      </span>
+                      <span>
+                        Combined: {result.risk_detection.order_risk_level}
+                      </span>
+                    </>
+                  )}
                 </div>
               </div>
 
@@ -2332,16 +2385,22 @@ export default function MonitoringPage() {
                 <div className={styles.earlyWarningHeader}>
                   <div>
                     <span className={styles.sectionKicker}>
-                      Experimental early warning · next 3 production days
+                      {orderCompleted
+                        ? 'Early warning · completed order'
+                        : 'Experimental early warning · next 3 production days'}
                     </span>
-                    <h3 id="early-warning-title">Emerging subtype risks</h3>
+                    <h3 id="early-warning-title">
+                      {orderCompleted
+                        ? 'No future production warning required'
+                        : 'Emerging subtype risks'}
+                    </h3>
                   </div>
                   <span className={styles.earlyWarningStatus}>
                     {earlyWarningStatusLabel(result.early_warning)}
                   </span>
                 </div>
 
-                {result.early_warning.status === 'available' ? (
+                {!orderCompleted && result.early_warning.status === 'available' ? (
                   <>
                     <div className={styles.earlyWarningHistory}>
                       <span>{historyStatusLabel(result.early_warning.history)}</span>
@@ -2365,7 +2424,9 @@ export default function MonitoringPage() {
                             <div className={styles.warningScoreHeader}>
                               <div>
                                 <span>{warning.display_name}</span>
-                                <small>{warning.model_name.replaceAll('_', ' ')}</small>
+                                <small>
+                                  {warning.model_name.replaceAll('_', ' ')} · calibrated
+                                </small>
                               </div>
                               <strong>{score.toFixed(1)}%</strong>
                             </div>
@@ -2391,7 +2452,11 @@ export default function MonitoringPage() {
                   </>
                 ) : (
                   <div className={styles.earlyWarningMessage}>
-                    <strong>Future subtype warning was not scored</strong>
+                    <strong>
+                      {orderCompleted
+                        ? 'Order monitoring is complete'
+                        : 'Future subtype warning was not scored'}
+                    </strong>
                     <span>{result.early_warning.message}</span>
                   </div>
                 )}
@@ -2399,8 +2464,8 @@ export default function MonitoringPage() {
                 <div className={styles.earlyWarningFootnote}>
                   <span>Research only · production approval pending</span>
                   <span>
-                    Scores are uncalibrated; worker-shortage future warning is not
-                    included.
+                    Order-grouped calibrated probabilities; worker-shortage future
+                    warning is not included.
                   </span>
                 </div>
               </section>
@@ -2408,7 +2473,11 @@ export default function MonitoringPage() {
               <div className={styles.confidenceGrid}>
                 <div className={styles.confidenceCard}>
                   <div className={styles.metricHeader}>
-                    <span>Risk-type confidence</span>
+                    <span>
+                      {orderCompleted
+                        ? `Raw ${result.risk_detection.raw_model_risk_type} score · audit only`
+                        : 'Risk-type confidence'}
+                    </span>
                     <strong>{riskConfidence.toFixed(1)}%</strong>
                   </div>
                   <div className={styles.meter}>
@@ -2417,7 +2486,11 @@ export default function MonitoringPage() {
                 </div>
                 <div className={styles.confidenceCard}>
                   <div className={styles.metricHeader}>
-                    <span>ML high-risk probability</span>
+                    <span>
+                      {orderCompleted
+                        ? 'Raw ML high-risk score · audit only'
+                        : 'ML high-risk probability'}
+                    </span>
                     <strong>{orderRiskProbability.toFixed(1)}%</strong>
                   </div>
                   <div className={`${styles.meter} ${styles.riskMeter}`}>
@@ -2428,16 +2501,28 @@ export default function MonitoringPage() {
 
               <div className={styles.assessmentGrid}>
                 <div>
-                  <span>ML assessment</span>
+                  <span>
+                    {orderCompleted ? 'Raw ML assessment · audit only' : 'ML assessment'}
+                  </span>
                   <strong>{result.risk_detection.ml_order_risk_level}</strong>
                 </div>
                 <div>
                   <span>Schedule assessment</span>
-                  <strong>{result.risk_detection.schedule_order_risk_level}</strong>
+                  <strong>
+                    {orderCompleted
+                      ? 'Completed'
+                      : result.risk_detection.schedule_order_risk_level}
+                  </strong>
                 </div>
                 <div>
-                  <span>Final combined risk</span>
-                  <strong>{result.risk_detection.order_risk_level}</strong>
+                  <span>
+                    {orderCompleted ? 'Final actionable risk' : 'Final combined risk'}
+                  </span>
+                  <strong>
+                    {orderCompleted
+                      ? 'None — order complete'
+                      : result.risk_detection.order_risk_level}
+                  </strong>
                 </div>
               </div>
 
@@ -2651,7 +2736,7 @@ export default function MonitoringPage() {
                             Start next working day →
                           </button>
                         )}
-                        <Link href="/dashboard/monitoring-history">
+                        <Link href="/component3/monitoring-history">
                           Open daily history →
                         </Link>
                       </div>
@@ -2698,7 +2783,7 @@ export default function MonitoringPage() {
                     {savedIncidentId && (
                       <div className={styles.trackingSuccess} role="status">
                         <span>Incident saved successfully.</span>
-                        <Link href="/dashboard/recovery-history">
+                        <Link href="/component3/recovery-history">
                           Open recovery history →
                         </Link>
                       </div>

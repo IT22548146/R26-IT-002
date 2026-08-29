@@ -125,6 +125,13 @@ function optionsForIncident(incident: IncidentDetail) {
   );
 }
 
+function optionAvailabilityLabel(option: RecoveryOption) {
+  if (option.option_id === 'manual_escalation') {
+    return '· requires external action';
+  }
+  return option.feasible_before_deadline ? '· feasible' : '· insufficient';
+}
+
 export default function RecoveryHistoryPage() {
   const [incidents, setIncidents] = useState<IncidentSummary[]>([]);
   const [total, setTotal] = useState(0);
@@ -371,6 +378,10 @@ export default function RecoveryHistoryPage() {
   const availableOptions = selectedIncident
     ? optionsForIncident(selectedIncident)
     : [];
+  const displayedRecoveryOption = selectedIncident
+    ? (selectedIncident.selected_option ??
+      selectedIncident.analysis.recovery_plan.recommended_option)
+    : null;
 
   return (
     <div className={styles.container}>
@@ -383,7 +394,7 @@ export default function RecoveryHistoryPage() {
             production against the calculated target.
           </p>
         </div>
-        <Link href="/dashboard/monitoring">← New monitoring analysis</Link>
+        <Link href="/component3/monitoring">← New monitoring analysis</Link>
       </section>
 
       <section className={styles.summaryGrid} aria-label="Visible incident summary">
@@ -519,11 +530,26 @@ export default function RecoveryHistoryPage() {
               <section className={styles.selectedPlan}>
                 <span>{selectedIncident.selected_option ? 'Approved recovery action' : 'System recommendation'}</span>
                 <h3>
-                  {(selectedIncident.selected_option ?? selectedIncident.analysis.recovery_plan.recommended_option)?.title ?? 'No recovery action'}
+                  {displayedRecoveryOption?.title ?? 'No recovery action'}
                 </h3>
                 <p>
-                  {(selectedIncident.selected_option ?? selectedIncident.analysis.recovery_plan.recommended_option)?.rationale ?? 'This order was already complete when saved.'}
+                  {displayedRecoveryOption?.rationale ?? 'This order was already complete when saved.'}
                 </p>
+                {displayedRecoveryOption?.option_id === 'manual_escalation' && (
+                  <div className={styles.externalRequirement}>
+                    <span>External capacity required</span>
+                    <strong>
+                      {displayedRecoveryOption.external_daily_capacity_required ===
+                      null ||
+                      displayedRecoveryOption.external_daily_capacity_required ===
+                        undefined
+                        ? 'Confirm with another line or plant'
+                        : `${formatNumber(
+                            displayedRecoveryOption.external_daily_capacity_required,
+                          )} pieces / day`}
+                    </strong>
+                  </div>
+                )}
               </section>
 
               <section className={styles.workflowCard}>
@@ -542,7 +568,7 @@ export default function RecoveryHistoryPage() {
                       <select value={selectedOptionId} onChange={(event) => setSelectedOptionId(event.target.value)} required>
                         {availableOptions.map((option) => (
                           <option key={option.option_id} value={option.option_id}>
-                            {option.title} {option.feasible_before_deadline ? '· feasible' : '· insufficient'}
+                            {option.title} {optionAvailabilityLabel(option)}
                           </option>
                         ))}
                       </select>

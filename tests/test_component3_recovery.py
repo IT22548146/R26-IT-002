@@ -134,6 +134,17 @@ class Component3RecoveryTests(unittest.TestCase):
         self.assertFalse(plan["manual_escalation_required"])
         self.assertEqual(plan["recommended_option"]["option_id"], "current_plan")
 
+    def test_completed_order_requires_no_recovery_action(self):
+        plan = build_recovery_plan(
+            self.data(cumulative_completed_qty=1_000)
+        )
+
+        self.assertEqual(plan["status"], "completed")
+        self.assertEqual(plan["remaining_quantity"], 0)
+        self.assertEqual(plan["required_daily_rate"], 0.0)
+        self.assertIsNone(plan["recommended_option"])
+        self.assertFalse(plan["manual_escalation_required"])
+
     def test_invalid_recovery_parameters_are_rejected(self):
         with self.assertRaisesRegex(ValueError, "planned_worker_count"):
             normalize_recovery_parameters(

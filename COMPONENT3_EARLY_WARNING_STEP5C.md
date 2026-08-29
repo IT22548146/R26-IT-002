@@ -79,7 +79,10 @@ Their normal analysis now includes:
         "target": "Machine_Breakdown_Within_3_Days",
         "probability": 0.725,
         "probability_pct": 72.5,
-        "decision_threshold": 0.5,
+        "probability_calibrated": true,
+        "calibration_method": "grouped_sigmoid_on_logit",
+        "raw_probability_audit": 0.681,
+        "decision_threshold": 0.32385,
         "warning_predicted": true,
         "model_name": "Random Forest",
         "preparation": "Inspect critical machines..."
@@ -113,19 +116,24 @@ Start the frontend from `frontends/`:
 npm run dev
 ```
 
-Open `http://localhost:3000/dashboard/monitoring`. After **Analyze situation**,
+Open `http://localhost:3000/component3/monitoring`. After **Analyze situation**,
 the result panel shows an **Experimental early warning — Next 3 production
 days** section. Save every real daily observation in order so later requests
 can use a better same-order history window.
 
-## Research and production boundary
+## Probability interpretation and validation status
 
-The displayed values are uncalibrated research scores selected using only 11
-historical orders. They are not guaranteed real-world probabilities and the
-artifacts contain `production_approved = false`. A manager must review any
-preparation or recovery action.
+The displayed values are sigmoid-calibrated probabilities. Calibration uses
+nested Leave-One-Group-Out evaluation, so each evaluated bulk order is absent
+from both the base model and the calibration mapping. Raw base-model scores are
+retained in `raw_probability_audit`, while the displayed score and warning
+decision use the calibrated probability and target-specific threshold.
+
+The calibration report covers 174 eligible stable rows from 11 historical bulk
+orders. The artifacts contain `production_approved = false`, and a manager must
+review any preparation or recovery action.
 
 The next validation step is to collect and verify new, untouched real orders,
 compare each saved warning with the actual next-three-production-day outcome,
-measure calibration and subtype metrics, and choose production thresholds only
-after that prospective evaluation.
+measure calibration and subtype metrics, and confirm or update the grouped
+thresholds after that prospective evaluation.

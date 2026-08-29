@@ -144,6 +144,45 @@ class Component3V2ApiTests(unittest.TestCase):
             0,
         )
 
+    def test_completed_order_overrides_future_delivery_risk(self):
+        payload = self.payload()
+        payload.update(
+            {
+                "production_date": "2024-11-27",
+                "working_day_no": 108,
+                "plant_daily_output": 430,
+                "daily_damage_qty": 0,
+                "machine_breakdown_count": 0,
+                "worker_shortage_count": 0,
+                "cumulative_completed_qty": payload["full_order_qty"],
+            }
+        )
+
+        response = self.client.post("/api/component3/predict", json=payload)
+
+        self.assertEqual(response.status_code, 200, response.get_json())
+        result = response.get_json()
+        risk = result["risk_detection"]
+        self.assertTrue(risk["order_completed"])
+        self.assertTrue(risk["completion_override_applied"])
+        self.assertEqual(risk["order_risk_level"], "Low")
+        self.assertEqual(risk["schedule_order_risk_level"], "Low")
+        self.assertIn(
+            risk["raw_combined_order_risk_level"],
+            {"Low", "Medium", "High", "Critical"},
+        )
+        self.assertEqual(result["recovery_plan"]["status"], "completed")
+        self.assertEqual(
+            result["early_warning"]["status"],
+            "not_applicable_order_completed",
+        )
+        self.assertEqual(result["early_warning"]["warnings"], [])
+        self.assertIn("order completed on time", result["order_progress"]["progress_summary"])
+        self.assertEqual(
+            result["planning_output"]["next_step"],
+            "Close Completed Order Monitoring",
+        )
+
     def test_missing_early_warning_models_do_not_break_current_prediction(self):
         payload = self.payload()
         payload.update(

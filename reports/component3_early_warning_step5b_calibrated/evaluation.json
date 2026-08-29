@@ -1,0 +1,800 @@
+{
+  "report_version": "component3-early-warning-step5b-calibrated-v2",
+  "generated_at_utc": "2026-08-29T04:20:53.888390+00:00",
+  "scope": "Research-only three-production-day subtype early warnings",
+  "production_approved": false,
+  "source_dataset": {
+    "workbook": "component3_final_preprossed dataset.xlsx",
+    "worksheet_count": 11,
+    "source_rows": 598,
+    "generated_or_augmented_rows_excluded": 0,
+    "historical_rows_used": 598,
+    "bulk_orders": 11,
+    "styles": 11,
+    "duplicate_order_date_rows": 0,
+    "cumulative_output_mismatch_rows": 0,
+    "cumulative_over_order_rows": 0,
+    "path": "component3_final_preprossed dataset.xlsx",
+    "sha256": "1ff07b96598d7509fe936cfc62d7c52ac87e6f27ddb1e3f0a92458233d6e64dd",
+    "labelled_rows_sha256": "aa600cb15997f327cf5f95b6c13ec8c19bb87713636e8df19027fb737d4d89f8",
+    "synthetic_rows_used": 0
+  },
+  "dataset": {
+    "eligible_stable_rows": 174,
+    "independent_bulk_orders": 11,
+    "model_feature_count": 30,
+    "model_features": [
+      "Daily_Commitment",
+      "Plant_Daily_Output",
+      "Output_Gap",
+      "Gap_Pct",
+      "Daily_Damage_Qty",
+      "Max_Daily_Damage_Qty",
+      "Damage_Ratio",
+      "Working_Day_No",
+      "Total_Working_Days",
+      "Days_Remaining",
+      "Day_Progress_Pct",
+      "Output_vs_Commit_Ratio",
+      "Remaining_Qty",
+      "Full_Order_Qty",
+      "Required_Daily_Rate",
+      "Commitment_Gap_Rate",
+      "Cumulative_Completed_Qty",
+      "Is_Cutting_Phase",
+      "Is_Sewing_Phase",
+      "History_Days_Available",
+      "Previous_Day_Output",
+      "Output_Change_From_Previous",
+      "Trailing_3D_Avg_Output",
+      "Trailing_3D_Output_Std",
+      "Trailing_3D_Avg_Gap_Pct",
+      "Trailing_3D_Emergency_Days",
+      "Trailing_3D_Worker_Shortage_Days",
+      "Trailing_3D_Machine_Breakdown_Days",
+      "Trailing_3D_Quality_Limit_Days",
+      "Days_Since_Last_Emergency"
+    ]
+  },
+  "protocol": {
+    "validation": "Leave-One-Group-Out",
+    "group_column": "Bulk_Order_ID",
+    "fold_count": 11,
+    "preprocessing_fitted_inside_each_training_fold": true,
+    "test_order_never_used_to_fit_its_prediction": true,
+    "decision_threshold": "Target-specific threshold selected from grouped out-of-fold calibrated scores",
+    "reported_metrics": [
+      "accuracy",
+      "macro_f1",
+      "f1"
+    ],
+    "reported_probability_metrics": [
+      "brier_score",
+      "log_loss",
+      "expected_calibration_error"
+    ],
+    "probability_calibration": "grouped_sigmoid_on_logit",
+    "calibration_validation": "Nested Leave-One-Group-Out",
+    "calibrator_uses_only_grouped_out_of_fold_base_scores": true,
+    "selection_rule": "Highest aggregate unseen-order Macro-F1; ties use F1, then Accuracy. The dummy prior is a non-selectable baseline. The selected model's probabilities then receive nested order-grouped sigmoid calibration.",
+    "final_refit": "After model selection, the selected pipeline is refit on all eligible rows. Its sigmoid mapping is fitted on probabilities generated while each bulk order was held out."
+  },
+  "targets": {
+    "Machine_Breakdown_Within_3_Days": {
+      "display_name": "Machine breakdown within 3 production days",
+      "class_coverage": {
+        "positive_rows": 47,
+        "negative_rows": 127,
+        "positive_orders": 11,
+        "negative_orders": 11
+      },
+      "candidate_metrics": [
+        {
+          "model": "dummy_prior",
+          "selectable": false,
+          "accuracy": 0.729885,
+          "macro_f1": 0.421927,
+          "f1": 0.0
+        },
+        {
+          "model": "logistic_regression",
+          "selectable": true,
+          "accuracy": 0.810345,
+          "macro_f1": 0.779586,
+          "f1": 0.697248
+        },
+        {
+          "model": "random_forest",
+          "selectable": true,
+          "accuracy": 0.856322,
+          "macro_f1": 0.82563,
+          "f1": 0.752475
+        },
+        {
+          "model": "xgboost",
+          "selectable": true,
+          "accuracy": 0.833333,
+          "macro_f1": 0.80004,
+          "f1": 0.718447
+        }
+      ],
+      "selected_model": "random_forest",
+      "selected_metrics": {
+        "accuracy": 0.856322,
+        "macro_f1": 0.82563,
+        "f1": 0.752475
+      },
+      "artifact_path": "models/c3_early_warning_machine_breakdown_v2.joblib",
+      "production_approved": false,
+      "validation": {
+        "fold_count": 11,
+        "held_out_orders": [
+          "BULK0001",
+          "BULK0002",
+          "BULK0003",
+          "BULK0004",
+          "BULK0005",
+          "BULK0006",
+          "BULK0007",
+          "BULK0008",
+          "BULK0009",
+          "BULK0010",
+          "BULK0015"
+        ],
+        "every_row_evaluated_once": true,
+        "train_test_group_overlap_detected": false
+      },
+      "calibration": {
+        "is_calibrated": true,
+        "method": "grouped_sigmoid_on_logit",
+        "group_column": "Bulk_Order_ID",
+        "outer_validation": "Nested Leave-One-Group-Out",
+        "outer_fold_count": 11,
+        "every_outer_row_evaluated_once": true,
+        "calibrator_fit_source": "Base-model probabilities generated while each bulk order was held out",
+        "raw_probability_metrics": {
+          "brier_score": 0.092461,
+          "log_loss": 0.29433,
+          "expected_calibration_error": 0.085892,
+          "reliability_bins": [
+            {
+              "lower": 0.0,
+              "upper": 0.1,
+              "rows": 81,
+              "mean_probability": 0.042115,
+              "observed_positive_rate": 0.0
+            },
+            {
+              "lower": 0.1,
+              "upper": 0.2,
+              "rows": 19,
+              "mean_probability": 0.131489,
+              "observed_positive_rate": 0.0
+            },
+            {
+              "lower": 0.2,
+              "upper": 0.3,
+              "rows": 2,
+              "mean_probability": 0.242571,
+              "observed_positive_rate": 0.0
+            },
+            {
+              "lower": 0.3,
+              "upper": 0.4,
+              "rows": 9,
+              "mean_probability": 0.356043,
+              "observed_positive_rate": 0.444444
+            },
+            {
+              "lower": 0.4,
+              "upper": 0.5,
+              "rows": 9,
+              "mean_probability": 0.459437,
+              "observed_positive_rate": 0.555556
+            },
+            {
+              "lower": 0.5,
+              "upper": 0.6,
+              "rows": 15,
+              "mean_probability": 0.561508,
+              "observed_positive_rate": 0.6
+            },
+            {
+              "lower": 0.6,
+              "upper": 0.7,
+              "rows": 19,
+              "mean_probability": 0.654049,
+              "observed_positive_rate": 0.789474
+            },
+            {
+              "lower": 0.7,
+              "upper": 0.8,
+              "rows": 13,
+              "mean_probability": 0.741968,
+              "observed_positive_rate": 0.538462
+            },
+            {
+              "lower": 0.8,
+              "upper": 0.9,
+              "rows": 7,
+              "mean_probability": 0.843755,
+              "observed_positive_rate": 1.0
+            }
+          ]
+        },
+        "calibrated_probability_metrics": {
+          "brier_score": 0.091659,
+          "log_loss": 0.273545,
+          "expected_calibration_error": 0.066983,
+          "reliability_bins": [
+            {
+              "lower": 0.0,
+              "upper": 0.1,
+              "rows": 100,
+              "mean_probability": 0.01688,
+              "observed_positive_rate": 0.0
+            },
+            {
+              "lower": 0.1,
+              "upper": 0.2,
+              "rows": 2,
+              "mean_probability": 0.133176,
+              "observed_positive_rate": 0.0
+            },
+            {
+              "lower": 0.2,
+              "upper": 0.3,
+              "rows": 7,
+              "mean_probability": 0.251599,
+              "observed_positive_rate": 0.285714
+            },
+            {
+              "lower": 0.3,
+              "upper": 0.4,
+              "rows": 5,
+              "mean_probability": 0.354126,
+              "observed_positive_rate": 0.6
+            },
+            {
+              "lower": 0.4,
+              "upper": 0.5,
+              "rows": 9,
+              "mean_probability": 0.450068,
+              "observed_positive_rate": 0.555556
+            },
+            {
+              "lower": 0.5,
+              "upper": 0.6,
+              "rows": 9,
+              "mean_probability": 0.569155,
+              "observed_positive_rate": 0.555556
+            },
+            {
+              "lower": 0.6,
+              "upper": 0.7,
+              "rows": 11,
+              "mean_probability": 0.64539,
+              "observed_positive_rate": 0.727273
+            },
+            {
+              "lower": 0.7,
+              "upper": 0.8,
+              "rows": 17,
+              "mean_probability": 0.750901,
+              "observed_positive_rate": 0.882353
+            },
+            {
+              "lower": 0.8,
+              "upper": 0.9,
+              "rows": 9,
+              "mean_probability": 0.853371,
+              "observed_positive_rate": 0.444444
+            },
+            {
+              "lower": 0.9,
+              "upper": 1.0,
+              "rows": 5,
+              "mean_probability": 0.931004,
+              "observed_positive_rate": 1.0
+            }
+          ]
+        },
+        "decision_threshold": 0.32385,
+        "threshold_selection": "Maximize Macro-F1 on bulk-order-held-out calibrated scores; ties use F1, Accuracy, then proximity to 0.5",
+        "nested_threshold_validation_metrics": {
+          "accuracy": 0.862069,
+          "macro_f1": 0.840489,
+          "f1": 0.781818
+        },
+        "final_threshold_training_metrics": {
+          "accuracy": 0.873563,
+          "macro_f1": 0.855176,
+          "f1": 0.803571
+        },
+        "nested_fold_thresholds": [
+          0.402629,
+          0.367933,
+          0.317525,
+          0.4744,
+          0.309994,
+          0.406759,
+          0.46785,
+          0.467936,
+          0.294841,
+          0.312603,
+          0.294046
+        ],
+        "brier_score_change": -0.000802,
+        "log_loss_change": -0.020785
+      }
+    },
+    "Quality_Limit_Within_3_Days": {
+      "display_name": "Quality-limit issue within 3 production days",
+      "class_coverage": {
+        "positive_rows": 134,
+        "negative_rows": 40,
+        "positive_orders": 11,
+        "negative_orders": 11
+      },
+      "candidate_metrics": [
+        {
+          "model": "dummy_prior",
+          "selectable": false,
+          "accuracy": 0.770115,
+          "macro_f1": 0.435065,
+          "f1": 0.87013
+        },
+        {
+          "model": "logistic_regression",
+          "selectable": true,
+          "accuracy": 0.637931,
+          "macro_f1": 0.531278,
+          "f1": 0.754864
+        },
+        {
+          "model": "random_forest",
+          "selectable": true,
+          "accuracy": 0.752874,
+          "macro_f1": 0.489318,
+          "f1": 0.856187
+        },
+        {
+          "model": "xgboost",
+          "selectable": true,
+          "accuracy": 0.706897,
+          "macro_f1": 0.505764,
+          "f1": 0.821053
+        }
+      ],
+      "selected_model": "logistic_regression",
+      "selected_metrics": {
+        "accuracy": 0.637931,
+        "macro_f1": 0.531278,
+        "f1": 0.754864
+      },
+      "artifact_path": "models/c3_early_warning_quality_limit_v2.joblib",
+      "production_approved": false,
+      "validation": {
+        "fold_count": 11,
+        "held_out_orders": [
+          "BULK0001",
+          "BULK0002",
+          "BULK0003",
+          "BULK0004",
+          "BULK0005",
+          "BULK0006",
+          "BULK0007",
+          "BULK0008",
+          "BULK0009",
+          "BULK0010",
+          "BULK0015"
+        ],
+        "every_row_evaluated_once": true,
+        "train_test_group_overlap_detected": false
+      },
+      "calibration": {
+        "is_calibrated": true,
+        "method": "grouped_sigmoid_on_logit",
+        "group_column": "Bulk_Order_ID",
+        "outer_validation": "Nested Leave-One-Group-Out",
+        "outer_fold_count": 11,
+        "every_outer_row_evaluated_once": true,
+        "calibrator_fit_source": "Base-model probabilities generated while each bulk order was held out",
+        "raw_probability_metrics": {
+          "brier_score": 0.232489,
+          "log_loss": 0.681831,
+          "expected_calibration_error": 0.194385,
+          "reliability_bins": [
+            {
+              "lower": 0.0,
+              "upper": 0.1,
+              "rows": 2,
+              "mean_probability": 0.0569,
+              "observed_positive_rate": 0.5
+            },
+            {
+              "lower": 0.1,
+              "upper": 0.2,
+              "rows": 8,
+              "mean_probability": 0.150154,
+              "observed_positive_rate": 0.5
+            },
+            {
+              "lower": 0.2,
+              "upper": 0.3,
+              "rows": 13,
+              "mean_probability": 0.250829,
+              "observed_positive_rate": 0.692308
+            },
+            {
+              "lower": 0.3,
+              "upper": 0.4,
+              "rows": 15,
+              "mean_probability": 0.355202,
+              "observed_positive_rate": 0.733333
+            },
+            {
+              "lower": 0.4,
+              "upper": 0.5,
+              "rows": 13,
+              "mean_probability": 0.443639,
+              "observed_positive_rate": 0.923077
+            },
+            {
+              "lower": 0.5,
+              "upper": 0.6,
+              "rows": 18,
+              "mean_probability": 0.554833,
+              "observed_positive_rate": 0.777778
+            },
+            {
+              "lower": 0.6,
+              "upper": 0.7,
+              "rows": 25,
+              "mean_probability": 0.648354,
+              "observed_positive_rate": 0.76
+            },
+            {
+              "lower": 0.7,
+              "upper": 0.8,
+              "rows": 21,
+              "mean_probability": 0.755355,
+              "observed_positive_rate": 0.714286
+            },
+            {
+              "lower": 0.8,
+              "upper": 0.9,
+              "rows": 20,
+              "mean_probability": 0.846181,
+              "observed_positive_rate": 0.8
+            },
+            {
+              "lower": 0.9,
+              "upper": 1.0,
+              "rows": 39,
+              "mean_probability": 0.946255,
+              "observed_positive_rate": 0.846154
+            }
+          ]
+        },
+        "calibrated_probability_metrics": {
+          "brier_score": 0.18059,
+          "log_loss": 0.556211,
+          "expected_calibration_error": 0.046808,
+          "reliability_bins": [
+            {
+              "lower": 0.6,
+              "upper": 0.7,
+              "rows": 19,
+              "mean_probability": 0.669544,
+              "observed_positive_rate": 0.631579
+            },
+            {
+              "lower": 0.7,
+              "upper": 0.8,
+              "rows": 107,
+              "mean_probability": 0.755678,
+              "observed_positive_rate": 0.794393
+            },
+            {
+              "lower": 0.8,
+              "upper": 0.9,
+              "rows": 43,
+              "mean_probability": 0.830411,
+              "observed_positive_rate": 0.813953
+            },
+            {
+              "lower": 0.9,
+              "upper": 1.0,
+              "rows": 5,
+              "mean_probability": 0.91462,
+              "observed_positive_rate": 0.4
+            }
+          ]
+        },
+        "decision_threshold": 0.726288,
+        "threshold_selection": "Maximize Macro-F1 on bulk-order-held-out calibrated scores; ties use F1, Accuracy, then proximity to 0.5",
+        "nested_threshold_validation_metrics": {
+          "accuracy": 0.666667,
+          "macro_f1": 0.511803,
+          "f1": 0.786765
+        },
+        "final_threshold_training_metrics": {
+          "accuracy": 0.718391,
+          "macro_f1": 0.58359,
+          "f1": 0.820513
+        },
+        "nested_fold_thresholds": [
+          0.719667,
+          0.718565,
+          0.70631,
+          0.726049,
+          0.757825,
+          0.698275,
+          0.767081,
+          0.730145,
+          0.738076,
+          0.732784,
+          0.742511
+        ],
+        "brier_score_change": -0.051899,
+        "log_loss_change": -0.12562
+      }
+    },
+    "Output_Schedule_Risk_Within_3_Days": {
+      "display_name": "Output or schedule risk within 3 production days",
+      "class_coverage": {
+        "positive_rows": 25,
+        "negative_rows": 149,
+        "positive_orders": 10,
+        "negative_orders": 11
+      },
+      "candidate_metrics": [
+        {
+          "model": "dummy_prior",
+          "selectable": false,
+          "accuracy": 0.856322,
+          "macro_f1": 0.4613,
+          "f1": 0.0
+        },
+        {
+          "model": "logistic_regression",
+          "selectable": true,
+          "accuracy": 0.729885,
+          "macro_f1": 0.628188,
+          "f1": 0.433735
+        },
+        {
+          "model": "random_forest",
+          "selectable": true,
+          "accuracy": 0.821839,
+          "macro_f1": 0.451104,
+          "f1": 0.0
+        },
+        {
+          "model": "xgboost",
+          "selectable": true,
+          "accuracy": 0.758621,
+          "macro_f1": 0.525208,
+          "f1": 0.192308
+        }
+      ],
+      "selected_model": "logistic_regression",
+      "selected_metrics": {
+        "accuracy": 0.729885,
+        "macro_f1": 0.628188,
+        "f1": 0.433735
+      },
+      "artifact_path": "models/c3_early_warning_output_schedule_risk_v2.joblib",
+      "production_approved": false,
+      "validation": {
+        "fold_count": 11,
+        "held_out_orders": [
+          "BULK0001",
+          "BULK0002",
+          "BULK0003",
+          "BULK0004",
+          "BULK0005",
+          "BULK0006",
+          "BULK0007",
+          "BULK0008",
+          "BULK0009",
+          "BULK0010",
+          "BULK0015"
+        ],
+        "every_row_evaluated_once": true,
+        "train_test_group_overlap_detected": false
+      },
+      "calibration": {
+        "is_calibrated": true,
+        "method": "grouped_sigmoid_on_logit",
+        "group_column": "Bulk_Order_ID",
+        "outer_validation": "Nested Leave-One-Group-Out",
+        "outer_fold_count": 11,
+        "every_outer_row_evaluated_once": true,
+        "calibrator_fit_source": "Base-model probabilities generated while each bulk order was held out",
+        "raw_probability_metrics": {
+          "brier_score": 0.204189,
+          "log_loss": 0.820563,
+          "expected_calibration_error": 0.209344,
+          "reliability_bins": [
+            {
+              "lower": 0.0,
+              "upper": 0.1,
+              "rows": 68,
+              "mean_probability": 0.036221,
+              "observed_positive_rate": 0.0
+            },
+            {
+              "lower": 0.1,
+              "upper": 0.2,
+              "rows": 16,
+              "mean_probability": 0.131822,
+              "observed_positive_rate": 0.125
+            },
+            {
+              "lower": 0.2,
+              "upper": 0.3,
+              "rows": 14,
+              "mean_probability": 0.240301,
+              "observed_positive_rate": 0.214286
+            },
+            {
+              "lower": 0.3,
+              "upper": 0.4,
+              "rows": 6,
+              "mean_probability": 0.351593,
+              "observed_positive_rate": 0.0
+            },
+            {
+              "lower": 0.4,
+              "upper": 0.5,
+              "rows": 12,
+              "mean_probability": 0.452169,
+              "observed_positive_rate": 0.166667
+            },
+            {
+              "lower": 0.5,
+              "upper": 0.6,
+              "rows": 11,
+              "mean_probability": 0.545036,
+              "observed_positive_rate": 0.545455
+            },
+            {
+              "lower": 0.6,
+              "upper": 0.7,
+              "rows": 8,
+              "mean_probability": 0.65352,
+              "observed_positive_rate": 0.125
+            },
+            {
+              "lower": 0.7,
+              "upper": 0.8,
+              "rows": 11,
+              "mean_probability": 0.758828,
+              "observed_positive_rate": 0.090909
+            },
+            {
+              "lower": 0.8,
+              "upper": 0.9,
+              "rows": 9,
+              "mean_probability": 0.853381,
+              "observed_positive_rate": 0.444444
+            },
+            {
+              "lower": 0.9,
+              "upper": 1.0,
+              "rows": 19,
+              "mean_probability": 0.983875,
+              "observed_positive_rate": 0.315789
+            }
+          ]
+        },
+        "calibrated_probability_metrics": {
+          "brier_score": 0.12803,
+          "log_loss": 0.401751,
+          "expected_calibration_error": 0.097743,
+          "reliability_bins": [
+            {
+              "lower": 0.0,
+              "upper": 0.1,
+              "rows": 64,
+              "mean_probability": 0.080447,
+              "observed_positive_rate": 0.0
+            },
+            {
+              "lower": 0.1,
+              "upper": 0.2,
+              "rows": 84,
+              "mean_probability": 0.145844,
+              "observed_positive_rate": 0.190476
+            },
+            {
+              "lower": 0.2,
+              "upper": 0.3,
+              "rows": 9,
+              "mean_probability": 0.227422,
+              "observed_positive_rate": 0.444444
+            },
+            {
+              "lower": 0.3,
+              "upper": 0.4,
+              "rows": 3,
+              "mean_probability": 0.32986,
+              "observed_positive_rate": 0.333333
+            },
+            {
+              "lower": 0.4,
+              "upper": 0.5,
+              "rows": 3,
+              "mean_probability": 0.453123,
+              "observed_positive_rate": 0.666667
+            },
+            {
+              "lower": 0.5,
+              "upper": 0.6,
+              "rows": 3,
+              "mean_probability": 0.56774,
+              "observed_positive_rate": 0.333333
+            },
+            {
+              "lower": 0.6,
+              "upper": 0.7,
+              "rows": 3,
+              "mean_probability": 0.629367,
+              "observed_positive_rate": 0.333333
+            },
+            {
+              "lower": 0.7,
+              "upper": 0.8,
+              "rows": 4,
+              "mean_probability": 0.773738,
+              "observed_positive_rate": 0.0
+            },
+            {
+              "lower": 0.8,
+              "upper": 0.9,
+              "rows": 1,
+              "mean_probability": 0.818983,
+              "observed_positive_rate": 0.0
+            }
+          ]
+        },
+        "decision_threshold": 0.195149,
+        "threshold_selection": "Maximize Macro-F1 on bulk-order-held-out calibrated scores; ties use F1, Accuracy, then proximity to 0.5",
+        "nested_threshold_validation_metrics": {
+          "accuracy": 0.793103,
+          "macro_f1": 0.6375,
+          "f1": 0.4
+        },
+        "final_threshold_training_metrics": {
+          "accuracy": 0.816092,
+          "macro_f1": 0.649282,
+          "f1": 0.407407
+        },
+        "nested_fold_thresholds": [
+          0.203485,
+          0.192735,
+          0.210976,
+          0.194038,
+          0.177219,
+          0.15832,
+          0.158935,
+          0.17529,
+          0.219637,
+          0.149093,
+          0.146612
+        ],
+        "brier_score_change": -0.076159,
+        "log_loss_change": -0.418812
+      }
+    }
+  },
+  "limitations": [
+    "The 174 eligible rows come from only 11 independent bulk orders.",
+    "The same grouped evaluation is used for model selection, so these are research comparison scores rather than a locked final test.",
+    "No general emergency or worker-shortage early-warning model is trained because Step 5A did not approve those targets.",
+    "Calibration reliability should be rechecked when additional new real orders become available."
+  ],
+  "decision": "Use grouped sigmoid-calibrated probabilities for the three supported research early-warning outputs and continue checking them against new real-order outcomes."
+}

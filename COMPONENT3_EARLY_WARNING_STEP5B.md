@@ -1,4 +1,4 @@
-# Component 3 Step 5B — Grouped Early-Warning Model Comparison
+# Component 3 Step 5B — Grouped Model Comparison and Probability Calibration
 
 ## Outcome
 
@@ -42,6 +42,12 @@ Validation uses Leave-One-Group-Out with `Bulk_Order_ID` as the group:
 This prevents rows from the same order appearing in both the training and test
 parts of a fold.
 
+After model selection, probability calibration uses nested
+Leave-One-Group-Out validation. In every outer fold, the held-out bulk order is
+absent from both the base model and the sigmoid calibration mapping. The final
+sigmoid mapping is fitted only from base-model probabilities generated while
+each bulk order was held out.
+
 ## Models compared
 
 - Dummy prior, used only as a majority-class baseline;
@@ -75,25 +81,42 @@ its Macro-F1 exposes weak performance across both classes. The output/schedule
 dummy and Random Forest have high Accuracy but zero positive-class F1. These
 examples are why the experiment does not select by Accuracy alone.
 
+## Probability calibration results
+
+Lower Brier score, log-loss, and expected calibration error (ECE) are better.
+All three selected models improved after grouped sigmoid calibration.
+
+| Target | Raw Brier | Calibrated Brier | Raw Log-loss | Calibrated Log-loss | Raw ECE | Calibrated ECE | Action threshold |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| Machine breakdown | 0.092461 | **0.091659** | 0.294330 | **0.273545** | 0.085892 | **0.066983** | 32.4% |
+| Quality limit | 0.232489 | **0.180590** | 0.681831 | **0.556211** | 0.194385 | **0.046808** | 72.6% |
+| Output/schedule risk | 0.204189 | **0.128030** | 0.820563 | **0.401751** | 0.209344 | **0.097743** | 19.5% |
+
+The action threshold is target-specific because the three event classes have
+different prevalence. It is selected from bulk-order-held-out calibrated
+scores by Macro-F1, rather than assuming that 50% is suitable for every event.
+
 ## Artifacts
 
 The selected pipelines are refitted on all 174 eligible rows and stored as:
 
 ```text
-models/c3_early_warning_machine_breakdown_v1.joblib
-models/c3_early_warning_quality_limit_v1.joblib
-models/c3_early_warning_output_schedule_risk_v1.joblib
+models/c3_early_warning_machine_breakdown_v2.joblib
+models/c3_early_warning_quality_limit_v2.joblib
+models/c3_early_warning_output_schedule_risk_v2.joblib
 ```
 
-Each artifact contains the fitted estimator, exact feature order, target,
-three-day horizon, class coverage, decision threshold, selected validation
-metrics, and `production_approved = false`.
+Each artifact contains the fitted base estimator, grouped sigmoid calibrator,
+exact feature order, target, three-day horizon, class coverage, target-specific
+decision threshold, classification metrics, probability metrics, and
+`production_approved = false`. Raw base-model scores remain available for
+audit, while the normal `predict_proba` output is calibrated.
 
 The machine-readable evidence is stored in:
 
 ```text
-reports/component3_early_warning_step5b/evaluation.json
-reports/component3_early_warning_step5b/model_comparison.csv
+reports/component3_early_warning_step5b_calibrated/evaluation.json
+reports/component3_early_warning_step5b_calibrated/model_comparison.csv
 ```
 
 ## Reproduce the experiment
@@ -105,8 +128,8 @@ python3 train_component3_early_warning.py
 ```
 
 The command rebuilds Step 5A labels from the original workbook, runs all 11
-grouped folds for every candidate and target, writes the comparison files, and
-replaces the three selected research artifacts.
+grouped folds for every candidate and target, runs nested grouped calibration,
+writes the comparison files, and replaces the three V2 research artifacts.
 
 ## Production boundary and next step
 

@@ -78,7 +78,22 @@ class Component3EarlyWarningTrainingTests(unittest.TestCase):
                 result["validation"]["train_test_group_overlap_detected"]
             )
             self.assertFalse(artifacts[target]["production_approved"])
+            self.assertTrue(artifacts[target]["probability_calibrated"])
             self.assertEqual(artifacts[target]["features"], EARLY_WARNING_FEATURES)
+            calibration = artifacts[target]["calibration"]
+            self.assertTrue(calibration["is_calibrated"])
+            self.assertEqual(
+                calibration["method"],
+                "grouped_sigmoid_on_logit",
+            )
+            self.assertEqual(calibration["outer_fold_count"], 6)
+            self.assertTrue(
+                calibration["every_outer_row_evaluated_once"]
+            )
+            self.assertIn(
+                "brier_score",
+                calibration["calibrated_probability_metrics"],
+            )
 
     def test_artifact_round_trip_preserves_fitted_pipeline(self):
         data = self.labelled_data()
@@ -97,7 +112,14 @@ class Component3EarlyWarningTrainingTests(unittest.TestCase):
         predictions = restored["estimator"].predict(
             data[EARLY_WARNING_FEATURES].iloc[:4]
         )
+        probabilities = restored["estimator"].predict_proba(
+            data[EARLY_WARNING_FEATURES].iloc[:4]
+        )
         self.assertEqual(len(predictions), 4)
+        self.assertEqual(probabilities.shape, (4, 2))
+        self.assertTrue(
+            ((probabilities >= 0) & (probabilities <= 1)).all()
+        )
         self.assertEqual(restored["target"], "Machine_Breakdown_Within_3_Days")
 
     def test_missing_feature_is_rejected(self):

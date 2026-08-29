@@ -42,6 +42,10 @@ from datetime import datetime, timedelta
 from flask import Blueprint, current_app, request, jsonify, send_file
 
 from components.component3_features import FEATURES, build_feature_row
+from components.component3_order_risk_features import (
+    ORDER_RISK_FEATURES,
+    build_order_risk_feature_row,
+)
 from components.component3_historical_import import (
     build_historical_import_preview,
     load_historical_order,
@@ -162,11 +166,15 @@ MODEL_FILES = {
         "risk_type": "c3_model1_risk_type_v2.pkl",
         "order_risk": "c3_model2_order_risk_v2.pkl",
     },
+    "v3": {
+        "risk_type": "c3_model1_risk_type_v2.pkl",
+        "order_risk": "c3_model2_order_risk_v3.pkl",
+    },
 }
 
 
 def _load_models():
-    version = os.environ.get("COMPONENT3_MODEL_VERSION", "v1").strip().lower()
+    version = os.environ.get("COMPONENT3_MODEL_VERSION", "v3").strip().lower()
     if version not in MODEL_FILES:
         raise RuntimeError(
             f"Unsupported COMPONENT3_MODEL_VERSION={version!r}; "
@@ -186,6 +194,9 @@ def _load_models():
         _models.clear()
         raise RuntimeError(f"Missing model files: {missing}. Run the Component 3 notebook first.")
     _models["version"] = version
+    _models["order_risk_feature_version"] = (
+        "deadline_v3" if version == "v3" else "canonical_v1"
+    )
     return _models
 
 
@@ -398,8 +409,33 @@ def _build_response(data: dict, models: dict) -> dict:
     risk_confidence  = float(risk_proba[risk_type_enc])
 
     # ── Model 2: Order risk level ─────────────────────────────
-    order_risk_prob  = float(models["order_risk"].predict_proba(row[FEATS])[0][1])
+    # V3 adds deadline-aware values that are known on the prediction day.
+    # V1/V2 retain their original feature contract for compatibility.
+    if models.get("order_risk_feature_version") == "deadline_v3":
+        order_risk_row = build_order_risk_feature_row(
+            daily_commitment=daily_commitment,
+            plant_daily_output=plant_daily_output,
+            machine_breakdown_count=machine_breakdown,
+            worker_shortage_count=worker_shortage,
+            daily_damage_qty=daily_damage_qty,
+            max_daily_damage_qty=max_daily_damage_qty,
+            working_day_no=working_day_no,
+            total_working_days=total_working_days,
+            cutting_days=cutting_days,
+            sewing_days=sewing_days,
+            full_order_qty=full_order_qty,
+            cumulative_completed_qty=cumulative_done,
+            production_date=data["production_date"],
+            buyer_required_date=data["buyer_required_date"],
+        )
+        order_risk_input = order_risk_row[ORDER_RISK_FEATURES]
+    else:
+        order_risk_input = row[FEATS]
+    order_risk_prob = float(
+        models["order_risk"].predict_proba(order_risk_input)[0][1]
+    )
     order_risk       = "High" if order_risk_prob >= 0.5 else "Low"
+    order_completed  = remaining_qty == 0
 
     # ── Rule-based outputs ────────────────────────────────────
     output_gap_val  = daily_commitment - plant_daily_output
@@ -417,10 +453,59 @@ def _build_response(data: dict, models: dict) -> dict:
     risk_status     = "No Risk" if risk_type == "No Issue" else "Risk"
     alert_generated = risk_status == "Risk"
 
+    # Preserve Model 1 exactly as predicted for research audit. On the final
+    # production day, the remaining quantity can legitimately be smaller than
+    # the normal daily commitment. That expected final-day shortfall must not
+    # become an active "Commitment Too Low" alert after the order is complete.
+    raw_model_risk_type = risk_type
+    raw_model_risk_confidence = risk_confidence
+    raw_model_risk_status = risk_status
+    raw_model_severity = severity if alert_generated else None
+    previous_cumulative = max(0, cumulative_done - plant_daily_output)
+    quantity_required_at_day_start = max(
+        0,
+        full_order_qty - previous_cumulative,
+    )
+    completed_required_output = (
+        order_completed
+        and plant_daily_output >= quantity_required_at_day_start
+    )
+    completion_pace_override = (
+        completed_required_output
+        and risk_type in {
+            "Commitment Too Low",
+            "Working Hours Issue",
+            "Minor Delay",
+        }
+        and machine_breakdown == 0
+        and worker_shortage == 0
+        and not ctx["damage_exceeded"]
+    )
+    if completion_pace_override:
+        risk_type = "No Issue"
+        risk_status = "No Risk"
+        severity = "No Risk"
+        alert_colour = _get_alert_colour(severity)
+        alert_to = []
+        alert_generated = False
+
     # Combine the binary ML result with the more detailed schedule-based result.
-    # The final result always reflects the more severe of the two assessments.
-    schedule_order_risk = ctx["order_risk_level"]
-    final_order_risk = _combine_order_risk(order_risk, schedule_order_risk)
+    # A completed order has no remaining delivery exposure. Preserve the raw
+    # model/rule decision for research audit, but do not present it as an
+    # actionable future risk after the full quantity has been produced.
+    raw_schedule_order_risk = ctx["order_risk_level"]
+    raw_combined_order_risk = _combine_order_risk(
+        order_risk,
+        raw_schedule_order_risk,
+    )
+    schedule_order_risk = "Low" if order_completed else raw_schedule_order_risk
+    final_order_risk = "Low" if order_completed else raw_combined_order_risk
+    if order_completed and risk_status == "No Risk":
+        recommendation = (
+            "Order completed on time. Close production monitoring and retain "
+            "the final daily record for verification."
+        )
+        action_required = "Close Completed Order Monitoring"
 
     # The models detect the risk; the deterministic engine calculates a
     # deadline-aware operational response using only declared capacity limits.
@@ -435,11 +520,24 @@ def _build_response(data: dict, models: dict) -> dict:
     day_progress_f    = float(row["Day_Progress_Pct"].iloc[0])
     req_daily_rate_f  = float(row["Required_Daily_Rate"].iloc[0])
 
-    progress_summary = (
-        f"{ctx['completion_pct']:.1f}% complete at day {working_day_no}/{total_working_days} "
-        f"({ctx['progress_gap_pct']:+.1f}% vs expected); "
-        f"{'on track' if ctx['on_track'] else 'behind schedule'} — "
-        f"{ctx['days_to_deadline']} day(s) {'buffer' if ctx['days_to_deadline'] >= 0 else 'overdue'} to deadline."
+    if order_completed:
+        progress_summary = (
+            f"{ctx['completion_pct']:.1f}% complete at day "
+            f"{working_day_no}/{total_working_days}; order completed on time — "
+            f"{ctx['days_to_deadline']} day(s) before the buyer deadline."
+        )
+    else:
+        progress_summary = (
+            f"{ctx['completion_pct']:.1f}% complete at day {working_day_no}/{total_working_days} "
+            f"({ctx['progress_gap_pct']:+.1f}% vs expected); "
+            f"{'on track' if ctx['on_track'] else 'behind schedule'} — "
+            f"{ctx['days_to_deadline']} day(s) {'buffer' if ctx['days_to_deadline'] >= 0 else 'overdue'} to deadline."
+        )
+
+    next_step = (
+        "Close Completed Order Monitoring"
+        if order_completed
+        else "Monitor Next Production Day"
     )
 
     return {
@@ -481,12 +579,26 @@ def _build_response(data: dict, models: dict) -> dict:
             "risk_status":       risk_status,
             "risk_type":         risk_type,
             "risk_confidence":   round(risk_confidence, 3),
+            "raw_model_risk_status": raw_model_risk_status,
+            "raw_model_risk_type": raw_model_risk_type,
+            "raw_model_risk_confidence": round(
+                raw_model_risk_confidence,
+                3,
+            ),
+            "raw_model_severity": raw_model_severity,
             "severity":          severity if alert_generated else None,
             "alert_colour":      alert_colour,
             "gap_severity_label":_gap_severity_label(gap_pct),
             "order_risk_level":  final_order_risk,
             "ml_order_risk_level": order_risk,
             "schedule_order_risk_level": schedule_order_risk,
+            "raw_schedule_order_risk_level": raw_schedule_order_risk,
+            "raw_combined_order_risk_level": raw_combined_order_risk,
+            "order_completed": order_completed,
+            "completion_override_applied": order_completed,
+            "current_day_completion_override_applied": (
+                completion_pace_override
+            ),
             "order_risk_probability": round(order_risk_prob, 3),
             "recommendation":    recommendation,
         },
@@ -512,6 +624,9 @@ def _build_response(data: dict, models: dict) -> dict:
             "order_risk_level":  final_order_risk,
             "ml_order_risk_level": order_risk,
             "schedule_order_risk_level": schedule_order_risk,
+            "raw_schedule_order_risk_level": raw_schedule_order_risk,
+            "raw_combined_order_risk_level": raw_combined_order_risk,
+            "order_completed": order_completed,
             "completion_pct":    ctx["completion_pct"],
             "days_elapsed_pct":  ctx["days_elapsed_pct"],
             "progress_gap_pct":  ctx["progress_gap_pct"],
@@ -537,14 +652,14 @@ def _build_response(data: dict, models: dict) -> dict:
                 ["System", "Email", "Dashboard", "Mobile App"]
                 if severity == "Critical" else ["System", "Dashboard"]
             ),
-            "next_step":            "Monitor Next Production Day",
+            "next_step":            next_step,
             "store_for_ml_training": True,
         },
 
         "planning_output": {
             "action_required":       action_required,
             "escalation_needed":     severity == "Critical",
-            "next_step":             "Monitor Next Production Day",
+            "next_step":             next_step,
             "store_for_ml_training": True,
         },
 
@@ -792,7 +907,7 @@ def health():
     return jsonify({
         "component": "3 — Emergency Situation Detection",
         "status": "ok",
-        "configured_model_version": os.environ.get("COMPONENT3_MODEL_VERSION", "v1"),
+        "configured_model_version": os.environ.get("COMPONENT3_MODEL_VERSION", "v3"),
         "experimental_early_warning_models": len(EARLY_WARNING_MODEL_SPECS),
         "early_warning_production_approved": False,
     })

@@ -15,14 +15,17 @@ from components.component3_early_warning_training import (
 
 
 BASE_DIR = Path(__file__).resolve().parent
-DEFAULT_REPORT_DIR = BASE_DIR / "reports" / "component3_early_warning_step5b"
+DEFAULT_REPORT_DIR = (
+    BASE_DIR / "reports" / "component3_early_warning_step5b_calibrated"
+)
 
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description=(
-            "Run leakage-safe, order-grouped model comparison for the supported "
-            "Component 3 three-day early-warning targets."
+            "Run leakage-safe, order-grouped model comparison and nested "
+            "probability calibration for the supported Component 3 three-day "
+            "early-warning targets."
         )
     )
     parser.add_argument(

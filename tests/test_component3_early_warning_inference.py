@@ -112,6 +112,13 @@ class Component3EarlyWarningInferenceTests(unittest.TestCase):
         for warning in result["warnings"]:
             self.assertGreaterEqual(warning["probability"], 0)
             self.assertLessEqual(warning["probability"], 1)
+            self.assertTrue(warning["probability_calibrated"])
+            self.assertEqual(
+                warning["calibration_method"],
+                "grouped_sigmoid_on_logit",
+            )
+            self.assertGreaterEqual(warning["raw_probability_audit"], 0)
+            self.assertLessEqual(warning["raw_probability_audit"], 1)
             self.assertEqual(
                 set(warning["validation_metrics"]),
                 {"accuracy", "macro_f1", "f1"},
@@ -133,6 +140,22 @@ class Component3EarlyWarningInferenceTests(unittest.TestCase):
         )
         self.assertEqual(result["warnings"], [])
         self.assertIn("recovery plan", result["message"])
+
+    def test_completed_order_is_not_scored_for_future_warnings(self):
+        current = self.prediction_input(20)
+        current["cumulative_completed_qty"] = current["full_order_qty"]
+
+        result = predict_early_warnings(
+            current,
+            current_risk_type="No Issue",
+            history=[],
+            models_directory="directory-is-not-needed",
+        )
+
+        self.assertEqual(result["status"], "not_applicable_order_completed")
+        self.assertFalse(result["alert_generated"])
+        self.assertEqual(result["warnings"], [])
+        self.assertIn("full order quantity is complete", result["message"])
 
     def test_missing_artifacts_are_reported(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -157,7 +180,7 @@ class Component3EarlyWarningInferenceTests(unittest.TestCase):
                     "production_approved": True,
                 },
                 Path(directory)
-                / "c3_early_warning_machine_breakdown_v1.joblib",
+                / "c3_early_warning_machine_breakdown_v2.joblib",
             )
 
             with self.assertRaisesRegex(

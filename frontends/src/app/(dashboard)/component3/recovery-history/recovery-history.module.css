@@ -1,4 +1,19 @@
 .container {
+  --primary: #6366f1;
+  --primary-hover: #4f46e5;
+  --secondary: #1e293b;
+  --foreground: #020617;
+  --card-bg: #ffffff;
+  --border: #e2e8f0;
+  --input-bg: #f1f5f9;
+  --error: #ef4444;
+  --success: #10b981;
+  --radius-md: 0.75rem;
+  --radius-lg: 1rem;
+  --radius-xl: 1.5rem;
+  --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+  --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+  color: var(--foreground);
   display: flex;
   flex-direction: column;
   gap: 1.25rem;
@@ -486,6 +501,27 @@
   color: #c7d2fe;
   font-size: 0.63rem;
   line-height: 1.45;
+}
+
+.externalRequirement {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.8rem;
+  margin-top: 0.65rem;
+  padding-top: 0.6rem;
+  border-top: 1px solid rgba(199, 210, 254, 0.3);
+}
+
+.externalRequirement span {
+  color: #c7d2fe;
+  font-size: 0.61rem;
+}
+
+.externalRequirement strong {
+  color: #fff;
+  font-size: 0.68rem;
+  text-align: right;
 }
 
 .workflowCard,

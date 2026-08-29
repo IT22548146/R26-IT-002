@@ -20,7 +20,12 @@ from sklearn.dummy import DummyClassifier
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.impute import SimpleImputer
 from sklearn.linear_model import LogisticRegression
-from sklearn.metrics import accuracy_score, f1_score
+from sklearn.metrics import (
+    accuracy_score,
+    brier_score_loss,
+    f1_score,
+    log_loss,
+)
 from sklearn.model_selection import LeaveOneGroupOut
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import StandardScaler
@@ -35,9 +40,11 @@ from components.component3_early_warning_data import (
 )
 
 
-REPORT_VERSION = "component3-early-warning-step5b-v1"
-ARTIFACT_VERSION = "component3-early-warning-model-v1"
+REPORT_VERSION = "component3-early-warning-step5b-calibrated-v2"
+ARTIFACT_VERSION = "component3-early-warning-model-calibrated-v2"
 RANDOM_STATE = 42
+CALIBRATION_METHOD = "grouped_sigmoid_on_logit"
+CALIBRATION_BINS = 10
 
 SUPPORTED_TARGETS: dict[str, dict[str, str]] = {
     "Machine_Breakdown_Within_3_Days": {
@@ -63,6 +70,39 @@ class CandidateModel:
     estimator: BaseEstimator
     selectable: bool = True
     balanced_fit_weights: bool = False
+
+
+class GroupedSigmoidCalibratedClassifier:
+    """Binary classifier with a grouped out-of-fold sigmoid calibrator.
+
+    The base estimator is fitted on all eligible rows.  The sigmoid mapping is
+    fitted separately from probabilities created while each bulk order was
+    held out, so no order calibrates its own training prediction.
+    """
+
+    def __init__(
+        self,
+        base_estimator: BaseEstimator,
+        calibration_model: LogisticRegression,
+    ) -> None:
+        self.base_estimator = base_estimator
+        self.calibration_model = calibration_model
+        self.classes_ = np.asarray([0, 1], dtype=int)
+
+    def raw_predict_proba(self, features: pd.DataFrame) -> np.ndarray:
+        positive = _positive_probabilities(self.base_estimator, features)
+        return np.column_stack((1.0 - positive, positive))
+
+    def predict_proba(self, features: pd.DataFrame) -> np.ndarray:
+        raw_positive = self.raw_predict_proba(features)[:, 1]
+        calibrated = _apply_sigmoid_calibrator(
+            self.calibration_model,
+            raw_positive,
+        )
+        return np.column_stack((1.0 - calibrated, calibrated))
+
+    def predict(self, features: pd.DataFrame) -> np.ndarray:
+        return (self.predict_proba(features)[:, 1] >= 0.5).astype(int)
 
 
 def build_candidate_models(
@@ -240,6 +280,318 @@ def _fit_candidate(
     return estimator
 
 
+def _positive_probabilities(
+    estimator: BaseEstimator,
+    features: pd.DataFrame,
+) -> np.ndarray:
+    """Return a finite positive-class probability vector."""
+    classes = [int(value) for value in estimator.classes_]
+    if 1 not in classes:
+        raise ValueError("Fitted candidate does not contain the positive class")
+    probabilities = np.asarray(estimator.predict_proba(features), dtype=float)
+    positive = probabilities[:, classes.index(1)]
+    if not np.isfinite(positive).all():
+        raise ValueError("Fitted candidate returned non-finite probabilities")
+    return np.clip(positive, 0.0, 1.0)
+
+
+def _probability_logits(probabilities: np.ndarray) -> np.ndarray:
+    clipped = np.clip(np.asarray(probabilities, dtype=float), 1e-6, 1 - 1e-6)
+    return np.log(clipped / (1.0 - clipped)).reshape(-1, 1)
+
+
+def _fit_sigmoid_calibrator(
+    raw_probabilities: np.ndarray,
+    actual: pd.Series | np.ndarray,
+    *,
+    random_state: int = RANDOM_STATE,
+) -> LogisticRegression:
+    labels = np.asarray(actual, dtype=int)
+    if set(np.unique(labels).tolist()) != {0, 1}:
+        raise ValueError("Sigmoid calibration requires both binary classes")
+    calibrator = LogisticRegression(
+        C=1.0,
+        max_iter=5_000,
+        random_state=random_state,
+    )
+    calibrator.fit(_probability_logits(raw_probabilities), labels)
+    return calibrator
+
+
+def _apply_sigmoid_calibrator(
+    calibrator: LogisticRegression,
+    raw_probabilities: np.ndarray,
+) -> np.ndarray:
+    classes = [int(value) for value in calibrator.classes_]
+    if 1 not in classes:
+        raise ValueError("Sigmoid calibrator does not contain the positive class")
+    calibrated = calibrator.predict_proba(
+        _probability_logits(raw_probabilities)
+    )[:, classes.index(1)]
+    if not np.isfinite(calibrated).all():
+        raise ValueError("Sigmoid calibrator returned non-finite probabilities")
+    return np.clip(calibrated, 0.0, 1.0)
+
+
+def _expected_calibration_error(
+    actual: np.ndarray,
+    probabilities: np.ndarray,
+    *,
+    bin_count: int = CALIBRATION_BINS,
+) -> tuple[float, list[dict[str, Any]]]:
+    """Return equal-width ECE and compact reliability-bin evidence."""
+    labels = np.asarray(actual, dtype=int)
+    scores = np.clip(np.asarray(probabilities, dtype=float), 0.0, 1.0)
+    edges = np.linspace(0.0, 1.0, bin_count + 1)
+    indexes = np.minimum(np.digitize(scores, edges[1:-1]), bin_count - 1)
+    ece = 0.0
+    bins: list[dict[str, Any]] = []
+    for index in range(bin_count):
+        mask = indexes == index
+        count = int(mask.sum())
+        if count == 0:
+            continue
+        mean_probability = float(scores[mask].mean())
+        observed_rate = float(labels[mask].mean())
+        ece += (count / len(labels)) * abs(mean_probability - observed_rate)
+        bins.append(
+            {
+                "lower": _rounded(edges[index]),
+                "upper": _rounded(edges[index + 1]),
+                "rows": count,
+                "mean_probability": _rounded(mean_probability),
+                "observed_positive_rate": _rounded(observed_rate),
+            }
+        )
+    return _rounded(ece), bins
+
+
+def _probability_metrics(
+    actual: pd.Series | np.ndarray,
+    probabilities: np.ndarray,
+) -> dict[str, Any]:
+    labels = np.asarray(actual, dtype=int)
+    scores = np.clip(np.asarray(probabilities, dtype=float), 1e-6, 1 - 1e-6)
+    ece, bins = _expected_calibration_error(labels, scores)
+    return {
+        "brier_score": _rounded(brier_score_loss(labels, scores)),
+        "log_loss": _rounded(log_loss(labels, scores, labels=[0, 1])),
+        "expected_calibration_error": ece,
+        "reliability_bins": bins,
+    }
+
+
+def _select_decision_threshold(
+    actual: pd.Series | np.ndarray,
+    probabilities: np.ndarray,
+) -> tuple[float, dict[str, float]]:
+    """Select a deterministic Macro-F1 threshold from grouped OOF scores."""
+    labels = np.asarray(actual, dtype=int)
+    scores = np.clip(np.asarray(probabilities, dtype=float), 0.0, 1.0)
+    unique_scores = np.unique(scores)
+    if len(unique_scores) == 1:
+        candidates = np.asarray([0.5, unique_scores[0]], dtype=float)
+    else:
+        midpoints = (unique_scores[:-1] + unique_scores[1:]) / 2.0
+        candidates = np.unique(
+            np.concatenate(([0.0, 0.5, 1.0], unique_scores, midpoints))
+        )
+    best_threshold = 0.5
+    best_metrics = _metrics(labels, (scores >= best_threshold).astype(int))
+    best_key = (
+        best_metrics["macro_f1"],
+        best_metrics["f1"],
+        best_metrics["accuracy"],
+        -abs(best_threshold - 0.5),
+        -best_threshold,
+    )
+    for threshold in candidates:
+        predicted = (scores >= threshold).astype(int)
+        metrics = _metrics(labels, predicted)
+        key = (
+            metrics["macro_f1"],
+            metrics["f1"],
+            metrics["accuracy"],
+            -abs(float(threshold) - 0.5),
+            -float(threshold),
+        )
+        if key > best_key:
+            best_key = key
+            best_threshold = float(threshold)
+            best_metrics = metrics
+    return _rounded(best_threshold), best_metrics
+
+
+def _grouped_out_of_fold_probabilities(
+    features: pd.DataFrame,
+    actual: pd.Series,
+    groups: pd.Series,
+    candidate: CandidateModel,
+) -> np.ndarray:
+    probabilities = np.full(len(actual), np.nan, dtype=float)
+    test_counts = np.zeros(len(actual), dtype=int)
+    splitter = LeaveOneGroupOut()
+    for train_indexes, test_indexes in splitter.split(features, actual, groups):
+        if actual.iloc[train_indexes].nunique() != 2:
+            raise ValueError(
+                "Grouped probability calibration found a fold with one "
+                "training class"
+            )
+        estimator = _fit_candidate(
+            candidate,
+            features.iloc[train_indexes],
+            actual.iloc[train_indexes],
+        )
+        probabilities[test_indexes] = _positive_probabilities(
+            estimator,
+            features.iloc[test_indexes],
+        )
+        test_counts[test_indexes] += 1
+    if not np.all(test_counts == 1) or not np.isfinite(probabilities).all():
+        raise RuntimeError(
+            "Grouped calibration did not produce one probability per row"
+        )
+    return probabilities
+
+
+def calibrate_selected_candidate(
+    labelled: pd.DataFrame,
+    target: str,
+    candidate: CandidateModel,
+    *,
+    random_state: int = RANDOM_STATE,
+) -> tuple[GroupedSigmoidCalibratedClassifier, dict[str, Any]]:
+    """Fit and evaluate a leakage-safe order-grouped sigmoid calibration.
+
+    Reported calibrated probabilities use nested Leave-One-Group-Out: the
+    outer order is absent from both the base model and its sigmoid mapping.
+    The final sigmoid is then fitted from full-dataset grouped OOF base scores.
+    """
+    features = labelled[EARLY_WARNING_FEATURES].astype(float).reset_index(drop=True)
+    actual = labelled[target].astype(int).reset_index(drop=True)
+    groups = labelled["Bulk_Order_ID"].astype(str).reset_index(drop=True)
+    outer_raw = np.full(len(actual), np.nan, dtype=float)
+    outer_calibrated = np.full(len(actual), np.nan, dtype=float)
+    outer_calibrated_predictions = np.full(len(actual), -1, dtype=int)
+    outer_counts = np.zeros(len(actual), dtype=int)
+    fold_thresholds: list[float] = []
+    splitter = LeaveOneGroupOut()
+
+    for train_indexes, test_indexes in splitter.split(features, actual, groups):
+        train_features = features.iloc[train_indexes].reset_index(drop=True)
+        train_actual = actual.iloc[train_indexes].reset_index(drop=True)
+        train_groups = groups.iloc[train_indexes].reset_index(drop=True)
+        if train_actual.nunique() != 2:
+            raise ValueError(
+                f"{target} has a nested calibration fold with one training class"
+            )
+        inner_raw = _grouped_out_of_fold_probabilities(
+            train_features,
+            train_actual,
+            train_groups,
+            candidate,
+        )
+        fold_calibrator = _fit_sigmoid_calibrator(
+            inner_raw,
+            train_actual,
+            random_state=random_state,
+        )
+        inner_calibrated = _apply_sigmoid_calibrator(
+            fold_calibrator,
+            inner_raw,
+        )
+        fold_threshold, _ = _select_decision_threshold(
+            train_actual,
+            inner_calibrated,
+        )
+        fold_thresholds.append(fold_threshold)
+        fold_estimator = _fit_candidate(
+            candidate,
+            train_features,
+            train_actual,
+        )
+        fold_raw = _positive_probabilities(
+            fold_estimator,
+            features.iloc[test_indexes],
+        )
+        outer_raw[test_indexes] = fold_raw
+        outer_calibrated[test_indexes] = _apply_sigmoid_calibrator(
+            fold_calibrator,
+            fold_raw,
+        )
+        outer_calibrated_predictions[test_indexes] = (
+            outer_calibrated[test_indexes] >= fold_threshold
+        ).astype(int)
+        outer_counts[test_indexes] += 1
+
+    if (
+        not np.all(outer_counts == 1)
+        or not np.isfinite(outer_raw).all()
+        or not np.isfinite(outer_calibrated).all()
+        or np.any(outer_calibrated_predictions < 0)
+    ):
+        raise RuntimeError(
+            "Nested grouped calibration did not score every held-out row once"
+        )
+
+    final_calibrator = _fit_sigmoid_calibrator(
+        outer_raw,
+        actual,
+        random_state=random_state,
+    )
+    final_oof_calibrated = _apply_sigmoid_calibrator(
+        final_calibrator,
+        outer_raw,
+    )
+    final_threshold, final_threshold_training_metrics = (
+        _select_decision_threshold(actual, final_oof_calibrated)
+    )
+    final_base_estimator = _fit_candidate(candidate, features, actual)
+    calibrated_estimator = GroupedSigmoidCalibratedClassifier(
+        final_base_estimator,
+        final_calibrator,
+    )
+    raw_probability_metrics = _probability_metrics(actual, outer_raw)
+    calibrated_probability_metrics = _probability_metrics(
+        actual,
+        outer_calibrated,
+    )
+    calibration_report = {
+        "is_calibrated": True,
+        "method": CALIBRATION_METHOD,
+        "group_column": "Bulk_Order_ID",
+        "outer_validation": "Nested Leave-One-Group-Out",
+        "outer_fold_count": int(groups.nunique()),
+        "every_outer_row_evaluated_once": bool(np.all(outer_counts == 1)),
+        "calibrator_fit_source": (
+            "Base-model probabilities generated while each bulk order was "
+            "held out"
+        ),
+        "raw_probability_metrics": raw_probability_metrics,
+        "calibrated_probability_metrics": calibrated_probability_metrics,
+        "decision_threshold": final_threshold,
+        "threshold_selection": (
+            "Maximize Macro-F1 on bulk-order-held-out calibrated scores; ties "
+            "use F1, Accuracy, then proximity to 0.5"
+        ),
+        "nested_threshold_validation_metrics": _metrics(
+            actual,
+            outer_calibrated_predictions,
+        ),
+        "final_threshold_training_metrics": final_threshold_training_metrics,
+        "nested_fold_thresholds": fold_thresholds,
+        "brier_score_change": _rounded(
+            calibrated_probability_metrics["brier_score"]
+            - raw_probability_metrics["brier_score"]
+        ),
+        "log_loss_change": _rounded(
+            calibrated_probability_metrics["log_loss"]
+            - raw_probability_metrics["log_loss"]
+        ),
+    }
+    return calibrated_estimator, calibration_report
+
+
 def evaluate_candidate(
     labelled: pd.DataFrame,
     target: str,
@@ -343,14 +695,15 @@ def train_early_warning_models(
         )
         selected_name = str(selected_result["model"])
         selected_candidate = all_candidates[selected_name]
-        final_estimator = _fit_candidate(
+        final_estimator, calibration_report = calibrate_selected_candidate(
+            labelled,
+            target,
             selected_candidate,
-            labelled[EARLY_WARNING_FEATURES].astype(float),
-            labelled[target].astype(int),
+            random_state=random_state,
         )
         target_info = SUPPORTED_TARGETS[target]
         artifact_path = (
-            f"models/c3_early_warning_{target_info['slug']}_v1.joblib"
+            f"models/c3_early_warning_{target_info['slug']}_v2.joblib"
         )
         coverage = _class_coverage(labelled, target)
         target_report = {
@@ -365,6 +718,7 @@ def train_early_warning_models(
             "artifact_path": artifact_path,
             "production_approved": False,
             "validation": validation_evidence,
+            "calibration": calibration_report,
         }
         target_reports[target] = target_report
         artifacts[target] = {
@@ -374,7 +728,9 @@ def train_early_warning_models(
             "horizon_production_days": 3,
             "model_name": selected_name,
             "features": list(EARLY_WARNING_FEATURES),
-            "decision_threshold": 0.5,
+            "decision_threshold": calibration_report["decision_threshold"],
+            "probability_calibrated": True,
+            "calibration": calibration_report,
             "validation_metrics": target_report["selected_metrics"],
             "training_rows": int(len(labelled)),
             "training_orders": int(labelled["Bulk_Order_ID"].nunique()),
@@ -390,6 +746,7 @@ def train_early_warning_models(
                     "Accuracy": result["accuracy"],
                     "Macro_F1": result["macro_f1"],
                     "F1": result["f1"],
+                    "Calibrated": result["model"] == selected_name,
                     "Selected": result["model"] == selected_name,
                     "Baseline": not result["selectable"],
                 }
@@ -399,7 +756,8 @@ def train_early_warning_models(
         "targets": target_reports,
         "selection_rule": (
             "Highest aggregate unseen-order Macro-F1; ties use F1, then Accuracy. "
-            "The dummy prior is a non-selectable baseline."
+            "The dummy prior is a non-selectable baseline. The selected model's "
+            "probabilities then receive nested order-grouped sigmoid calibration."
         ),
     }
     comparison = pd.DataFrame.from_records(comparison_rows)
@@ -462,12 +820,24 @@ def run_step5b_experiment(
             "fold_count": int(labelled["Bulk_Order_ID"].nunique()),
             "preprocessing_fitted_inside_each_training_fold": True,
             "test_order_never_used_to_fit_its_prediction": True,
-            "decision_threshold": 0.5,
+            "decision_threshold": (
+                "Target-specific threshold selected from grouped out-of-fold "
+                "calibrated scores"
+            ),
             "reported_metrics": ["accuracy", "macro_f1", "f1"],
+            "reported_probability_metrics": [
+                "brier_score",
+                "log_loss",
+                "expected_calibration_error",
+            ],
+            "probability_calibration": CALIBRATION_METHOD,
+            "calibration_validation": "Nested Leave-One-Group-Out",
+            "calibrator_uses_only_grouped_out_of_fold_base_scores": True,
             "selection_rule": experiment["selection_rule"],
             "final_refit": (
                 "After model selection, the selected pipeline is refit on all "
-                "eligible rows for a research artifact."
+                "eligible rows. Its sigmoid mapping is fitted on probabilities "
+                "generated while each bulk order was held out."
             ),
         },
         "targets": experiment["targets"],
@@ -483,13 +853,14 @@ def run_step5b_experiment(
                 "is trained because Step 5A did not approve those targets."
             ),
             (
-                "The final refitted artifacts require validation on new, "
-                "untouched real orders before production approval."
+                "Calibration reliability should be rechecked when additional "
+                "new real orders become available."
             ),
         ],
         "decision": (
-            "Keep all three artifacts research-only. Integrate them behind an "
-            "experimental early-warning response and validate on new real orders."
+            "Use grouped sigmoid-calibrated probabilities for the three supported "
+            "research early-warning outputs and continue checking them against "
+            "new real-order outcomes."
         ),
     }
     return report, comparison, artifacts

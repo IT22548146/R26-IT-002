@@ -17,12 +17,12 @@ from components.component3_early_warning_data import (
 from components.component3_features import build_feature_values
 
 
-INFERENCE_VERSION = "component3-early-warning-inference-v1"
+INFERENCE_VERSION = "component3-early-warning-inference-calibrated-v2"
 
 MODEL_SPECS: dict[str, dict[str, str]] = {
     "Machine_Breakdown_Within_3_Days": {
         "display_name": "Machine breakdown",
-        "filename": "c3_early_warning_machine_breakdown_v1.joblib",
+        "filename": "c3_early_warning_machine_breakdown_v2.joblib",
         "preparation": (
             "Inspect critical machines, confirm maintenance availability, and "
             "reserve feasible backup-machine capacity."
@@ -30,7 +30,7 @@ MODEL_SPECS: dict[str, dict[str, str]] = {
     },
     "Quality_Limit_Within_3_Days": {
         "display_name": "Quality-limit issue",
-        "filename": "c3_early_warning_quality_limit_v1.joblib",
+        "filename": "c3_early_warning_quality_limit_v2.joblib",
         "preparation": (
             "Increase in-line quality checks and review the latest damage trend "
             "before releasing more pieces."
@@ -38,7 +38,7 @@ MODEL_SPECS: dict[str, dict[str, str]] = {
     },
     "Output_Schedule_Risk_Within_3_Days": {
         "display_name": "Output or schedule risk",
-        "filename": "c3_early_warning_output_schedule_risk_v1.joblib",
+        "filename": "c3_early_warning_output_schedule_risk_v2.joblib",
         "preparation": (
             "Review the remaining rate, overtime limit, and backup-line capacity "
             "before the schedule gap grows."
@@ -287,6 +287,21 @@ def load_early_warning_artifacts(
             raise EarlyWarningModelError(
                 f"Early-warning approval metadata is invalid in {path.name}"
             )
+        if artifact.get("probability_calibrated") is not True:
+            raise EarlyWarningModelError(
+                f"Early-warning calibration metadata is invalid in {path.name}"
+            )
+        calibration = artifact.get("calibration")
+        if (
+            not isinstance(calibration, dict)
+            or calibration.get("is_calibrated") is not True
+            or calibration.get("method") != "grouped_sigmoid_on_logit"
+            or calibration.get("outer_validation")
+            != "Nested Leave-One-Group-Out"
+        ):
+            raise EarlyWarningModelError(
+                f"Early-warning calibration evidence is invalid in {path.name}"
+            )
         if not isinstance(artifact.get("model_name"), str):
             raise EarlyWarningModelError(
                 f"Early-warning model name is invalid in {path.name}"
@@ -351,6 +366,26 @@ def _positive_probability(estimator: Any, row: pd.DataFrame) -> float:
     return min(1.0, max(0.0, probability))
 
 
+def _raw_positive_probability(estimator: Any, row: pd.DataFrame) -> float:
+    if not hasattr(estimator, "raw_predict_proba"):
+        raise EarlyWarningModelError(
+            "Calibrated early-warning estimator has no raw audit score"
+        )
+    try:
+        classes = [int(value) for value in estimator.classes_]
+        probabilities = estimator.raw_predict_proba(row)[0]
+        probability = float(probabilities[classes.index(1)])
+    except Exception as exc:
+        raise EarlyWarningModelError(
+            "Early-warning estimator could not produce a raw audit score"
+        ) from exc
+    if not math.isfinite(probability):
+        raise EarlyWarningModelError(
+            "Early-warning estimator returned a non-finite raw audit score"
+        )
+    return min(1.0, max(0.0, probability))
+
+
 def _not_applicable_response(current_risk_type: str) -> dict[str, Any]:
     return {
         "inference_version": INFERENCE_VERSION,
@@ -373,6 +408,29 @@ def _not_applicable_response(current_risk_type: str) -> dict[str, Any]:
     }
 
 
+def _completed_order_response(current_risk_type: str) -> dict[str, Any]:
+    return {
+        "inference_version": INFERENCE_VERSION,
+        "status": "not_applicable_order_completed",
+        "production_approved": False,
+        "horizon_production_days": 3,
+        "current_risk_type": current_risk_type,
+        "alert_generated": False,
+        "highest_warning": None,
+        "warnings": [],
+        "history": None,
+        "message": (
+            "The full order quantity is complete. No future production-day "
+            "warning is required; raw model outputs remain available in the "
+            "saved analysis for research audit."
+        ),
+        "limitations": [
+            "Completed orders are excluded from actionable future warnings.",
+            "The subtype artifacts are research-only and not production approved.",
+        ],
+    }
+
+
 def predict_early_warnings(
     prediction_input: dict[str, Any],
     *,
@@ -381,6 +439,12 @@ def predict_early_warnings(
     models_directory: str | Path,
 ) -> dict[str, Any]:
     """Predict supported three-day subtype outcomes for a stable current day."""
+    order_completed = int(
+        prediction_input["cumulative_completed_qty"]
+    ) >= int(prediction_input["full_order_qty"])
+    if order_completed:
+        return _completed_order_response(current_risk_type)
+
     current_emergency = bool(
         current_risk_type != "No Issue"
         or int(prediction_input["worker_shortage_count"]) > 0
@@ -400,6 +464,7 @@ def predict_early_warnings(
     for target, spec in MODEL_SPECS.items():
         artifact = artifacts[target]
         estimator = artifact["estimator"]
+        raw_probability = _raw_positive_probability(estimator, row)
         probability = _positive_probability(estimator, row)
         threshold = float(artifact["decision_threshold"])
         warnings.append(
@@ -408,6 +473,15 @@ def predict_early_warnings(
                 "display_name": spec["display_name"],
                 "probability": round(probability, 6),
                 "probability_pct": round(probability * 100, 2),
+                "probability_calibrated": True,
+                "calibration_method": str(
+                    artifact["calibration"]["method"]
+                ),
+                "raw_probability_audit": round(raw_probability, 6),
+                "raw_probability_audit_pct": round(
+                    raw_probability * 100,
+                    2,
+                ),
                 "decision_threshold": threshold,
                 "warning_predicted": probability >= threshold,
                 "model_name": str(artifact["model_name"]),
@@ -444,7 +518,10 @@ def predict_early_warnings(
             else "No supported subtype crossed its experimental threshold."
         ),
         "limitations": [
-            "Scores are uncalibrated research probabilities from 11 historical orders.",
+            (
+                "Probabilities use nested order-grouped sigmoid calibration; "
+                "raw base-model scores are retained for audit."
+            ),
             "Worker-shortage future warning is not available in Step 5C.",
             "A manager must review warnings and approve operational actions.",
         ],
