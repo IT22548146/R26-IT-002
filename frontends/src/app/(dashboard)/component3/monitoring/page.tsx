@@ -2088,17 +2088,21 @@ export default function MonitoringPage() {
     <div className={styles.container}>
       <section className={styles.hero}>
         <div>
-          <span className={styles.eyebrow}>Research Component 03</span>
           <h1>Emergency Situation Detection &amp; Management</h1>
           <p>
             Monitor daily production, detect operational risk early, and receive a
             clear recovery plan before an order misses its buyer deadline.
           </p>
         </div>
-        <div className={styles.serviceBadge}>
-          <span className={styles.liveDot} aria-hidden="true" />
-          {result ? `Model ${result.model_version.toUpperCase()}` : 'Component 3 API'}
-        </div>
+        <span
+          className={styles.liveDot}
+          role="status"
+          aria-label={
+            result
+              ? `Component 3 model ${result.model_version.toUpperCase()} is available`
+              : 'Component 3 API is available'
+          }
+        />
       </section>
 
       <section className={styles.scenarioSection} aria-labelledby="scenario-title">

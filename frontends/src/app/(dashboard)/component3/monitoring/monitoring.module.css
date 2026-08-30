@@ -53,7 +53,6 @@
   z-index: 1;
 }
 
-.eyebrow,
 .sectionKicker,
 .bannerLabel {
   display: block;
@@ -62,10 +61,6 @@
   font-weight: 700;
   letter-spacing: 0.14em;
   text-transform: uppercase;
-}
-
-.eyebrow {
-  color: #7dd3fc;
 }
 
 .hero h1 {
@@ -82,24 +77,12 @@
   line-height: 1.6;
 }
 
-.serviceBadge {
-  flex: 0 0 auto;
-  display: inline-flex;
-  align-items: center;
-  gap: 0.6rem;
-  padding: 0.65rem 0.9rem;
-  color: #e0f2fe;
-  border: 1px solid rgba(125, 211, 252, 0.24);
-  border-radius: 999px;
-  background: rgba(15, 23, 42, 0.45);
-  font-size: 0.78rem;
-  font-weight: 600;
-  backdrop-filter: blur(8px);
-}
-
 .liveDot {
-  width: 8px;
-  height: 8px;
+  display: block;
+  flex: 0 0 auto;
+  width: 10px;
+  height: 10px;
+  margin: 0.65rem;
   border-radius: 50%;
   background: #34d399;
   box-shadow: 0 0 0 5px rgba(52, 211, 153, 0.13);
