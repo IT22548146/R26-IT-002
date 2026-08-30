@@ -2465,13 +2465,6 @@ export default function MonitoringPage() {
                   </div>
                 )}
 
-                <div className={styles.earlyWarningFootnote}>
-                  <span>Research only · production approval pending</span>
-                  <span>
-                    Order-grouped calibrated probabilities; worker-shortage future
-                    warning is not included.
-                  </span>
-                </div>
               </section>
 
               <div className={styles.confidenceGrid}>

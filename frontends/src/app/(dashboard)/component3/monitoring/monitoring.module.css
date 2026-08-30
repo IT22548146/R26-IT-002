@@ -757,8 +757,7 @@
 .earlyWarningHeader,
 .warningScoreHeader,
 .warningDecision,
-.earlyWarningHistory,
-.earlyWarningFootnote {
+.earlyWarningHistory {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
@@ -891,14 +890,6 @@
 
 .earlyWarningMessage strong {
   color: var(--foreground);
-}
-
-.earlyWarningFootnote {
-  margin-top: 0.7rem;
-  padding-top: 0.6rem;
-  color: var(--secondary);
-  border-top: 1px solid var(--border);
-  font-size: 0.55rem;
 }
 
 .assessmentGrid {
@@ -1613,7 +1604,6 @@
   .optionHeading,
   .triggerRow,
   .earlyWarningHeader,
-  .earlyWarningFootnote,
   .earlyWarningHistory {
     align-items: flex-start;
     flex-direction: column;
