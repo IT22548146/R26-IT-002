@@ -387,7 +387,7 @@ export default function RecoveryHistoryPage() {
     <div className={styles.container}>
       <section className={styles.hero}>
         <div>
-          <span>Component 03 · Recovery operations</span>
+          <span>Recovery operations</span>
           <h1>Recovery History &amp; Feedback</h1>
           <p>
             Approve recovery decisions, follow execution, and compare actual
