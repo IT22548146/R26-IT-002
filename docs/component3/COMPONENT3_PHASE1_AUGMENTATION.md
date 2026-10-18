@@ -2,7 +2,7 @@
 
 ## Artifacts
 
-- Generator: `augment_component3_low_risk.py`
+- Generator: `scripts/component3/augment_component3_low_risk.py`
 - Source workbook: `../component3 (2).xlsx`
 - Generated workbook: `data/component3_training_augmented.xlsx`
 - Generator version: `component3_low_risk_v1`
@@ -94,7 +94,7 @@ real Low Risk orders are collected and evaluated as untouched groups.
 ## Reproduce
 
 ```bash
-python3 augment_component3_low_risk.py \
+python3 -m scripts.component3.augment_component3_low_risk \
   --input "../component3 (2).xlsx" \
   --output "data/component3_training_augmented.xlsx" \
   --orders 12 \

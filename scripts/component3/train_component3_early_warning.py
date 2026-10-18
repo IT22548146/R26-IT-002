@@ -13,8 +13,8 @@ from components.component3_early_warning_training import (
     run_step5b_experiment,
 )
 
-BASE_DIR = Path(__file__).resolve().parent
-DEFAULT_REPORT_DIR = BASE_DIR / "reports" / "component3_early_warning_step5b_calibrated"
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+DEFAULT_REPORT_DIR = PROJECT_ROOT / "reports" / "component3_early_warning_step5b_calibrated"
 
 
 def parse_args() -> argparse.Namespace:
@@ -28,7 +28,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--data",
         type=Path,
-        default=BASE_DIR / "data" / "component3_final_preprocessed_dataset.xlsx",
+        default=PROJECT_ROOT / "data" / "component3_final_preprocessed_dataset.xlsx",
         help="Original Component 3 historical workbook",
     )
     parser.add_argument(
@@ -46,7 +46,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--models-dir",
         type=Path,
-        default=BASE_DIR / "models",
+        default=PROJECT_ROOT / "models",
         help="Directory for selected research model artifacts",
     )
     parser.add_argument(

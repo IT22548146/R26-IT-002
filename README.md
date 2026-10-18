@@ -20,45 +20,45 @@ The backend is organized into four specialized components, each accessible via i
 - **Risk Mitigation**: Proactive alerts for potential supply chain or production failures.
 - **Recovery Planning**: Calculates deadline-aware overtime, worker, machine,
   backup-line, and escalation options. See
-  [`COMPONENT3_RECOVERY_ENGINE.md`](COMPONENT3_RECOVERY_ENGINE.md).
+  [`COMPONENT3_RECOVERY_ENGINE.md`](docs/component3/COMPONENT3_RECOVERY_ENGINE.md).
 - **Recovery Tracking**: Stores approval, execution, actual output,
   effectiveness and the incident audit timeline. See
-  [`COMPONENT3_TRACKING_API.md`](COMPONENT3_TRACKING_API.md).
+  [`COMPONENT3_TRACKING_API.md`](docs/component3/COMPONENT3_TRACKING_API.md).
 - **Historical Validation**: Replays recovery plans against the next recorded
   production day and reports calibration evidence without assuming an action
   was applied. See
-  [`COMPONENT3_HISTORICAL_VALIDATION.md`](COMPONENT3_HISTORICAL_VALIDATION.md).
+  [`COMPONENT3_HISTORICAL_VALIDATION.md`](docs/component3/COMPONENT3_HISTORICAL_VALIDATION.md).
 - **Early-Warning Readiness**: Builds leakage-safe future labels from currently
   stable production days and checks whether grouped model training is valid.
-  See [`COMPONENT3_EARLY_WARNING_STEP5A.md`](COMPONENT3_EARLY_WARNING_STEP5A.md).
+  See [`COMPONENT3_EARLY_WARNING_STEP5A.md`](docs/component3/COMPONENT3_EARLY_WARNING_STEP5A.md).
 - **Daily Monitoring Collection**: Stores daily detections, captures
   supervisor-verified actual outcomes with an audit history, derives exact
   three-day future labels, and reports live training readiness. See
-  [`COMPONENT3_DAILY_MONITORING.md`](COMPONENT3_DAILY_MONITORING.md).
+  [`COMPONENT3_DAILY_MONITORING.md`](docs/component3/COMPONENT3_DAILY_MONITORING.md).
 - **Verified Training Export**: Exports only eligible verified source days,
   audits leakage and class balance, and provides CSV/Excel artifacts for Step
-  5B. See [`COMPONENT3_TRAINING_EXPORT.md`](COMPONENT3_TRAINING_EXPORT.md).
+  5B. See [`COMPONENT3_TRAINING_EXPORT.md`](docs/component3/COMPONENT3_TRAINING_EXPORT.md).
 - **Grouped Subtype Early-Warning Experiment**: Compares Logistic Regression,
   Random Forest and XGBoost against a no-skill baseline using complete held-out
   bulk orders, then saves research-only three-day warning artifacts. See
-  [`COMPONENT3_EARLY_WARNING_STEP5B.md`](COMPONENT3_EARLY_WARNING_STEP5B.md).
+  [`COMPONENT3_EARLY_WARNING_STEP5B.md`](docs/component3/COMPONENT3_EARLY_WARNING_STEP5B.md).
 - **Experimental Early-Warning Integration**: Loads the three selected
   artifacts with current/past-only same-order history and displays
   research-only next-three-production-day warnings without interrupting
   current emergency recovery. See
-  [`COMPONENT3_EARLY_WARNING_STEP5C.md`](COMPONENT3_EARLY_WARNING_STEP5C.md).
+  [`COMPONENT3_EARLY_WARNING_STEP5C.md`](docs/component3/COMPONENT3_EARLY_WARNING_STEP5C.md).
 - **Retrospective Historical Import**: Audits Component 2 master fields and
   safely replays one Component 3 order without duplicating or overwriting
   existing records. Imports are explicitly marked as training-data reuse, not
   independent validation. See
-  [`COMPONENT3_HISTORICAL_IMPORT.md`](COMPONENT3_HISTORICAL_IMPORT.md).
+  [`COMPONENT3_HISTORICAL_IMPORT.md`](docs/component3/COMPONENT3_HISTORICAL_IMPORT.md).
 - **Early-Warning Outcome Validation**: Compares stored warnings with later
   verified three-day outcomes, reports Accuracy, Macro-F1 and F1, and keeps
   retrospective training-data reuse separate from unseen-order validation. See
-  [`COMPONENT3_EARLY_WARNING_STEP5D1.md`](COMPONENT3_EARLY_WARNING_STEP5D1.md).
+  [`COMPONENT3_EARLY_WARNING_STEP5D1.md`](docs/component3/COMPONENT3_EARLY_WARNING_STEP5D1.md).
 - **Demonstration Workflow**: Provides a repeatable walkthrough for live order
   entry, all five scenarios, recovery tracking, and retrospective evidence
-  setup. See [`COMPONENT3_DEMO_GUIDE.md`](COMPONENT3_DEMO_GUIDE.md).
+  setup. See [`COMPONENT3_DEMO_GUIDE.md`](docs/component3/COMPONENT3_DEMO_GUIDE.md).
 
 ### 4. Production Analysis & Resource Optimization (`/api/component4`)
 - **Efficiency Analytics**: Detailed insights into production performance.

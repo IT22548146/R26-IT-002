@@ -3,7 +3,7 @@
 ## Reproduce training
 
 ```bash
-python3 train_component3_v2.py
+python3 -m scripts.component3.train_component3_v2
 ```
 
 The pipeline uses `data/component3_training_augmented.xlsx` and:

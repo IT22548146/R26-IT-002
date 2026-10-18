@@ -1150,7 +1150,7 @@ activated.
 ### 24.1 Model 1 and version-2 experiment
 
 ```bash
-python train_component3_v2.py
+python -m scripts.component3.train_component3_v2
 ```
 
 Inputs and outputs:
@@ -1165,7 +1165,7 @@ Report:  reports/component3_v2/evaluation.json
 ### 24.2 Overall order-risk Model 2 v3
 
 ```bash
-python train_component3_model2_v3.py
+python -m scripts.component3.train_component3_model2_v3
 ```
 
 Inputs and outputs:
@@ -1180,7 +1180,7 @@ Report:    reports/component3_model2_v3/evaluation.json
 ### 24.3 Calibrated early-warning models
 
 ```bash
-python train_component3_early_warning.py
+python -m scripts.component3.train_component3_early_warning
 ```
 
 Inputs and outputs:
@@ -1195,7 +1195,7 @@ CSV:     reports/component3_early_warning_step5b_calibrated/model_comparison.csv
 ### 24.4 Generate the PDF evidence report
 
 ```bash
-python scripts/generate_component3_ml_report.py
+python -m scripts.component3.generate_component3_ml_report
 ```
 
 Output:
@@ -1353,11 +1353,15 @@ npx tsc --noEmit
 Garment_model_backend_latest/
 ├── app.py
 ├── main.py
-├── train_component3_v2.py
-├── train_component3_model2_v3.py
-├── train_component3_early_warning.py
-├── train_component3_optimized.py
 ├── README_COMPONENT3.md
+├── scripts/component3/
+│   ├── train_component3_v2.py
+│   ├── train_component3_model2_v3.py
+│   ├── train_component3_early_warning.py
+│   ├── train_component3_optimized.py
+│   └── generate_component3_ml_report.py
+├── docs/component3/
+│   └── COMPONENT3_*.md
 ├── notebooks/
 │   └── Component3_Model_Explanation.ipynb
 ├── components/
@@ -1413,19 +1417,19 @@ Garment_model_backend_latest/
 
 ### 30.2 Detailed supporting documentation
 
-- [`COMPONENT3_V2_TRAINING.md`](COMPONENT3_V2_TRAINING.md)
-- [`COMPONENT3_PHASE1_AUGMENTATION.md`](COMPONENT3_PHASE1_AUGMENTATION.md)
-- [`COMPONENT3_EARLY_WARNING_STEP5A.md`](COMPONENT3_EARLY_WARNING_STEP5A.md)
-- [`COMPONENT3_EARLY_WARNING_STEP5B.md`](COMPONENT3_EARLY_WARNING_STEP5B.md)
-- [`COMPONENT3_EARLY_WARNING_STEP5C.md`](COMPONENT3_EARLY_WARNING_STEP5C.md)
-- [`COMPONENT3_EARLY_WARNING_STEP5D1.md`](COMPONENT3_EARLY_WARNING_STEP5D1.md)
-- [`COMPONENT3_DAILY_MONITORING.md`](COMPONENT3_DAILY_MONITORING.md)
-- [`COMPONENT3_TRAINING_EXPORT.md`](COMPONENT3_TRAINING_EXPORT.md)
-- [`COMPONENT3_RECOVERY_ENGINE.md`](COMPONENT3_RECOVERY_ENGINE.md)
-- [`COMPONENT3_TRACKING_API.md`](COMPONENT3_TRACKING_API.md)
-- [`COMPONENT3_HISTORICAL_VALIDATION.md`](COMPONENT3_HISTORICAL_VALIDATION.md)
-- [`COMPONENT3_HISTORICAL_IMPORT.md`](COMPONENT3_HISTORICAL_IMPORT.md)
-- [`COMPONENT3_DEMO_GUIDE.md`](COMPONENT3_DEMO_GUIDE.md)
+- [`COMPONENT3_V2_TRAINING.md`](docs/component3/COMPONENT3_V2_TRAINING.md)
+- [`COMPONENT3_PHASE1_AUGMENTATION.md`](docs/component3/COMPONENT3_PHASE1_AUGMENTATION.md)
+- [`COMPONENT3_EARLY_WARNING_STEP5A.md`](docs/component3/COMPONENT3_EARLY_WARNING_STEP5A.md)
+- [`COMPONENT3_EARLY_WARNING_STEP5B.md`](docs/component3/COMPONENT3_EARLY_WARNING_STEP5B.md)
+- [`COMPONENT3_EARLY_WARNING_STEP5C.md`](docs/component3/COMPONENT3_EARLY_WARNING_STEP5C.md)
+- [`COMPONENT3_EARLY_WARNING_STEP5D1.md`](docs/component3/COMPONENT3_EARLY_WARNING_STEP5D1.md)
+- [`COMPONENT3_DAILY_MONITORING.md`](docs/component3/COMPONENT3_DAILY_MONITORING.md)
+- [`COMPONENT3_TRAINING_EXPORT.md`](docs/component3/COMPONENT3_TRAINING_EXPORT.md)
+- [`COMPONENT3_RECOVERY_ENGINE.md`](docs/component3/COMPONENT3_RECOVERY_ENGINE.md)
+- [`COMPONENT3_TRACKING_API.md`](docs/component3/COMPONENT3_TRACKING_API.md)
+- [`COMPONENT3_HISTORICAL_VALIDATION.md`](docs/component3/COMPONENT3_HISTORICAL_VALIDATION.md)
+- [`COMPONENT3_HISTORICAL_IMPORT.md`](docs/component3/COMPONENT3_HISTORICAL_IMPORT.md)
+- [`COMPONENT3_DEMO_GUIDE.md`](docs/component3/COMPONENT3_DEMO_GUIDE.md)
 
 ## 31. Thesis-use guidance
 

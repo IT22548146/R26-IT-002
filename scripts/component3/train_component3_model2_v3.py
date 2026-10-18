@@ -34,7 +34,8 @@ from components.component3_order_risk_features import (
     ORDER_RISK_FEATURES,
     build_order_risk_feature_frame,
 )
-from train_component3_v2 import (
+
+from .train_component3_v2 import (
     json_ready,
     model2_candidates,
     per_order_metrics,

@@ -260,7 +260,8 @@ class Component3TrainingExportTests(unittest.TestCase, TrainingExportFixture):
         result = subprocess.run(
             [
                 sys.executable,
-                str(repository_root / "export_component3_training_dataset.py"),
+                "-m",
+                "scripts.component3.export_component3_training_dataset",
                 "--database",
                 self.database_path,
                 "--csv",

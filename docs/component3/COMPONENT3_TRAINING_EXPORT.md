@@ -95,7 +95,7 @@ three independent orders per class.
 From the repository root:
 
 ```bash
-python export_component3_training_dataset.py \
+python -m scripts.component3.export_component3_training_dataset \
   --database instance/component3_tracking.db \
   --csv reports/component3_training_export/training_data.csv \
   --xlsx reports/component3_training_export/training_data.xlsx \

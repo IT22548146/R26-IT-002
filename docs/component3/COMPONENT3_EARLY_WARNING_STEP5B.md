@@ -124,7 +124,7 @@ reports/component3_early_warning_step5b_calibrated/model_comparison.csv
 From the backend repository root:
 
 ```bash
-python3 train_component3_early_warning.py
+python3 -m scripts.component3.train_component3_early_warning
 ```
 
 The command rebuilds Step 5A labels from the original workbook, runs all 11

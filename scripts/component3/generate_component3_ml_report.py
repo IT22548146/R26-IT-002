@@ -17,7 +17,7 @@ import numpy as np
 from matplotlib.backends.backend_pdf import PdfPages
 from matplotlib.patches import FancyBboxPatch
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path(__file__).resolve().parents[2]
 OUTPUT = ROOT / "reports" / "Component3_Dataset_and_ML_Results_Report.pdf"
 
 NAVY = "#12213f"
@@ -1135,7 +1135,9 @@ def generate() -> None:
         implementation_rows = [
             [
                 "Training",
-                "train_component3_v2.py; train_component3_model2_v3.py; train_component3_early_warning.py",
+                "scripts.component3.train_component3_v2; "
+                "scripts.component3.train_component3_model2_v3; "
+                "scripts.component3.train_component3_early_warning",
             ],
             [
                 "Feature engineering",
@@ -1261,10 +1263,10 @@ def generate() -> None:
 
         ax.text(0.61, 0.655, "REPRODUCIBILITY COMMANDS", fontsize=9, color=INDIGO, weight="bold")
         commands = [
-            "python train_component3_v2.py",
-            "python train_component3_model2_v3.py",
-            "python train_component3_early_warning.py",
-            "python scripts/generate_component3_ml_report.py",
+            "python -m scripts.component3.train_component3_v2",
+            "python -m scripts.component3.train_component3_model2_v3",
+            "python -m scripts.component3.train_component3_early_warning",
+            "python -m scripts.component3.generate_component3_ml_report",
             "python main.py                         # backend :5001",
             "cd frontends && npm run dev            # frontend :3000",
         ]

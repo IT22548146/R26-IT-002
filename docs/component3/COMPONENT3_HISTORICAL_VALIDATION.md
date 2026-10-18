@@ -21,7 +21,7 @@ validation.
 From the backend project directory:
 
 ```bash
-python3 validate_component3_recovery.py \
+python3 -m scripts.component3.validate_component3_recovery \
   --data "data/component3_final_preprocessed_dataset.xlsx" \
   --json-output reports/component3_recovery_validation/evaluation.json \
   --csv-output reports/component3_recovery_validation/historical_cases.csv

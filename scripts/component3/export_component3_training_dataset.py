@@ -13,7 +13,7 @@ from components.component3_training_export import (
     dataframe_to_xlsx_bytes,
 )
 
-BASE_DIR = Path(__file__).resolve().parent
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
 
 def parse_args() -> argparse.Namespace:
@@ -25,7 +25,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--database",
         type=Path,
-        default=BASE_DIR / "instance" / "component3_tracking.db",
+        default=PROJECT_ROOT / "instance" / "component3_tracking.db",
         help="Component 3 SQLite database path",
     )
     parser.add_argument("--csv", type=Path, help="Write the training CSV")

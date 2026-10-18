@@ -14,7 +14,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-from augment_component3_low_risk import (
+from .augment_component3_low_risk import (
     BUYERS,
     OUTPUT_COLUMNS,
     PLANTS,
