@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from functools import lru_cache
 import math
+from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
@@ -15,7 +15,6 @@ from components.component3_early_warning_data import (
     EARLY_WARNING_FEATURES,
 )
 from components.component3_features import build_feature_values
-
 
 INFERENCE_VERSION = "component3-early-warning-inference-calibrated-v2"
 
@@ -55,9 +54,7 @@ def _current_features(prediction_input: dict[str, Any]) -> dict[str, float]:
     canonical = build_feature_values(
         daily_commitment=int(prediction_input["daily_commitment"]),
         plant_daily_output=int(prediction_input["plant_daily_output"]),
-        machine_breakdown_count=int(
-            prediction_input["machine_breakdown_count"]
-        ),
+        machine_breakdown_count=int(prediction_input["machine_breakdown_count"]),
         worker_shortage_count=int(prediction_input["worker_shortage_count"]),
         daily_damage_qty=int(prediction_input["daily_damage_qty"]),
         max_daily_damage_qty=int(prediction_input["max_daily_damage_qty"]),
@@ -66,13 +63,9 @@ def _current_features(prediction_input: dict[str, Any]) -> dict[str, float]:
         cutting_days=int(prediction_input["cutting_days"]),
         sewing_days=int(prediction_input["sewing_days"]),
         full_order_qty=int(prediction_input["full_order_qty"]),
-        cumulative_completed_qty=int(
-            prediction_input["cumulative_completed_qty"]
-        ),
+        cumulative_completed_qty=int(prediction_input["cumulative_completed_qty"]),
     )
-    return {
-        feature: float(canonical[feature]) for feature in CURRENT_FEATURES
-    }
+    return {feature: float(canonical[feature]) for feature in CURRENT_FEATURES}
 
 
 def _record_is_emergency(record: dict[str, Any]) -> bool:
@@ -82,8 +75,7 @@ def _record_is_emergency(record: dict[str, Any]) -> bool:
         or str(record.get("risk_type", "No Issue")) != "No Issue"
         or int(prediction_input["worker_shortage_count"]) > 0
         or int(prediction_input["machine_breakdown_count"]) > 0
-        or int(prediction_input["daily_damage_qty"])
-        > int(prediction_input["max_daily_damage_qty"])
+        or int(prediction_input["daily_damage_qty"]) > int(prediction_input["max_daily_damage_qty"])
     )
 
 
@@ -119,7 +111,7 @@ def _history_evidence(
     day_numbers.append(current_day)
     gap_count = sum(
         current - previous != 1
-        for previous, current in zip(day_numbers, day_numbers[1:])
+        for previous, current in zip(day_numbers, day_numbers[1:], strict=False)
     )
     feature_days = min(len(prior) + 1, 3)
     if gap_count:
@@ -138,9 +130,7 @@ def _history_evidence(
         "status": status,
         "working_day_gap_detected": bool(gap_count),
         "working_day_gap_transitions": gap_count,
-        "latest_prior_working_day": (
-            int(prior[-1]["working_day_no"]) if prior else None
-        ),
+        "latest_prior_working_day": (int(prior[-1]["working_day_no"]) if prior else None),
         "future_or_current_saved_rows_used": 0,
     }
 
@@ -158,28 +148,18 @@ def build_inference_feature_row(
     }
     observations = [*prior, current_observation]
     trailing = observations[-3:]
-    previous_input = (
-        prior[-1]["prediction_input"] if prior else prediction_input
-    )
+    previous_input = prior[-1]["prediction_input"] if prior else prediction_input
     current_input = prediction_input
     outputs = pd.Series(
-        [
-            float(record["prediction_input"]["plant_daily_output"])
-            for record in trailing
-        ],
+        [float(record["prediction_input"]["plant_daily_output"]) for record in trailing],
         dtype="float64",
     )
     gaps = pd.Series(
-        [
-            _current_features(record["prediction_input"])["Gap_Pct"]
-            for record in trailing
-        ],
+        [_current_features(record["prediction_input"])["Gap_Pct"] for record in trailing],
         dtype="float64",
     )
     earlier_emergency_positions = [
-        position
-        for position, record in enumerate(prior)
-        if _record_is_emergency(record)
+        position for position, record in enumerate(prior) if _record_is_emergency(record)
     ]
     days_since_last_emergency = (
         len(prior) - earlier_emergency_positions[-1]
@@ -191,12 +171,9 @@ def build_inference_feature_row(
     features.update(
         {
             "History_Days_Available": float(len(trailing)),
-            "Previous_Day_Output": float(
-                previous_input["plant_daily_output"]
-            ),
+            "Previous_Day_Output": float(previous_input["plant_daily_output"]),
             "Output_Change_From_Previous": float(
-                int(current_input["plant_daily_output"])
-                - int(previous_input["plant_daily_output"])
+                int(current_input["plant_daily_output"]) - int(previous_input["plant_daily_output"])
             ),
             "Trailing_3D_Avg_Output": round(float(outputs.mean()), 4),
             "Trailing_3D_Output_Std": round(
@@ -209,24 +186,20 @@ def build_inference_feature_row(
             ),
             "Trailing_3D_Worker_Shortage_Days": float(
                 sum(
-                    int(record["prediction_input"]["worker_shortage_count"])
-                    > 0
+                    int(record["prediction_input"]["worker_shortage_count"]) > 0
                     for record in trailing
                 )
             ),
             "Trailing_3D_Machine_Breakdown_Days": float(
                 sum(
-                    int(record["prediction_input"]["machine_breakdown_count"])
-                    > 0
+                    int(record["prediction_input"]["machine_breakdown_count"]) > 0
                     for record in trailing
                 )
             ),
             "Trailing_3D_Quality_Limit_Days": float(
                 sum(
                     int(record["prediction_input"]["daily_damage_qty"])
-                    > int(
-                        record["prediction_input"]["max_daily_damage_qty"]
-                    )
+                    > int(record["prediction_input"]["max_daily_damage_qty"])
                     for record in trailing
                 )
             ),
@@ -235,16 +208,10 @@ def build_inference_feature_row(
     )
     missing = sorted(set(EARLY_WARNING_FEATURES).difference(features))
     if missing:
-        raise EarlyWarningModelError(
-            f"Early-warning feature builder is missing columns: {missing}"
-        )
+        raise EarlyWarningModelError(f"Early-warning feature builder is missing columns: {missing}")
     row = pd.DataFrame([features], columns=EARLY_WARNING_FEATURES)
-    if row.isna().any(axis=None) or not all(
-        math.isfinite(float(value)) for value in row.iloc[0]
-    ):
-        raise EarlyWarningModelError(
-            "Early-warning feature row contains invalid numeric values"
-        )
+    if row.isna().any(axis=None) or not all(math.isfinite(float(value)) for value in row.iloc[0]):
+        raise EarlyWarningModelError("Early-warning feature row contains invalid numeric values")
     return row, _history_evidence(prediction_input, prior)
 
 
@@ -258,9 +225,7 @@ def load_early_warning_artifacts(
     for target, spec in MODEL_SPECS.items():
         path = models_path / spec["filename"]
         if not path.is_file():
-            raise EarlyWarningModelError(
-                f"Missing early-warning model artifact: {path.name}"
-            )
+            raise EarlyWarningModelError(f"Missing early-warning model artifact: {path.name}")
         try:
             artifact = joblib.load(path)
         except Exception as exc:
@@ -268,21 +233,13 @@ def load_early_warning_artifacts(
                 f"Could not load early-warning model artifact: {path.name}"
             ) from exc
         if not isinstance(artifact, dict):
-            raise EarlyWarningModelError(
-                f"Invalid early-warning artifact structure: {path.name}"
-            )
+            raise EarlyWarningModelError(f"Invalid early-warning artifact structure: {path.name}")
         if artifact.get("target") != target:
-            raise EarlyWarningModelError(
-                f"Early-warning target mismatch in {path.name}"
-            )
+            raise EarlyWarningModelError(f"Early-warning target mismatch in {path.name}")
         if artifact.get("features") != EARLY_WARNING_FEATURES:
-            raise EarlyWarningModelError(
-                f"Early-warning feature contract mismatch in {path.name}"
-            )
+            raise EarlyWarningModelError(f"Early-warning feature contract mismatch in {path.name}")
         if artifact.get("horizon_production_days") != 3:
-            raise EarlyWarningModelError(
-                f"Early-warning horizon mismatch in {path.name}"
-            )
+            raise EarlyWarningModelError(f"Early-warning horizon mismatch in {path.name}")
         if artifact.get("production_approved") is not False:
             raise EarlyWarningModelError(
                 f"Early-warning approval metadata is invalid in {path.name}"
@@ -296,16 +253,13 @@ def load_early_warning_artifacts(
             not isinstance(calibration, dict)
             or calibration.get("is_calibrated") is not True
             or calibration.get("method") != "grouped_sigmoid_on_logit"
-            or calibration.get("outer_validation")
-            != "Nested Leave-One-Group-Out"
+            or calibration.get("outer_validation") != "Nested Leave-One-Group-Out"
         ):
             raise EarlyWarningModelError(
                 f"Early-warning calibration evidence is invalid in {path.name}"
             )
         if not isinstance(artifact.get("model_name"), str):
-            raise EarlyWarningModelError(
-                f"Early-warning model name is invalid in {path.name}"
-            )
+            raise EarlyWarningModelError(f"Early-warning model name is invalid in {path.name}")
         metrics = artifact.get("validation_metrics")
         if not isinstance(metrics, dict) or set(metrics) != {
             "accuracy",
@@ -324,14 +278,10 @@ def load_early_warning_artifacts(
             )
         estimator = artifact.get("estimator")
         if estimator is None or not hasattr(estimator, "predict_proba"):
-            raise EarlyWarningModelError(
-                f"Early-warning estimator is invalid in {path.name}"
-            )
+            raise EarlyWarningModelError(f"Early-warning estimator is invalid in {path.name}")
         threshold = artifact.get("decision_threshold")
         if not isinstance(threshold, (int, float)) or not 0 <= threshold <= 1:
-            raise EarlyWarningModelError(
-                f"Early-warning threshold is invalid in {path.name}"
-            )
+            raise EarlyWarningModelError(f"Early-warning threshold is invalid in {path.name}")
         artifacts[target] = artifact
     return artifacts
 
@@ -346,13 +296,9 @@ def _positive_probability(estimator: Any, row: pd.DataFrame) -> float:
         classes = [int(value) for value in estimator.classes_]
         probabilities = estimator.predict_proba(row)[0]
     except Exception as exc:
-        raise EarlyWarningModelError(
-            "Early-warning estimator could not produce a score"
-        ) from exc
+        raise EarlyWarningModelError("Early-warning estimator could not produce a score") from exc
     if 1 not in classes:
-        raise EarlyWarningModelError(
-            "Early-warning estimator does not contain the positive class"
-        )
+        raise EarlyWarningModelError("Early-warning estimator does not contain the positive class")
     try:
         probability = float(probabilities[classes.index(1)])
     except (IndexError, TypeError, ValueError) as exc:
@@ -360,17 +306,13 @@ def _positive_probability(estimator: Any, row: pd.DataFrame) -> float:
             "Early-warning estimator returned invalid probabilities"
         ) from exc
     if not math.isfinite(probability):
-        raise EarlyWarningModelError(
-            "Early-warning estimator returned a non-finite probability"
-        )
+        raise EarlyWarningModelError("Early-warning estimator returned a non-finite probability")
     return min(1.0, max(0.0, probability))
 
 
 def _raw_positive_probability(estimator: Any, row: pd.DataFrame) -> float:
     if not hasattr(estimator, "raw_predict_proba"):
-        raise EarlyWarningModelError(
-            "Calibrated early-warning estimator has no raw audit score"
-        )
+        raise EarlyWarningModelError("Calibrated early-warning estimator has no raw audit score")
     try:
         classes = [int(value) for value in estimator.classes_]
         probabilities = estimator.raw_predict_proba(row)[0]
@@ -439,9 +381,9 @@ def predict_early_warnings(
     models_directory: str | Path,
 ) -> dict[str, Any]:
     """Predict supported three-day subtype outcomes for a stable current day."""
-    order_completed = int(
-        prediction_input["cumulative_completed_qty"]
-    ) >= int(prediction_input["full_order_qty"])
+    order_completed = int(prediction_input["cumulative_completed_qty"]) >= int(
+        prediction_input["full_order_qty"]
+    )
     if order_completed:
         return _completed_order_response(current_risk_type)
 
@@ -449,8 +391,7 @@ def predict_early_warnings(
         current_risk_type != "No Issue"
         or int(prediction_input["worker_shortage_count"]) > 0
         or int(prediction_input["machine_breakdown_count"]) > 0
-        or int(prediction_input["daily_damage_qty"])
-        > int(prediction_input["max_daily_damage_qty"])
+        or int(prediction_input["daily_damage_qty"]) > int(prediction_input["max_daily_damage_qty"])
     )
     if current_emergency:
         return _not_applicable_response(current_risk_type)
@@ -474,9 +415,7 @@ def predict_early_warnings(
                 "probability": round(probability, 6),
                 "probability_pct": round(probability * 100, 2),
                 "probability_calibrated": True,
-                "calibration_method": str(
-                    artifact["calibration"]["method"]
-                ),
+                "calibration_method": str(artifact["calibration"]["method"]),
                 "raw_probability_audit": round(raw_probability, 6),
                 "raw_probability_audit_pct": round(
                     raw_probability * 100,
@@ -485,17 +424,13 @@ def predict_early_warnings(
                 "decision_threshold": threshold,
                 "warning_predicted": probability >= threshold,
                 "model_name": str(artifact["model_name"]),
-                "validation_metrics": dict(
-                    artifact.get("validation_metrics", {})
-                ),
+                "validation_metrics": dict(artifact.get("validation_metrics", {})),
                 "preparation": spec["preparation"],
             }
         )
 
     highest = max(warnings, key=lambda warning: warning["probability"])
-    alert_generated = any(
-        warning["warning_predicted"] for warning in warnings
-    )
+    alert_generated = any(warning["warning_predicted"] for warning in warnings)
     return {
         "inference_version": INFERENCE_VERSION,
         "status": "available",

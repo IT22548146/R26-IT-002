@@ -12,7 +12,6 @@ from components.component3_historical_validation import (
     load_historical_workbook,
 )
 
-
 IMPORT_VERSION = "component3-historical-import-v1"
 
 PREDICTION_FIELDS = (
@@ -159,9 +158,7 @@ def historical_actual_outcome(
         return True, "Machine Breakdown"
     if int(row.get("Worker_Shortage_Count", 0)) > 0:
         return True, "Worker Shortage"
-    if int(row.get("Daily_Damage_Qty", 0)) > int(
-        row.get("Max_Daily_Damage_Qty", 0)
-    ):
+    if int(row.get("Daily_Damage_Qty", 0)) > int(row.get("Max_Daily_Damage_Qty", 0)):
         return True, "Quality Issue"
     if risk_type != "No Issue":
         return True, "Other Emergency"
@@ -184,8 +181,7 @@ def prediction_inputs_match(
 ) -> bool:
     """Compare only the canonical monitoring fields, not recovery defaults."""
     return all(
-        _comparison_value(first.get(field), field)
-        == _comparison_value(second.get(field), field)
+        _comparison_value(first.get(field), field) == _comparison_value(second.get(field), field)
         for field in PREDICTION_FIELDS
     )
 
@@ -198,9 +194,7 @@ def _load_sources(
     master_path = Path(component2_path)
     daily, daily_audit = load_historical_workbook(daily_path)
     if not master_path.is_file():
-        raise FileNotFoundError(
-            f"Component 2 master workbook not found: {master_path}"
-        )
+        raise FileNotFoundError(f"Component 2 master workbook not found: {master_path}")
     master = pd.read_excel(
         master_path,
         sheet_name="Component2_Bulk_400",
@@ -261,21 +255,17 @@ def load_historical_order(
 ) -> list[dict[str, Any]]:
     """Return one source order in strict production-day order."""
     daily, _, _, _, _ = _load_sources(component3_path, component2_path)
-    selected = daily.loc[
-        daily["Bulk_Order_ID"].astype(str).eq(str(bulk_order_id))
-    ].sort_values(["Working_Day_No", "Production_Date"])
+    selected = daily.loc[daily["Bulk_Order_ID"].astype(str).eq(str(bulk_order_id))].sort_values(
+        ["Working_Day_No", "Production_Date"]
+    )
     if selected.empty:
-        raise ValueError(
-            f"Historical bulk order {bulk_order_id!r} was not found"
-        )
+        raise ValueError(f"Historical bulk order {bulk_order_id!r} was not found")
     records: list[dict[str, Any]] = []
     for source_row in selected.to_dict(orient="records"):
         actual_emergency, actual_type = historical_actual_outcome(source_row)
         records.append(
             {
-                "prediction_input": historical_row_to_prediction_input(
-                    source_row
-                ),
+                "prediction_input": historical_row_to_prediction_input(source_row),
                 "source_risk_type": str(source_row["Risk_Type"]).strip(),
                 "actual_emergency": actual_emergency,
                 "actual_emergency_type": actual_type,
@@ -296,9 +286,7 @@ def build_historical_import_preview(
     )
     existing_by_order: dict[str, list[dict[str, Any]]] = {}
     for record in existing_records:
-        existing_by_order.setdefault(str(record["bulk_order_id"]), []).append(
-            record
-        )
+        existing_by_order.setdefault(str(record["bulk_order_id"]), []).append(record)
 
     orders: list[dict[str, Any]] = []
     total_importable = 0
@@ -306,24 +294,16 @@ def build_historical_import_preview(
     total_existing_conflicts = 0
     component2_matches = 0
     for order_id, order_rows in daily.groupby("Bulk_Order_ID", sort=True):
-        ordered = order_rows.sort_values(
-            ["Working_Day_No", "Production_Date"]
-        )
+        ordered = order_rows.sort_values(["Working_Day_No", "Production_Date"])
         first = ordered.iloc[0].to_dict()
-        master_rows = master.loc[
-            master["Bulk_Order_ID"].astype(str).eq(str(order_id))
-        ]
+        master_rows = master.loc[master["Bulk_Order_ID"].astype(str).eq(str(order_id))]
         comparison = _master_comparison(first, master_rows)
         if comparison["status"].startswith("matched"):
             component2_matches += 1
 
         existing_order = existing_by_order.get(str(order_id), [])
-        by_day = {
-            int(record["working_day_no"]): record for record in existing_order
-        }
-        by_date = {
-            str(record["production_date"]): record for record in existing_order
-        }
+        by_day = {int(record["working_day_no"]): record for record in existing_order}
+        by_date = {str(record["production_date"]): record for record in existing_order}
         importable = 0
         existing_matching = 0
         existing_conflicts = 0

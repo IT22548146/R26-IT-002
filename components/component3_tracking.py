@@ -6,10 +6,10 @@ import json
 import os
 import sqlite3
 import uuid
+from collections.abc import Iterator
 from contextlib import contextmanager
-from datetime import datetime, timezone
-from typing import Any, Iterator
-
+from datetime import UTC, datetime
+from typing import Any
 
 INCIDENT_STATUSES = ("Pending", "Approved", "In Progress", "Completed")
 STATUS_TRANSITIONS = {
@@ -29,7 +29,7 @@ class TrackingConflictError(RuntimeError):
 
 
 def utc_now() -> str:
-    return datetime.now(timezone.utc).isoformat(timespec="microseconds")
+    return datetime.now(UTC).isoformat(timespec="microseconds")
 
 
 def normalize_status(value: Any) -> str:
@@ -75,6 +75,7 @@ class Component3TrackingStore:
                 CREATE TABLE IF NOT EXISTS component3_incidents (
                     incident_id TEXT PRIMARY KEY,
                     bulk_order_id TEXT NOT NULL,
+                    plant_key TEXT NOT NULL DEFAULT '',
                     style_id TEXT NOT NULL,
                     buyer_name TEXT NOT NULL,
                     allocated_bulk_plant TEXT NOT NULL,
@@ -141,9 +142,55 @@ class Component3TrackingStore:
                 """
             )
 
+            columns = {
+                row[1]
+                for row in connection.execute("PRAGMA table_info(component3_incidents)").fetchall()
+            }
+            if "plant_key" not in columns:
+                connection.execute(
+                    "ALTER TABLE component3_incidents ADD COLUMN plant_key TEXT NOT NULL DEFAULT ''"
+                )
+
+            legacy_rows = connection.execute(
+                """SELECT incident_id, prediction_input_json
+                   FROM component3_incidents
+                   WHERE plant_key = ''"""
+            ).fetchall()
+            for row in legacy_rows:
+                try:
+                    prediction_input = json.loads(row["prediction_input_json"])
+                    plant_key = self._plant_key(prediction_input)
+                except Exception:
+                    plant_key = ""
+                connection.execute(
+                    "UPDATE component3_incidents SET plant_key=? WHERE incident_id=?",
+                    (plant_key, row["incident_id"]),
+                )
+
+            # Split allocations may share a bulk-order ID and production date,
+            # so incident uniqueness must include the assigned plant.
+            connection.execute("DROP INDEX IF EXISTS idx_component3_incidents_daily_order")
+            connection.execute(
+                """CREATE UNIQUE INDEX IF NOT EXISTS
+                   idx_component3_incidents_daily_order
+                   ON component3_incidents
+                   (bulk_order_id, plant_key, production_date)"""
+            )
+            connection.execute(
+                """CREATE INDEX IF NOT EXISTS idx_component3_incidents_plant
+                   ON component3_incidents (plant_key, created_at DESC)"""
+            )
+
     @staticmethod
     def _json(value: Any) -> str:
         return json.dumps(value, ensure_ascii=False, separators=(",", ":"))
+
+    @staticmethod
+    def _plant_key(prediction_input: dict[str, Any]) -> str:
+        value = prediction_input.get("integrated_plant_id") or prediction_input.get(
+            "allocated_bulk_plant"
+        )
+        return str(value or "").strip()
 
     @staticmethod
     def _option_map(analysis: dict[str, Any]) -> dict[str, dict[str, Any]]:
@@ -199,22 +246,24 @@ class Component3TrackingStore:
         recommended = recovery_plan.get("recommended_option") or {}
         recommended_option_id = recommended.get("option_id")
         risk_detection = analysis.get("risk_detection") or {}
+        plant_key = self._plant_key(prediction_input)
 
         with self._connection() as connection:
             try:
                 connection.execute(
                     """
                     INSERT INTO component3_incidents (
-                        incident_id, bulk_order_id, style_id, buyer_name,
+                        incident_id, bulk_order_id, plant_key, style_id, buyer_name,
                         allocated_bulk_plant, production_date, risk_type,
                         order_risk_level, severity, workflow_status,
                         recommended_option_id, prediction_input_json,
                         analysis_json, created_at, updated_at
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """,
                     (
                         incident_id,
                         str(analysis["bulk_order_id"]),
+                        plant_key,
                         str(analysis["style_id"]),
                         str(analysis["buyer_name"]),
                         str(analysis["allocated_bulk_plant"]),
@@ -232,8 +281,7 @@ class Component3TrackingStore:
                 )
             except sqlite3.IntegrityError as exc:
                 raise TrackingConflictError(
-                    "An incident already exists for this bulk order and "
-                    "production date"
+                    "An incident already exists for this bulk order and production date"
                 ) from exc
             self._add_event(
                 connection,
@@ -254,6 +302,7 @@ class Component3TrackingStore:
         self,
         *,
         bulk_order_id: str | None = None,
+        plant_key: str | None = None,
         status: str | None = None,
         limit: int = 50,
         offset: int = 0,
@@ -263,6 +312,9 @@ class Component3TrackingStore:
         if bulk_order_id:
             where.append("bulk_order_id = ?")
             params.append(bulk_order_id)
+        if plant_key:
+            where.append("plant_key = ?")
+            params.append(plant_key)
         if status:
             where.append("workflow_status = ?")
             params.append(status)
@@ -322,9 +374,7 @@ class Component3TrackingStore:
                 "prediction_input": json.loads(row["prediction_input_json"]),
                 "analysis": json.loads(row["analysis_json"]),
                 "selected_option": (
-                    json.loads(row["selected_option_json"])
-                    if row["selected_option_json"]
-                    else None
+                    json.loads(row["selected_option_json"]) if row["selected_option_json"] else None
                 ),
                 "outcomes": [self._outcome(row) for row in outcomes],
                 "timeline": [self._event(row) for row in events],
@@ -357,9 +407,7 @@ class Component3TrackingStore:
             options = self._option_map(analysis)
             selected_option = options.get(selected_option_id)
             if selected_option is None:
-                raise ValueError(
-                    f"selected_option_id must be one of {sorted(options)}"
-                )
+                raise ValueError(f"selected_option_id must be one of {sorted(options)}")
 
             connection.execute(
                 """
@@ -484,9 +532,7 @@ class Component3TrackingStore:
                     "Outcomes can only be recorded for In Progress or Completed incidents"
                 )
             if outcome_date <= incident["production_date"]:
-                raise ValueError(
-                    "outcome_date must be after the incident production_date"
-                )
+                raise ValueError("outcome_date must be after the incident production_date")
 
             analysis = json.loads(incident["analysis_json"])
             full_order_qty = analysis.get("order_summary", {}).get("full_order_qty")
@@ -509,9 +555,7 @@ class Component3TrackingStore:
                 target = recovery_plan.get("required_daily_rate")
             target = float(target) if target is not None else None
 
-            output_variance = (
-                round(actual_daily_output - target, 2) if target is not None else None
-            )
+            output_variance = round(actual_daily_output - target, 2) if target is not None else None
             effectiveness = (
                 round(actual_daily_output / target * 100, 2)
                 if target is not None and target > 0
@@ -524,9 +568,7 @@ class Component3TrackingStore:
                 original_gap = float(required_rate) - float(current_capacity)
                 if original_gap > 0:
                     gap_closed = round(
-                        (actual_daily_output - float(current_capacity))
-                        / original_gap
-                        * 100,
+                        (actual_daily_output - float(current_capacity)) / original_gap * 100,
                         2,
                     )
 
@@ -589,6 +631,7 @@ class Component3TrackingStore:
         return {
             "incident_id": row["incident_id"],
             "bulk_order_id": row["bulk_order_id"],
+            "plant_key": row["plant_key"],
             "style_id": row["style_id"],
             "buyer_name": row["buyer_name"],
             "allocated_bulk_plant": row["allocated_bulk_plant"],

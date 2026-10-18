@@ -15,7 +15,6 @@ import pandas as pd
 from components.component3_features import build_feature_frame
 from components.component3_historical_validation import load_historical_workbook
 
-
 REPORT_VERSION = "component3-early-warning-step5a-v1"
 DEFAULT_HORIZON = 3
 MIN_ROWS_PER_CLASS = 20
@@ -95,9 +94,7 @@ def emergency_mask(data: pd.DataFrame) -> pd.Series:
         | data["Machine_Breakdown_Count"].gt(0)
         | data["Daily_Damage_Qty"].gt(data["Max_Daily_Damage_Qty"])
     )
-    labelled_risk = data["Risk_Type"].fillna("").astype(str).str.strip().ne(
-        "No Issue"
-    )
+    labelled_risk = data["Risk_Type"].fillna("").astype(str).str.strip().ne("No Issue")
     return operational | labelled_risk
 
 
@@ -116,9 +113,7 @@ def _first_emergency_type(row: pd.Series) -> str:
 
 def _days_since_last_emergency(mask: pd.Series, position: int) -> int:
     earlier = mask.iloc[:position]
-    emergency_positions = [
-        index for index, occurred in enumerate(earlier.tolist()) if occurred
-    ]
+    emergency_positions = [index for index, occurred in enumerate(earlier.tolist()) if occurred]
     if not emergency_positions:
         return position + 1
     return position - emergency_positions[-1]
@@ -128,12 +123,10 @@ def _sequence_quality(data: pd.DataFrame) -> dict[str, int]:
     working_day_jumps = 0
     non_increasing_dates = 0
     for _, order_rows in data.groupby("Bulk_Order_ID", sort=False):
-        ordered = order_rows.sort_values(
-            ["Production_Date", "Working_Day_No"]
-        ).reset_index(drop=True)
-        working_day_jumps += int(
-            ordered["Working_Day_No"].diff().dropna().ne(1).sum()
+        ordered = order_rows.sort_values(["Production_Date", "Working_Day_No"]).reset_index(
+            drop=True
         )
+        working_day_jumps += int(ordered["Working_Day_No"].diff().dropna().ne(1).sum())
         non_increasing_dates += int(
             ordered["Production_Date"].diff().dropna().le(pd.Timedelta(0)).sum()
         )
@@ -159,9 +152,7 @@ def build_early_warning_dataset(
     complete_horizon_rows_all_states = 0
 
     for _, positions in data.groupby("Bulk_Order_ID", sort=False).groups.items():
-        order = data.loc[list(positions)].sort_values(
-            ["Production_Date", "Working_Day_No"]
-        )
+        order = data.loc[list(positions)].sort_values(["Production_Date", "Working_Day_No"])
         order_features = canonical_features.loc[order.index]
         current_emergencies = emergency_mask(order)
 
@@ -183,9 +174,7 @@ def build_early_warning_dataset(
             trailing_start = max(0, position - 2)
             trailing = order.iloc[trailing_start : position + 1]
             trailing_features = order_features.iloc[trailing_start : position + 1]
-            trailing_emergencies = current_emergencies.iloc[
-                trailing_start : position + 1
-            ]
+            trailing_emergencies = current_emergencies.iloc[trailing_start : position + 1]
 
             first_type = "No Emergency"
             first_lead: int | None = None
@@ -213,10 +202,7 @@ def build_early_warning_dataset(
                 "Production_Date": row["Production_Date"].strftime("%Y-%m-%d"),
             }
             record.update(
-                {
-                    feature: float(current_features[feature])
-                    for feature in CURRENT_FEATURES
-                }
+                {feature: float(current_features[feature]) for feature in CURRENT_FEATURES}
             )
             record.update(
                 {
@@ -231,12 +217,8 @@ def build_early_warning_dataset(
                     "Trailing_3D_Output_Std": round(
                         float(trailing["Plant_Daily_Output"].std(ddof=0)), 4
                     ),
-                    "Trailing_3D_Avg_Gap_Pct": round(
-                        float(trailing_features["Gap_Pct"].mean()), 4
-                    ),
-                    "Trailing_3D_Emergency_Days": int(
-                        trailing_emergencies.sum()
-                    ),
+                    "Trailing_3D_Avg_Gap_Pct": round(float(trailing_features["Gap_Pct"].mean()), 4),
+                    "Trailing_3D_Emergency_Days": int(trailing_emergencies.sum()),
                     "Trailing_3D_Worker_Shortage_Days": int(
                         trailing["Worker_Shortage_Count"].gt(0).sum()
                     ),
@@ -244,9 +226,7 @@ def build_early_warning_dataset(
                         trailing["Machine_Breakdown_Count"].gt(0).sum()
                     ),
                     "Trailing_3D_Quality_Limit_Days": int(
-                        trailing["Daily_Damage_Qty"]
-                        .gt(trailing["Max_Daily_Damage_Qty"])
-                        .sum()
+                        trailing["Daily_Damage_Qty"].gt(trailing["Max_Daily_Damage_Qty"]).sum()
                     ),
                     "Days_Since_Last_Emergency": _days_since_last_emergency(
                         current_emergencies, position
@@ -262,13 +242,9 @@ def build_early_warning_dataset(
                         future["Machine_Breakdown_Count"].gt(0).any()
                     ),
                     "Quality_Limit_Within_3_Days": int(
-                        future["Daily_Damage_Qty"]
-                        .gt(future["Max_Daily_Damage_Qty"])
-                        .any()
+                        future["Daily_Damage_Qty"].gt(future["Max_Daily_Damage_Qty"]).any()
                     ),
-                    "Output_Schedule_Risk_Within_3_Days": int(
-                        schedule_only.any()
-                    ),
+                    "Output_Schedule_Risk_Within_3_Days": int(schedule_only.any()),
                 }
             )
             labelled_records.append(record)
@@ -295,22 +271,14 @@ def _binary_readiness(
     counts = labelled[target].value_counts().to_dict()
     positive_rows = int(counts.get(1, 0))
     negative_rows = int(counts.get(0, 0))
-    positive_orders = int(
-        labelled.loc[labelled[target].eq(1), "Bulk_Order_ID"].nunique()
-    )
-    negative_orders = int(
-        labelled.loc[labelled[target].eq(0), "Bulk_Order_ID"].nunique()
-    )
+    positive_orders = int(labelled.loc[labelled[target].eq(1), "Bulk_Order_ID"].nunique())
+    negative_orders = int(labelled.loc[labelled[target].eq(0), "Bulk_Order_ID"].nunique())
     rows_sufficient = min(positive_rows, negative_rows) >= MIN_ROWS_PER_CLASS
-    orders_sufficient = (
-        min(positive_orders, negative_orders) >= MIN_ORDERS_PER_CLASS
-    )
+    orders_sufficient = min(positive_orders, negative_orders) >= MIN_ORDERS_PER_CLASS
     return {
         "positive_rows": positive_rows,
         "negative_rows": negative_rows,
-        "positive_rate": round(positive_rows / len(labelled), 4)
-        if len(labelled)
-        else None,
+        "positive_rate": round(positive_rows / len(labelled), 4) if len(labelled) else None,
         "positive_orders": positive_orders,
         "negative_orders": negative_orders,
         "minimum_rows_per_class_required": MIN_ROWS_PER_CLASS,
@@ -328,17 +296,13 @@ def _type_readiness(labelled: pd.DataFrame) -> dict[str, Any]:
     insufficient = sorted(
         label
         for label in counts
-        if counts[label] < MIN_ROWS_PER_CLASS
-        or order_counts.get(label, 0) < MIN_ORDERS_PER_CLASS
+        if counts[label] < MIN_ROWS_PER_CLASS or order_counts.get(label, 0) < MIN_ORDERS_PER_CLASS
     )
     return {
         "class_rows": {str(key): int(value) for key, value in counts.items()},
-        "class_orders": {
-            str(key): int(value) for key, value in order_counts.items()
-        },
+        "class_orders": {str(key): int(value) for key, value in order_counts.items()},
         "insufficient_classes": insufficient,
-        "ready_for_grouped_multiclass_modeling": not insufficient
-        and len(counts) >= 2,
+        "ready_for_grouped_multiclass_modeling": not insufficient and len(counts) >= 2,
     }
 
 
@@ -363,9 +327,7 @@ def audit_early_warning_dataset(
             "Output_Schedule_Risk_Within_3_Days",
         )
     }
-    primary_ready = targets["Emergency_Within_3_Days"][
-        "ready_for_grouped_modeling"
-    ]
+    primary_ready = targets["Emergency_Within_3_Days"]["ready_for_grouped_modeling"]
     subtype_candidates = [
         target
         for target in (

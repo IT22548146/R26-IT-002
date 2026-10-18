@@ -11,7 +11,7 @@ import argparse
 import hashlib
 import json
 import platform
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 import joblib
@@ -40,7 +40,6 @@ from sklearn.pipeline import make_pipeline
 from sklearn.preprocessing import StandardScaler
 
 from components.component3_features import FEATURES, build_feature_frame
-
 
 RANDOM_SEED = 42
 RISK_LABELS = [
@@ -151,9 +150,7 @@ def validate_dataset(data: pd.DataFrame) -> None:
     unknown_risk_types = sorted(set(data["Risk_Type"].dropna()) - set(RISK_LABELS))
     if unknown_risk_types:
         raise ValueError(f"Unknown Risk_Type labels: {unknown_risk_types}")
-    unknown_order_risk = sorted(
-        set(data["Order_Risk_Level"].dropna()) - {"Low", "High"}
-    )
+    unknown_order_risk = sorted(set(data["Order_Risk_Level"].dropna()) - {"Low", "High"})
     if unknown_order_risk:
         raise ValueError(f"Unknown Order_Risk_Level labels: {unknown_order_risk}")
 
@@ -208,9 +205,7 @@ def evaluate_model1(
     for name, candidate in candidates.items():
         predictions = np.empty(len(real), dtype=int)
         for train_indices, test_indices in splits:
-            X_train = pd.concat(
-                [real_X.iloc[train_indices], augmented_X], ignore_index=True
-            )
+            X_train = pd.concat([real_X.iloc[train_indices], augmented_X], ignore_index=True)
             y_train = np.concatenate([real_y[train_indices], augmented_y])
             model = clone(candidate)
             model.fit(X_train, y_train)
@@ -265,16 +260,12 @@ def evaluate_model2(
         predictions = np.empty(len(real), dtype=int)
         probabilities = np.empty(len(real), dtype=float)
         for train_indices, test_indices in splits:
-            X_train = pd.concat(
-                [real_X.iloc[train_indices], augmented_X], ignore_index=True
-            )
+            X_train = pd.concat([real_X.iloc[train_indices], augmented_X], ignore_index=True)
             y_train = np.concatenate([real_y[train_indices], augmented_y])
             model = clone(candidate)
             model.fit(X_train, y_train)
             predictions[test_indices] = model.predict(real_X.iloc[test_indices])
-            probabilities[test_indices] = positive_probabilities(
-                model, real_X.iloc[test_indices]
-            )
+            probabilities[test_indices] = positive_probabilities(model, real_X.iloc[test_indices])
 
         evaluations[name] = {
             "accuracy": float(accuracy_score(real_y, predictions)),
@@ -309,7 +300,9 @@ def evaluate_model2(
 
 
 def select_candidate(evaluations: dict[str, dict]) -> str:
-    eligible = {name: metrics for name, metrics in evaluations.items() if not name.startswith("dummy")}
+    eligible = {
+        name: metrics for name, metrics in evaluations.items() if not name.startswith("dummy")
+    }
     return max(
         eligible,
         key=lambda name: (
@@ -363,13 +356,9 @@ def main() -> None:
     low_risk_real_orders = int(
         real.loc[real["Order_Risk_Level"].eq("Low"), "Bulk_Order_ID"].nunique()
     )
-    risk_type_real_rows = {
-        label: int(real["Risk_Type"].eq(label).sum()) for label in RISK_LABELS
-    }
+    risk_type_real_rows = {label: int(real["Risk_Type"].eq(label).sum()) for label in RISK_LABELS}
     risk_type_real_orders = {
-        label: int(
-            real.loc[real["Risk_Type"].eq(label), "Bulk_Order_ID"].nunique()
-        )
+        label: int(real.loc[real["Risk_Type"].eq(label), "Bulk_Order_ID"].nunique())
         for label in RISK_LABELS
     }
     risk_type_model_approved = all(
@@ -391,15 +380,14 @@ def main() -> None:
     dataset_hash = hashlib.sha256(args.data.read_bytes()).hexdigest()
     metadata = {
         "artifact_version": "2.0.0",
-        "trained_at_utc": datetime.now(timezone.utc).isoformat(),
+        "trained_at_utc": datetime.now(UTC).isoformat(),
         "production_approved": production_approved,
         "model_approval": {
             "risk_type": risk_type_model_approved,
             "order_risk": order_risk_model_approved,
         },
-        "approval_notes": approval_notes or [
-            "Independent real-order coverage meets the configured minimums."
-        ],
+        "approval_notes": approval_notes
+        or ["Independent real-order coverage meets the configured minimums."],
         "dataset": {
             "path": str(args.data.resolve()),
             "sha256": dataset_hash,

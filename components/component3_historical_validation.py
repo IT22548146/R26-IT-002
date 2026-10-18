@@ -17,7 +17,6 @@ import pandas as pd
 
 from components.component3_recovery import build_recovery_plan
 
-
 REPORT_VERSION = "component3-recovery-historical-v1"
 
 COLUMN_ALIASES = {
@@ -93,9 +92,7 @@ def _find_header_row(path: Path, sheet_name: str) -> int:
             "Production_Date" in values or "Running_Day_No" in values
         ):
             return int(index)
-    raise ValueError(
-        f"Could not find the Component 3 table header in sheet {sheet_name!r}"
-    )
+    raise ValueError(f"Could not find the Component 3 table header in sheet {sheet_name!r}")
 
 
 def _boolean_mask(series: pd.Series) -> pd.Series:
@@ -173,9 +170,7 @@ def load_historical_workbook(path: str | Path) -> tuple[pd.DataFrame, dict[str, 
     for column in NUMERIC_COLUMNS:
         data[column] = pd.to_numeric(data[column], errors="coerce")
 
-    critical_columns = sorted(
-        REQUIRED_COLUMNS.difference({"Risk_Type", "System_Recommendation"})
-    )
+    critical_columns = sorted(REQUIRED_COLUMNS.difference({"Risk_Type", "System_Recommendation"}))
     invalid = {
         column: int(data[column].isna().sum())
         for column in critical_columns
@@ -184,28 +179,21 @@ def load_historical_workbook(path: str | Path) -> tuple[pd.DataFrame, dict[str, 
     if invalid:
         raise ValueError(f"Historical dataset contains invalid required values: {invalid}")
 
-    duplicates = int(
-        data.duplicated(subset=["Bulk_Order_ID", "Production_Date"]).sum()
-    )
+    duplicates = int(data.duplicated(subset=["Bulk_Order_ID", "Production_Date"]).sum())
     if duplicates:
         raise ValueError(
-            "Historical dataset contains duplicate bulk-order/production-date rows: "
-            f"{duplicates}"
+            f"Historical dataset contains duplicate bulk-order/production-date rows: {duplicates}"
         )
 
-    data = data.sort_values(
-        ["Bulk_Order_ID", "Production_Date", "Working_Day_No"]
-    ).reset_index(drop=True)
+    data = data.sort_values(["Bulk_Order_ID", "Production_Date", "Working_Day_No"]).reset_index(
+        drop=True
+    )
 
-    cumulative_from_output = data.groupby("Bulk_Order_ID")[
-        "Plant_Daily_Output"
-    ].cumsum()
+    cumulative_from_output = data.groupby("Bulk_Order_ID")["Plant_Daily_Output"].cumsum()
     cumulative_mismatches = int(
         (~np.isclose(cumulative_from_output, data["Cumulative_Completed_Qty"])).sum()
     )
-    cumulative_over_order = int(
-        (data["Cumulative_Completed_Qty"] > data["Full_Order_Qty"]).sum()
-    )
+    cumulative_over_order = int((data["Cumulative_Completed_Qty"] > data["Full_Order_Qty"]).sum())
 
     summary = {
         "workbook": workbook_path.name,
@@ -258,9 +246,7 @@ def _payload_from_row(row: pd.Series) -> dict[str, Any]:
         "allocated_bulk_plant": str(row["Allocated_Bulk_Plant"]),
         "plant_location": str(row["Plant_Location"]),
         "full_order_qty": int(row["Full_Order_Qty"]),
-        "bulk_order_approved_date": row["Bulk_Order_Approved_Date"].strftime(
-            "%Y-%m-%d"
-        ),
+        "bulk_order_approved_date": row["Bulk_Order_Approved_Date"].strftime("%Y-%m-%d"),
         "buyer_required_date": row["Buyer_Required_Date"].strftime("%Y-%m-%d"),
         "total_working_days": int(row["Total_Working_Days"]),
         "cutting_days": int(row["Cutting_Days"]),
@@ -322,18 +308,17 @@ def _error_metrics(predicted: pd.Series, actual: pd.Series) -> dict[str, Any]:
         "mae": _rounded(absolute_errors.mean()),
         "rmse": _rounded(math.sqrt(float((errors**2).mean()))),
         "mean_error": _rounded(errors.mean()),
-        "wape_pct": _rounded(absolute_errors.sum() / actual_sum * 100)
-        if actual_sum
-        else None,
+        "wape_pct": _rounded(absolute_errors.sum() / actual_sum * 100) if actual_sum else None,
         "within_10_pct": _rounded((relative <= 0.10).mean()),
     }
 
 
 def _ratio_summary(cases: pd.DataFrame) -> dict[str, Any]:
     ratios = (
-        cases["actual_next_workday_output"]
-        / cases["current_daily_output"].replace(0, np.nan)
-    ).replace([np.inf, -np.inf], np.nan).dropna()
+        (cases["actual_next_workday_output"] / cases["current_daily_output"].replace(0, np.nan))
+        .replace([np.inf, -np.inf], np.nan)
+        .dropna()
+    )
     if ratios.empty:
         return {
             "case_count": 0,
@@ -371,9 +356,7 @@ def build_historical_cases(data: pd.DataFrame) -> pd.DataFrame:
         actual_completion = completion_dates.get(str(row["Bulk_Order_ID"]))
         projected_completion_raw = recommendation.get("projected_completion_date")
         projected_completion = (
-            pd.Timestamp(projected_completion_raw)
-            if projected_completion_raw
-            else pd.NaT
+            pd.Timestamp(projected_completion_raw) if projected_completion_raw else pd.NaT
         )
         deadline = pd.Timestamp(row["Buyer_Required_Date"])
         next_completes_order = bool(
@@ -387,20 +370,14 @@ def build_historical_cases(data: pd.DataFrame) -> pd.DataFrame:
         )
 
         resolved_triggers: list[str] = []
-        if (
-            row["Worker_Shortage_Count"] > 0
-            and next_worker_shortage < row["Worker_Shortage_Count"]
-        ):
+        if row["Worker_Shortage_Count"] > 0 and next_worker_shortage < row["Worker_Shortage_Count"]:
             resolved_triggers.append("worker_shortage")
         if (
             row["Machine_Breakdown_Count"] > 0
             and next_machine_breakdown < row["Machine_Breakdown_Count"]
         ):
             resolved_triggers.append("machine_breakdown")
-        if (
-            row["Daily_Damage_Qty"] > row["Max_Daily_Damage_Qty"]
-            and not next_quality_exceeded
-        ):
+        if row["Daily_Damage_Qty"] > row["Max_Daily_Damage_Qty"] and not next_quality_exceeded:
             resolved_triggers.append("quality_limit")
 
         records.append(
@@ -408,9 +385,7 @@ def build_historical_cases(data: pd.DataFrame) -> pd.DataFrame:
                 "bulk_order_id": str(row["Bulk_Order_ID"]),
                 "style_id": str(row["Style_ID"]),
                 "production_date": row["Production_Date"].strftime("%Y-%m-%d"),
-                "next_production_date": next_row["Production_Date"].strftime(
-                    "%Y-%m-%d"
-                ),
+                "next_production_date": next_row["Production_Date"].strftime("%Y-%m-%d"),
                 "risk_type": str(row["Risk_Type"]),
                 "triggers": "|".join(triggers),
                 "resolved_triggers_next_workday": "|".join(resolved_triggers),
@@ -422,9 +397,7 @@ def build_historical_cases(data: pd.DataFrame) -> pd.DataFrame:
                 "missing_parameters": "|".join(plan.get("missing_parameters", [])),
                 "current_daily_output": float(row["Plant_Daily_Output"]),
                 "required_daily_rate": plan.get("required_daily_rate"),
-                "engine_recommended_daily_capacity": recommendation.get(
-                    "daily_capacity"
-                ),
+                "engine_recommended_daily_capacity": recommendation.get("daily_capacity"),
                 "actual_next_workday_output": float(next_row["Plant_Daily_Output"]),
                 "next_workday_completes_order": next_completes_order,
                 "projected_completion_date": projected_completion.strftime("%Y-%m-%d")
@@ -439,13 +412,9 @@ def build_historical_cases(data: pd.DataFrame) -> pd.DataFrame:
                     if pd.notna(projected_completion) and actual_completion is not None
                     else None
                 ),
-                "predicted_deadline_feasible": recommendation.get(
-                    "feasible_before_deadline"
-                ),
+                "predicted_deadline_feasible": recommendation.get("feasible_before_deadline"),
                 "actual_deadline_met": (
-                    bool(actual_completion <= deadline)
-                    if actual_completion is not None
-                    else None
+                    bool(actual_completion <= deadline) if actual_completion is not None else None
                 ),
             }
         )
@@ -455,8 +424,7 @@ def build_historical_cases(data: pd.DataFrame) -> pd.DataFrame:
 
 def _deadline_metrics(cases: pd.DataFrame) -> dict[str, Any]:
     valid = cases.loc[
-        cases["predicted_deadline_feasible"].notna()
-        & cases["actual_deadline_met"].notna()
+        cases["predicted_deadline_feasible"].notna() & cases["actual_deadline_met"].notna()
     ]
     if valid.empty:
         return {
@@ -489,9 +457,9 @@ def _calibration_evidence(cases: pd.DataFrame) -> dict[str, Any]:
         "schedule_or_output_risk",
     ):
         selected = capacity_cases.loc[
-            capacity_cases["triggers"].str.split("|").apply(
-                lambda values: trigger in values
-            )
+            capacity_cases["triggers"]
+            .str.split("|")
+            .apply(lambda values, current_trigger=trigger: current_trigger in values)
         ]
         groups[trigger] = _ratio_summary(selected)
 
@@ -500,16 +468,14 @@ def _calibration_evidence(cases: pd.DataFrame) -> dict[str, Any]:
         selected = capacity_cases.loc[
             capacity_cases["resolved_triggers_next_workday"]
             .str.split("|")
-            .apply(lambda values: trigger in values)
+            .apply(lambda values, current_trigger=trigger: current_trigger in values)
         ]
         resolved[trigger] = _ratio_summary(selected)
 
     return {
         "next_workday_output_multipliers": groups,
         "when_trigger_reduces_or_resolves": resolved,
-        "interpretation": (
-            "These are observational output multipliers, not causal action gains."
-        ),
+        "interpretation": ("These are observational output multipliers, not causal action gains."),
     }
 
 
@@ -548,25 +514,17 @@ def evaluate_historical_recovery(
         else None,
     }
 
-    comparable_policy = cases.loc[
-        cases["historical_recommendation_category"] != "unmapped"
-    ]
+    comparable_policy = cases.loc[cases["historical_recommendation_category"] != "unmapped"]
     policy_agreement = (
         comparable_policy["historical_recommendation_category"]
         == comparable_policy["engine_recommended_option"]
     )
 
-    available_action_fields = [
-        field for field in ACTION_OUTCOME_FIELDS if field in data.columns
-    ]
-    missing_action_fields = [
-        field for field in ACTION_OUTCOME_FIELDS if field not in data.columns
-    ]
+    available_action_fields = [field for field in ACTION_OUTCOME_FIELDS if field in data.columns]
+    missing_action_fields = [field for field in ACTION_OUTCOME_FIELDS if field not in data.columns]
     action_labeled_rows = 0
     if available_action_fields:
-        action_labeled_rows = int(
-            data[list(available_action_fields)].notna().all(axis=1).sum()
-        )
+        action_labeled_rows = int(data[list(available_action_fields)].notna().all(axis=1).sum())
 
     actual_completion_orders = int(
         cases.dropna(subset=["actual_completion_date"])["bulk_order_id"].nunique()
@@ -574,12 +532,8 @@ def evaluate_historical_recovery(
     order_outcomes = cases[
         ["bulk_order_id", "actual_completion_date", "buyer_required_date"]
     ].drop_duplicates(subset=["bulk_order_id"])
-    actual_completion = pd.to_datetime(
-        order_outcomes["actual_completion_date"], errors="coerce"
-    )
-    buyer_deadline = pd.to_datetime(
-        order_outcomes["buyer_required_date"], errors="coerce"
-    )
+    actual_completion = pd.to_datetime(order_outcomes["actual_completion_date"], errors="coerce")
+    buyer_deadline = pd.to_datetime(order_outcomes["buyer_required_date"], errors="coerce")
     dataset = dict(dataset_summary or {})
     dataset.update(
         {
@@ -592,12 +546,8 @@ def evaluate_historical_recovery(
             "orders_completed_exactly_on_deadline": int(
                 (actual_completion == buyer_deadline).sum()
             ),
-            "orders_completed_before_deadline": int(
-                (actual_completion < buyer_deadline).sum()
-            ),
-            "orders_completed_after_deadline": int(
-                (actual_completion > buyer_deadline).sum()
-            ),
+            "orders_completed_before_deadline": int((actual_completion < buyer_deadline).sum()),
+            "orders_completed_after_deadline": int((actual_completion > buyer_deadline).sum()),
         }
     )
 
@@ -621,9 +571,7 @@ def evaluate_historical_recovery(
             "deadline_feasibility": _deadline_metrics(cases),
             "historical_policy_category_agreement": {
                 "case_count": int(len(comparable_policy)),
-                "agreement": _rounded(policy_agreement.mean())
-                if len(comparable_policy)
-                else None,
+                "agreement": _rounded(policy_agreement.mean()) if len(comparable_policy) else None,
                 "note": (
                     "This compares recommendation categories only; it does not "
                     "show that the historical action was implemented or successful."

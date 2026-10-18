@@ -29,9 +29,7 @@ class Component3EarlyWarningTrainingTests(unittest.TestCase):
                     "Output_Schedule_Risk_Within_3_Days": output_target,
                 }
                 for feature_number, feature in enumerate(EARLY_WARNING_FEATURES):
-                    record[feature] = float(
-                        (order_number + row_number + feature_number) % 7
-                    )
+                    record[feature] = float((order_number + row_number + feature_number) % 7)
                 record[EARLY_WARNING_FEATURES[0]] = float(machine_target * 10)
                 record[EARLY_WARNING_FEATURES[1]] = float(quality_target * 10)
                 record[EARLY_WARNING_FEATURES[2]] = float(output_target * 10)
@@ -71,12 +69,8 @@ class Component3EarlyWarningTrainingTests(unittest.TestCase):
                 {"accuracy", "macro_f1", "f1"},
             )
             self.assertEqual(result["validation"]["fold_count"], 6)
-            self.assertTrue(
-                result["validation"]["every_row_evaluated_once"]
-            )
-            self.assertFalse(
-                result["validation"]["train_test_group_overlap_detected"]
-            )
+            self.assertTrue(result["validation"]["every_row_evaluated_once"])
+            self.assertFalse(result["validation"]["train_test_group_overlap_detected"])
             self.assertFalse(artifacts[target]["production_approved"])
             self.assertTrue(artifacts[target]["probability_calibrated"])
             self.assertEqual(artifacts[target]["features"], EARLY_WARNING_FEATURES)
@@ -87,9 +81,7 @@ class Component3EarlyWarningTrainingTests(unittest.TestCase):
                 "grouped_sigmoid_on_logit",
             )
             self.assertEqual(calibration["outer_fold_count"], 6)
-            self.assertTrue(
-                calibration["every_outer_row_evaluated_once"]
-            )
+            self.assertTrue(calibration["every_outer_row_evaluated_once"])
             self.assertIn(
                 "brier_score",
                 calibration["calibrated_probability_metrics"],
@@ -109,17 +101,11 @@ class Component3EarlyWarningTrainingTests(unittest.TestCase):
             joblib.dump(artifact, path)
             restored = joblib.load(path)
 
-        predictions = restored["estimator"].predict(
-            data[EARLY_WARNING_FEATURES].iloc[:4]
-        )
-        probabilities = restored["estimator"].predict_proba(
-            data[EARLY_WARNING_FEATURES].iloc[:4]
-        )
+        predictions = restored["estimator"].predict(data[EARLY_WARNING_FEATURES].iloc[:4])
+        probabilities = restored["estimator"].predict_proba(data[EARLY_WARNING_FEATURES].iloc[:4])
         self.assertEqual(len(predictions), 4)
         self.assertEqual(probabilities.shape, (4, 2))
-        self.assertTrue(
-            ((probabilities >= 0) & (probabilities <= 1)).all()
-        )
+        self.assertTrue(((probabilities >= 0) & (probabilities <= 1)).all())
         self.assertEqual(restored["target"], "Machine_Breakdown_Within_3_Days")
 
     def test_missing_feature_is_rejected(self):

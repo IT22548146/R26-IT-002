@@ -7,11 +7,12 @@ a prediction for a bulk order that was absent from that fold's training data.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-from datetime import datetime, timezone
 import hashlib
+from collections.abc import Iterable
+from dataclasses import dataclass
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any
 
 import numpy as np
 import pandas as pd
@@ -30,7 +31,6 @@ from sklearn.model_selection import LeaveOneGroupOut
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import StandardScaler
 from sklearn.utils.class_weight import compute_sample_weight
-from xgboost import XGBClassifier
 
 from components.component3_early_warning_data import (
     EARLY_WARNING_FEATURES,
@@ -38,7 +38,6 @@ from components.component3_early_warning_data import (
     MIN_ROWS_PER_CLASS,
     run_step5a_audit,
 )
-
 
 REPORT_VERSION = "component3-early-warning-step5b-calibrated-v2"
 ARTIFACT_VERSION = "component3-early-warning-model-calibrated-v2"
@@ -70,6 +69,19 @@ class CandidateModel:
     estimator: BaseEstimator
     selectable: bool = True
     balanced_fit_weights: bool = False
+
+
+class UnavailableXGBoostClassifier(BaseEstimator):
+    """Cloneable placeholder that reports a missing native XGBoost runtime."""
+
+    def __init__(self, reason: str, random_state: int = RANDOM_STATE) -> None:
+        self.reason = reason
+        self.random_state = random_state
+
+    def fit(self, features: pd.DataFrame, labels: pd.Series, **kwargs: Any):
+        raise RuntimeError(
+            f"The XGBoost comparison candidate is unavailable in this environment: {self.reason}"
+        )
 
 
 class GroupedSigmoidCalibratedClassifier:
@@ -110,6 +122,29 @@ def build_candidate_models(
     random_state: int = RANDOM_STATE,
 ) -> dict[str, CandidateModel]:
     """Return the fixed Step 5B baseline and candidate model definitions."""
+    # XGBoost is needed only while comparing/training candidate models. Keeping
+    # this import out of module scope lets the selected sklearn-only artifacts
+    # be loaded for inference on systems that do not have the native OpenMP
+    # runtime required by XGBoost (notably a fresh macOS installation).
+    try:
+        from xgboost import XGBClassifier
+
+        xgboost_estimator: BaseEstimator = XGBClassifier(
+            n_estimators=250,
+            max_depth=3,
+            learning_rate=0.05,
+            subsample=0.9,
+            colsample_bytree=0.8,
+            eval_metric="logloss",
+            random_state=random_state,
+            n_jobs=1,
+        )
+    except Exception as exc:
+        xgboost_estimator = UnavailableXGBoostClassifier(
+            reason=str(exc),
+            random_state=random_state,
+        )
+
     return {
         "dummy_prior": CandidateModel(
             name="dummy_prior",
@@ -161,19 +196,7 @@ def build_candidate_models(
             estimator=Pipeline(
                 [
                     ("imputer", SimpleImputer(strategy="median")),
-                    (
-                        "model",
-                        XGBClassifier(
-                            n_estimators=250,
-                            max_depth=3,
-                            learning_rate=0.05,
-                            subsample=0.9,
-                            colsample_bytree=0.8,
-                            eval_metric="logloss",
-                            random_state=random_state,
-                            n_jobs=1,
-                        ),
-                    ),
+                    ("model", xgboost_estimator),
                 ]
             ),
             balanced_fit_weights=True,
@@ -201,9 +224,7 @@ def _rounded(value: float) -> float:
 def _metrics(actual: pd.Series, predicted: np.ndarray) -> dict[str, float]:
     return {
         "accuracy": _rounded(accuracy_score(actual, predicted)),
-        "macro_f1": _rounded(
-            f1_score(actual, predicted, average="macro", zero_division=0)
-        ),
+        "macro_f1": _rounded(f1_score(actual, predicted, average="macro", zero_division=0)),
         "f1": _rounded(f1_score(actual, predicted, zero_division=0)),
     }
 
@@ -215,12 +236,8 @@ def _class_coverage(labelled: pd.DataFrame, target: str) -> dict[str, Any]:
     return {
         "positive_rows": int(positive.sum()),
         "negative_rows": int(negative.sum()),
-        "positive_orders": int(
-            labelled.loc[positive, "Bulk_Order_ID"].nunique()
-        ),
-        "negative_orders": int(
-            labelled.loc[negative, "Bulk_Order_ID"].nunique()
-        ),
+        "positive_orders": int(labelled.loc[positive, "Bulk_Order_ID"].nunique()),
+        "negative_orders": int(labelled.loc[negative, "Bulk_Order_ID"].nunique()),
     }
 
 
@@ -241,9 +258,7 @@ def _validate_training_data(labelled: pd.DataFrame, targets: Iterable[str]) -> N
     except (TypeError, ValueError) as exc:
         raise ValueError("Step 5B model features must be numeric") from exc
     if numeric_features.isna().all(axis=0).any():
-        empty_features = numeric_features.columns[
-            numeric_features.isna().all(axis=0)
-        ].tolist()
+        empty_features = numeric_features.columns[numeric_features.isna().all(axis=0)].tolist()
         raise ValueError(f"Model features contain all-null columns: {empty_features}")
     finite_values = numeric_features.to_numpy(dtype=float, na_value=np.nan)
     if np.isinf(finite_values).any():
@@ -325,9 +340,9 @@ def _apply_sigmoid_calibrator(
     classes = [int(value) for value in calibrator.classes_]
     if 1 not in classes:
         raise ValueError("Sigmoid calibrator does not contain the positive class")
-    calibrated = calibrator.predict_proba(
-        _probability_logits(raw_probabilities)
-    )[:, classes.index(1)]
+    calibrated = calibrator.predict_proba(_probability_logits(raw_probabilities))[
+        :, classes.index(1)
+    ]
     if not np.isfinite(calibrated).all():
         raise ValueError("Sigmoid calibrator returned non-finite probabilities")
     return np.clip(calibrated, 0.0, 1.0)
@@ -393,9 +408,7 @@ def _select_decision_threshold(
         candidates = np.asarray([0.5, unique_scores[0]], dtype=float)
     else:
         midpoints = (unique_scores[:-1] + unique_scores[1:]) / 2.0
-        candidates = np.unique(
-            np.concatenate(([0.0, 0.5, 1.0], unique_scores, midpoints))
-        )
+        candidates = np.unique(np.concatenate(([0.0, 0.5, 1.0], unique_scores, midpoints)))
     best_threshold = 0.5
     best_metrics = _metrics(labels, (scores >= best_threshold).astype(int))
     best_key = (
@@ -433,10 +446,7 @@ def _grouped_out_of_fold_probabilities(
     splitter = LeaveOneGroupOut()
     for train_indexes, test_indexes in splitter.split(features, actual, groups):
         if actual.iloc[train_indexes].nunique() != 2:
-            raise ValueError(
-                "Grouped probability calibration found a fold with one "
-                "training class"
-            )
+            raise ValueError("Grouped probability calibration found a fold with one training class")
         estimator = _fit_candidate(
             candidate,
             features.iloc[train_indexes],
@@ -448,9 +458,7 @@ def _grouped_out_of_fold_probabilities(
         )
         test_counts[test_indexes] += 1
     if not np.all(test_counts == 1) or not np.isfinite(probabilities).all():
-        raise RuntimeError(
-            "Grouped calibration did not produce one probability per row"
-        )
+        raise RuntimeError("Grouped calibration did not produce one probability per row")
     return probabilities
 
 
@@ -482,9 +490,7 @@ def calibrate_selected_candidate(
         train_actual = actual.iloc[train_indexes].reset_index(drop=True)
         train_groups = groups.iloc[train_indexes].reset_index(drop=True)
         if train_actual.nunique() != 2:
-            raise ValueError(
-                f"{target} has a nested calibration fold with one training class"
-            )
+            raise ValueError(f"{target} has a nested calibration fold with one training class")
         inner_raw = _grouped_out_of_fold_probabilities(
             train_features,
             train_actual,
@@ -530,9 +536,7 @@ def calibrate_selected_candidate(
         or not np.isfinite(outer_calibrated).all()
         or np.any(outer_calibrated_predictions < 0)
     ):
-        raise RuntimeError(
-            "Nested grouped calibration did not score every held-out row once"
-        )
+        raise RuntimeError("Nested grouped calibration did not score every held-out row once")
 
     final_calibrator = _fit_sigmoid_calibrator(
         outer_raw,
@@ -543,8 +547,8 @@ def calibrate_selected_candidate(
         final_calibrator,
         outer_raw,
     )
-    final_threshold, final_threshold_training_metrics = (
-        _select_decision_threshold(actual, final_oof_calibrated)
+    final_threshold, final_threshold_training_metrics = _select_decision_threshold(
+        actual, final_oof_calibrated
     )
     final_base_estimator = _fit_candidate(candidate, features, actual)
     calibrated_estimator = GroupedSigmoidCalibratedClassifier(
@@ -564,8 +568,7 @@ def calibrate_selected_candidate(
         "outer_fold_count": int(groups.nunique()),
         "every_outer_row_evaluated_once": bool(np.all(outer_counts == 1)),
         "calibrator_fit_source": (
-            "Base-model probabilities generated while each bulk order was "
-            "held out"
+            "Base-model probabilities generated while each bulk order was held out"
         ),
         "raw_probability_metrics": raw_probability_metrics,
         "calibrated_probability_metrics": calibrated_probability_metrics,
@@ -581,12 +584,10 @@ def calibrate_selected_candidate(
         "final_threshold_training_metrics": final_threshold_training_metrics,
         "nested_fold_thresholds": fold_thresholds,
         "brier_score_change": _rounded(
-            calibrated_probability_metrics["brier_score"]
-            - raw_probability_metrics["brier_score"]
+            calibrated_probability_metrics["brier_score"] - raw_probability_metrics["brier_score"]
         ),
         "log_loss_change": _rounded(
-            calibrated_probability_metrics["log_loss"]
-            - raw_probability_metrics["log_loss"]
+            calibrated_probability_metrics["log_loss"] - raw_probability_metrics["log_loss"]
         ),
     }
     return calibrated_estimator, calibration_report
@@ -614,9 +615,7 @@ def evaluate_candidate(
         group_overlap_detected |= bool(train_groups.intersection(test_groups))
         held_out_orders.extend(sorted(test_groups))
         if actual.iloc[train_indexes].nunique() != 2:
-            raise ValueError(
-                f"{target} has a Leave-One-Order-Out fold with one training class"
-            )
+            raise ValueError(f"{target} has a Leave-One-Order-Out fold with one training class")
 
         estimator = _fit_candidate(
             candidate,
@@ -681,9 +680,7 @@ def train_early_warning_models(
             }
             candidate_results.append(result)
 
-        selectable_results = [
-            result for result in candidate_results if result["selectable"]
-        ]
+        selectable_results = [result for result in candidate_results if result["selectable"]]
         selected_result = max(
             selectable_results,
             key=lambda result: (
@@ -702,9 +699,7 @@ def train_early_warning_models(
             random_state=random_state,
         )
         target_info = SUPPORTED_TARGETS[target]
-        artifact_path = (
-            f"models/c3_early_warning_{target_info['slug']}_v2.joblib"
-        )
+        artifact_path = f"models/c3_early_warning_{target_info['slug']}_v2.joblib"
         coverage = _class_coverage(labelled, target)
         target_report = {
             "display_name": target_info["display_name"],
@@ -712,8 +707,7 @@ def train_early_warning_models(
             "candidate_metrics": candidate_results,
             "selected_model": selected_name,
             "selected_metrics": {
-                key: selected_result[key]
-                for key in ("accuracy", "macro_f1", "f1")
+                key: selected_result[key] for key in ("accuracy", "macro_f1", "f1")
             },
             "artifact_path": artifact_path,
             "production_approved": False,
@@ -772,25 +766,18 @@ def run_step5b_experiment(
     """Build Step 5A labels, run grouped comparison, and return artifacts."""
     source_path = Path(path)
     step5a_report, labelled = run_step5a_audit(source_path)
-    supported_by_audit = set(
-        step5a_report.get("supported_research_subtype_targets", [])
-    )
-    targets = [
-        target for target in SUPPORTED_TARGETS if target in supported_by_audit
-    ]
+    supported_by_audit = set(step5a_report.get("supported_research_subtype_targets", []))
+    targets = [target for target in SUPPORTED_TARGETS if target in supported_by_audit]
     if set(targets) != set(SUPPORTED_TARGETS):
         missing = sorted(set(SUPPORTED_TARGETS).difference(targets))
-        raise ValueError(
-            "Step 5A did not approve all configured Step 5B targets: "
-            f"{missing}"
-        )
+        raise ValueError(f"Step 5A did not approve all configured Step 5B targets: {missing}")
 
     experiment, comparison, artifacts = train_early_warning_models(
         labelled,
         target_names=targets,
         candidate_names=candidate_names,
     )
-    generated_at = datetime.now(timezone.utc).isoformat()
+    generated_at = datetime.now(UTC).isoformat()
     source_dataset = {
         **step5a_report.get("source_dataset", {}),
         "path": source_path.name,
@@ -821,8 +808,7 @@ def run_step5b_experiment(
             "preprocessing_fitted_inside_each_training_fold": True,
             "test_order_never_used_to_fit_its_prediction": True,
             "decision_threshold": (
-                "Target-specific threshold selected from grouped out-of-fold "
-                "calibrated scores"
+                "Target-specific threshold selected from grouped out-of-fold calibrated scores"
             ),
             "reported_metrics": ["accuracy", "macro_f1", "f1"],
             "reported_probability_metrics": [

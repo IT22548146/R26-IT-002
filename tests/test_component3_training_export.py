@@ -40,9 +40,7 @@ class TrainingExportFixture:
             "cutting_days": 5,
             "sewing_days": 10,
             "daily_commitment": 100,
-            "production_date": (
-                date(2026, 8, 17) + timedelta(days=day - 1)
-            ).isoformat(),
+            "production_date": (date(2026, 8, 17) + timedelta(days=day - 1)).isoformat(),
             "working_day_no": day,
             "plant_daily_output": 100 + day,
             "daily_damage_qty": 1,
@@ -120,9 +118,7 @@ class Component3TrainingExportTests(unittest.TestCase, TrainingExportFixture):
             "ORDER_POSITIVE",
             {2: "Worker Shortage"},
         )
-        dataset, audit = build_verified_training_dataset(
-            self.store.training_export_snapshot()
-        )
+        dataset, audit = build_verified_training_dataset(self.store.training_export_snapshot())
 
         self.assertEqual(len(dataset), 1)
         self.assertEqual(dataset.columns.tolist(), EXPORT_COLUMNS)
@@ -156,9 +152,7 @@ class Component3TrainingExportTests(unittest.TestCase, TrainingExportFixture):
             {2: "Worker Shortage"},
         )
         self.save_order(self.store, "ORDER_NEGATIVE")
-        dataset, audit = build_verified_training_dataset(
-            self.store.training_export_snapshot()
-        )
+        dataset, audit = build_verified_training_dataset(self.store.training_export_snapshot())
 
         self.assertEqual(len(dataset), 2)
         primary = audit["primary_target"]
@@ -186,9 +180,7 @@ class Component3TrainingExportTests(unittest.TestCase, TrainingExportFixture):
                 days=tuple(range(1, 11)),
             )
 
-        dataset, audit = build_verified_training_dataset(
-            self.store.training_export_snapshot()
-        )
+        dataset, audit = build_verified_training_dataset(self.store.training_export_snapshot())
         primary = audit["primary_target"]
         self.assertEqual(len(dataset), 42)
         self.assertEqual(primary["positive_rows"], 21)
@@ -208,15 +200,11 @@ class Component3TrainingExportTests(unittest.TestCase, TrainingExportFixture):
         day2 = self.store.get_record(records[1]["record_id"])
         self.assertEqual(day2["label_status"], "Ready")
 
-        dataset, audit = build_verified_training_dataset(
-            self.store.training_export_snapshot()
-        )
+        dataset, audit = build_verified_training_dataset(self.store.training_export_snapshot())
         self.assertTrue(dataset.empty)
         self.assertEqual(audit["dataset"]["ready_source_candidates"], 1)
         self.assertEqual(
-            audit["dataset"]["excluded_rows_by_reason"][
-                "unverified_prior_history"
-            ],
+            audit["dataset"]["excluded_rows_by_reason"]["unverified_prior_history"],
             1,
         )
 
@@ -226,9 +214,7 @@ class Component3TrainingExportTests(unittest.TestCase, TrainingExportFixture):
             "ORDER_GAP",
             days=(1, 3, 4, 5, 6),
         )
-        dataset, audit = build_verified_training_dataset(
-            self.store.training_export_snapshot()
-        )
+        dataset, audit = build_verified_training_dataset(self.store.training_export_snapshot())
 
         self.assertEqual(len(dataset), 1)
         self.assertFalse(audit["sequence_quality"]["passed"])
@@ -244,18 +230,14 @@ class Component3TrainingExportTests(unittest.TestCase, TrainingExportFixture):
 
     def test_csv_and_excel_include_data_audit_and_column_manifest(self):
         self.save_order(self.store, "ORDER_NEGATIVE")
-        dataset, audit = build_verified_training_dataset(
-            self.store.training_export_snapshot()
-        )
+        dataset, audit = build_verified_training_dataset(self.store.training_export_snapshot())
 
         csv_content = dataframe_to_csv_bytes(dataset).decode("utf-8")
         self.assertTrue(csv_content.startswith("Record_ID,Bulk_Order_ID"))
         self.assertNotIn("Verified_By", csv_content.splitlines()[0])
         self.assertNotIn("Actual_Emergency", csv_content.splitlines()[0])
 
-        workbook = pd.ExcelFile(
-            BytesIO(dataframe_to_xlsx_bytes(dataset, audit))
-        )
+        workbook = pd.ExcelFile(BytesIO(dataframe_to_xlsx_bytes(dataset, audit)))
         self.assertEqual(
             workbook.sheet_names,
             ["training_data", "audit_summary", "column_manifest"],
@@ -323,15 +305,11 @@ class Component3TrainingExportApiTests(unittest.TestCase, TrainingExportFixture)
     def test_audit_and_csv_and_excel_downloads(self):
         self.save_order(self.store, "ORDER_DOWNLOAD")
 
-        audit_response = self.client.get(
-            "/api/component3/training-dataset-audit"
-        )
+        audit_response = self.client.get("/api/component3/training-dataset-audit")
         self.assertEqual(audit_response.status_code, 200)
         self.assertEqual(audit_response.get_json()["dataset"]["exported_rows"], 1)
 
-        csv_response = self.client.get(
-            "/api/component3/training-dataset?format=csv"
-        )
+        csv_response = self.client.get("/api/component3/training-dataset?format=csv")
         self.assertEqual(csv_response.status_code, 200)
         self.assertIn("text/csv", csv_response.content_type)
         self.assertEqual(csv_response.headers["X-Component3-Export-Rows"], "1")
@@ -341,9 +319,7 @@ class Component3TrainingExportApiTests(unittest.TestCase, TrainingExportFixture)
         )
         self.assertIn(b"Emergency_Within_3_Days", csv_response.data)
 
-        excel_response = self.client.get(
-            "/api/component3/training-dataset?format=xlsx"
-        )
+        excel_response = self.client.get("/api/component3/training-dataset?format=xlsx")
         self.assertEqual(excel_response.status_code, 200)
         self.assertIn(
             "spreadsheetml.sheet",
@@ -353,13 +329,9 @@ class Component3TrainingExportApiTests(unittest.TestCase, TrainingExportFixture)
         self.assertIn("audit_summary", workbook.sheet_names)
 
     def test_empty_and_invalid_download_requests_are_rejected(self):
-        response = self.client.get(
-            "/api/component3/training-dataset?format=pdf"
-        )
+        response = self.client.get("/api/component3/training-dataset?format=pdf")
         self.assertEqual(response.status_code, 400)
-        response = self.client.get(
-            "/api/component3/training-dataset?format=csv"
-        )
+        response = self.client.get("/api/component3/training-dataset?format=csv")
         self.assertEqual(response.status_code, 409)
         self.assertEqual(response.get_json()["audit"]["dataset"]["exported_rows"], 0)
 

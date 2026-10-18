@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import pandas as pd
 
-
 FEATURES = [
     "Daily_Commitment",
     "Plant_Daily_Output",
@@ -95,9 +94,7 @@ def build_feature_values(
             and worker_shortage_count == 0
         ),
         "Is_Cutting_Phase": int(working_day_no <= cutting_days),
-        "Is_Sewing_Phase": int(
-            cutting_days < working_day_no <= cutting_days + sewing_days
-        ),
+        "Is_Sewing_Phase": int(cutting_days < working_day_no <= cutting_days + sewing_days),
     }
 
 

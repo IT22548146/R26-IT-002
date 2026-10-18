@@ -2,6 +2,9 @@
 
 import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
+import api from '@/lib/api';
+import { useAuth } from '@/contexts/AuthContext';
+import RecoveryOptionCard, { type RecoveryOption } from './RecoveryOptionCard';
 import styles from './monitoring.module.css';
 
 type NumericValue = number | '';
@@ -59,25 +62,6 @@ type SavedOrderFields = Pick<
 type SavedRecoveryParameters = Partial<
   Record<keyof RecoveryFormData, number | null>
 >;
-
-interface RecoveryOption {
-  option_id: string;
-  title: string;
-  feasible_before_deadline: boolean;
-  rationale: string;
-  daily_capacity?: number;
-  daily_capacity_gain?: number;
-  required_overtime_hours_per_day?: number;
-  additional_workers?: number;
-  repaired_machines?: number;
-  expected_machine_repair_hours?: number;
-  backup_machines?: number;
-  backup_line_daily_capacity_used?: number;
-  required_working_days?: number | null;
-  projected_completion_date?: string | null;
-  deadline_margin_working_days?: number | null;
-  external_daily_capacity_required?: number | null;
-}
 
 interface RecoveryPlan {
   engine_version: string;
@@ -330,6 +314,31 @@ interface MonitoringDraft {
   recovery_data: RecoveryFormData;
 }
 
+interface AssignedBulkOrder {
+  id: number;
+  style_number: string;
+  bulk_order_quantity: number;
+  daily_commitment: number;
+  daily_capacity?: number;
+  required_daily_rate?: number;
+  planned_phase_days?: number;
+  daily_commitment_source?: string;
+  approved_date: string;
+  buyer_required_date: string;
+  status: string;
+  plant_approved_at: string | null;
+  allocated_qty: number | null;
+  allocation_type: string;
+  buyer_name: string;
+  plant_id: string;
+  plant_name: string;
+  plant_location: string | null;
+  total_production_days: number | null;
+  cutting_days: number | null;
+  sewing_days: number | null;
+  monitoring_eligible: boolean;
+}
+
 interface DraftFeedback {
   status: 'idle' | 'saved' | 'restored' | 'cleared' | 'error';
   message: string;
@@ -341,6 +350,32 @@ const API_BASE_URL = (
 ).replace(/\/$/, '');
 
 const MONITORING_DRAFT_STORAGE_KEY = 'component3-current-order-draft-v1';
+const SHOW_DEMO_PRESETS =
+  process.env.NEXT_PUBLIC_SHOW_COMPONENT3_DEMOS === 'true';
+
+function component3AuthHeaders(
+  headers: Record<string, string> = {},
+): Record<string, string> {
+  if (typeof window === 'undefined') return headers;
+  const token = window.localStorage.getItem('token');
+  return token
+    ? { ...headers, Authorization: `Bearer ${token}` }
+    : headers;
+}
+
+const ASSIGNMENT_CONTROLLED_FIELDS = new Set<keyof MonitoringFormData>([
+  'style_id',
+  'buyer_name',
+  'allocated_bulk_plant',
+  'plant_location',
+  'full_order_qty',
+  'bulk_order_approved_date',
+  'buyer_required_date',
+  'total_working_days',
+  'cutting_days',
+  'sewing_days',
+  'daily_commitment',
+]);
 
 function countWorkingDaysInclusive(start: string, end: string): NumericValue {
   if (!start || !end) return '';
@@ -514,6 +549,15 @@ const RECOVERY_NUMERIC_FIELDS: Array<keyof RecoveryFormData> = [
 
 function isObject(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function requestErrorMessage(error: unknown, fallback: string) {
+  if (isObject(error) && isObject(error.response) && isObject(error.response.data)) {
+    const apiError = error.response.data.error;
+    if (typeof apiError === 'string' && apiError) return apiError;
+  }
+  if (error instanceof Error && error.message) return error.message;
+  return fallback;
 }
 
 function parseMonitoringDraft(raw: string | null): MonitoringDraft | null {
@@ -880,129 +924,9 @@ function recoveryParameters(data: RecoveryFormData) {
   );
 }
 
-function RecoveryOptionCard({
-  option,
-  recommended = false,
-}: {
-  option: RecoveryOption;
-  recommended?: boolean;
-}) {
-  const resourceMetrics = [
-    option.additional_workers
-      ? { label: 'Add workers', value: String(option.additional_workers) }
-      : null,
-    option.required_overtime_hours_per_day
-      ? {
-          label: 'OT hours / day',
-          value: formatCapacity(option.required_overtime_hours_per_day),
-        }
-      : null,
-    option.repaired_machines
-      ? { label: 'Repair machines', value: String(option.repaired_machines) }
-      : null,
-    option.repaired_machines && option.expected_machine_repair_hours !== undefined
-      ? {
-          label: 'Expected repair time',
-          value: `${formatCapacity(option.expected_machine_repair_hours)} hr`,
-        }
-      : null,
-    option.backup_machines
-      ? { label: 'Backup machines', value: String(option.backup_machines) }
-      : null,
-    option.backup_line_daily_capacity_used
-      ? {
-          label: 'Backup line / day',
-          value: formatCapacity(option.backup_line_daily_capacity_used),
-        }
-      : null,
-    option.external_daily_capacity_required !== undefined &&
-    option.external_daily_capacity_required !== null
-      ? {
-          label: 'External capacity / day',
-          value: formatCapacity(option.external_daily_capacity_required),
-        }
-      : null,
-  ].filter((metric): metric is { label: string; value: string } => metric !== null);
-
-  return (
-    <article
-      className={`${styles.recoveryOption} ${
-        recommended ? styles.recommendedOption : ''
-      }`}
-    >
-      <div className={styles.optionHeading}>
-        <div>
-          {recommended && <span className={styles.recommendedLabel}>Recommended</span>}
-          <h4>{option.title}</h4>
-        </div>
-        <span
-          className={`${styles.feasibilityBadge} ${
-            option.feasible_before_deadline
-              ? styles.feasibleBadge
-              : styles.infeasibleBadge
-          }`}
-        >
-          {option.feasible_before_deadline ? 'Deadline feasible' : 'Not sufficient'}
-        </span>
-      </div>
-
-      <p>{option.rationale}</p>
-
-      {resourceMetrics.length > 0 && (
-        <div className={styles.resourceMetrics}>
-          {resourceMetrics.map((metric) => (
-            <div key={metric.label}>
-              <span>{metric.label}</span>
-              <strong>{metric.value}</strong>
-            </div>
-          ))}
-        </div>
-      )}
-
-      {(option.daily_capacity !== undefined || option.projected_completion_date) && (
-        <dl className={styles.optionForecast}>
-          {option.daily_capacity !== undefined && (
-            <div>
-              <dt>Recovered daily capacity</dt>
-              <dd>{formatCapacity(option.daily_capacity)} pieces</dd>
-            </div>
-          )}
-          {option.daily_capacity_gain !== undefined && (
-            <div>
-              <dt>Daily capacity gain</dt>
-              <dd>+{formatCapacity(option.daily_capacity_gain)} pieces</dd>
-            </div>
-          )}
-          {option.required_working_days !== undefined &&
-            option.required_working_days !== null && (
-              <div>
-                <dt>Working days required</dt>
-                <dd>{option.required_working_days}</dd>
-              </div>
-            )}
-          {option.projected_completion_date && (
-            <div>
-              <dt>New completion date</dt>
-              <dd>{option.projected_completion_date}</dd>
-            </div>
-          )}
-          {option.deadline_margin_working_days !== undefined &&
-            option.deadline_margin_working_days !== null && (
-              <div>
-                <dt>Deadline margin</dt>
-                <dd>
-                  {option.deadline_margin_working_days >= 0 ? '+' : ''}
-                  {option.deadline_margin_working_days} working day(s)
-                </dd>
-              </div>
-            )}
-        </dl>
-      )}
-    </article>
-  );
-}
-
 export default function MonitoringPage() {
+  const { user } = useAuth();
+  const isPlantManager = user?.role === 'PlantManager';
   const [formData, setFormData] = useState<MonitoringFormData>(() =>
     createCurrentOrderForm(),
   );
@@ -1049,6 +973,14 @@ export default function MonitoringPage() {
     status: 'idle',
     message: 'Auto-save will start when you edit the new current-order form.',
   });
+  const [assignedOrders, setAssignedOrders] = useState<AssignedBulkOrder[]>([]);
+  const [assignedOrdersLoading, setAssignedOrdersLoading] = useState(false);
+  const [assignedOrdersError, setAssignedOrdersError] = useState('');
+  const [selectedAssignedOrderId, setSelectedAssignedOrderId] = useState('');
+
+  const selectedAssignedOrder = assignedOrders.find(
+    (order) => String(order.id) === selectedAssignedOrderId,
+  );
 
   const replaceFormData = (next: MonitoringFormData) => {
     formDataRef.current = next;
@@ -1064,6 +996,63 @@ export default function MonitoringPage() {
       return next;
     });
   };
+
+  useEffect(() => {
+    let active = true;
+    const timer = window.setTimeout(() => {
+      if (!isPlantManager) {
+        setAssignedOrders([]);
+        setAssignedOrdersError('');
+        setSelectedAssignedOrderId('');
+        return;
+      }
+
+      setAssignedOrdersLoading(true);
+      setAssignedOrdersError('');
+
+      void api
+        .get('/plant/orders')
+        .then((response) => {
+          if (!active) return;
+          const orders = Array.isArray(response.data)
+            ? (response.data as AssignedBulkOrder[]).filter(
+                (order) => order.monitoring_eligible,
+              )
+            : [];
+          setAssignedOrders(orders);
+          setSelectedAssignedOrderId((current) =>
+            orders.some((order) => String(order.id) === current) ? current : '',
+          );
+        })
+        .catch((requestError: unknown) => {
+          if (!active) return;
+          const message =
+            typeof requestError === 'object' &&
+            requestError !== null &&
+            'response' in requestError
+              ? ((requestError as { response?: { data?: { error?: string } } })
+                  .response?.data?.error ?? 'Assigned bulk orders could not be loaded.')
+              : 'Assigned bulk orders could not be loaded.';
+          setAssignedOrders([]);
+          setAssignedOrdersError(message);
+        })
+        .finally(() => {
+          if (active) setAssignedOrdersLoading(false);
+        });
+    }, 0);
+
+    return () => {
+      active = false;
+      window.clearTimeout(timer);
+    };
+  }, [isPlantManager]);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      if (user?.full_name) setTrackingActor(user.full_name);
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [user?.full_name]);
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -1141,7 +1130,10 @@ export default function MonitoringPage() {
     cumulativeRequestController.current = null;
   };
 
-  const updateAutomaticCumulative = async (next: MonitoringFormData) => {
+  const updateAutomaticCumulative = async (
+    next: MonitoringFormData,
+    plantKey?: string,
+  ) => {
     cancelCumulativeLookup();
 
     const output = next.plant_daily_output;
@@ -1216,10 +1208,18 @@ export default function MonitoringPage() {
     });
 
     try {
+      const scopedPlantKey =
+        plantKey ?? (isPlantManager ? selectedAssignedOrder?.plant_id : undefined);
+      const plantQuery = scopedPlantKey
+        ? `&plant_id=${encodeURIComponent(scopedPlantKey)}`
+        : '';
       const response = await fetch(
         `${API_BASE_URL}/orders/${encodeURIComponent(orderId)}` +
-          `/cumulative-context?working_day_no=${workingDay}`,
-        { signal: controller.signal },
+          `/cumulative-context?working_day_no=${workingDay}${plantQuery}`,
+        {
+          signal: controller.signal,
+          headers: component3AuthHeaders(),
+        },
       );
       const payload: unknown = await response.json();
       if (!response.ok) {
@@ -1303,7 +1303,11 @@ export default function MonitoringPage() {
     }
   };
 
-  const scheduleOrderEntryLookup = (next: MonitoringFormData) => {
+  const scheduleOrderEntryLookup = (
+    next: MonitoringFormData,
+    plantKey?: string,
+    authoritativeOrderFields?: Partial<MonitoringFormData>,
+  ) => {
     cancelOrderEntryLookup();
     cancelCumulativeLookup();
     setOrderEntryBlockMessage('');
@@ -1349,10 +1353,18 @@ export default function MonitoringPage() {
       orderEntryRequestController.current = controller;
 
       try {
+        const scopedPlantKey =
+          plantKey ?? (isPlantManager ? selectedAssignedOrder?.plant_id : undefined);
+        const plantQuery = scopedPlantKey
+          ? `?plant_id=${encodeURIComponent(scopedPlantKey)}`
+          : '';
         const response = await fetch(
           `${API_BASE_URL}/orders/${encodeURIComponent(orderId)}` +
-            '/next-entry-context',
-          { signal: controller.signal },
+            `/next-entry-context${plantQuery}`,
+          {
+            signal: controller.signal,
+            headers: component3AuthHeaders(),
+          },
         );
         const payload: unknown = await response.json();
         if (!response.ok) {
@@ -1374,6 +1386,7 @@ export default function MonitoringPage() {
         const suggested = {
           ...current,
           ...(context.saved_order_setup?.order_fields ?? {}),
+          ...(authoritativeOrderFields ?? {}),
           working_day_no: context.suggested_working_day_no,
           production_date: suggestedDate,
           cumulative_completed_qty: '',
@@ -1402,7 +1415,9 @@ export default function MonitoringPage() {
                 `record (day ${context.latest_record.working_day_no}, ` +
                 `${context.latest_record.production_date}). Suggested next entry: ` +
                 `day ${context.suggested_working_day_no} on ${suggestedDate}. ` +
-                'Review the values before analysis; Component 2 master data is not used by this lookup.',
+                (authoritativeOrderFields
+                  ? 'The Component 2 assignment details remain authoritative.'
+                  : 'Review the values before analysis.'),
             });
           } else {
             const blockMessage = continuationBlockMessage(
@@ -1434,7 +1449,9 @@ export default function MonitoringPage() {
             status: 'ready',
             message:
               `No saved history found for ${orderId}. Starting at working day 1 ` +
-              'with an editable current production date.',
+              (authoritativeOrderFields
+                ? 'with the selected Component 2 assignment details.'
+                : 'with an editable current production date.'),
           });
         }
 
@@ -1452,7 +1469,7 @@ export default function MonitoringPage() {
             blocking: true,
           });
         } else {
-          void updateAutomaticCumulative(suggested);
+          void updateAutomaticCumulative(suggested, scopedPlantKey);
         }
       } catch (requestError: unknown) {
         if (
@@ -1496,6 +1513,96 @@ export default function MonitoringPage() {
     });
   };
 
+  const handleAssignedOrderChange = (
+    event: React.ChangeEvent<HTMLSelectElement>,
+  ) => {
+    const orderId = event.currentTarget.value;
+    setSelectedAssignedOrderId(orderId);
+    invalidateAnalysis();
+    activateDraftAfterEdit();
+    cancelOrderEntryLookup();
+    cancelCumulativeLookup();
+    setRecoveryData({ ...EMPTY_RECOVERY_FORM });
+    setLoadedOrderSetupRecordId('');
+    setOrderEntryBlockMessage('');
+
+    if (!orderId) {
+      replaceFormData(createCurrentOrderForm());
+      setOrderEntryFeedback({
+        status: 'idle',
+        message: 'Select a bulk order assigned to your plant.',
+      });
+      setCumulativeFeedback({
+        status: 'idle',
+        message: 'Select an assigned order and enter today\'s actual output.',
+        blocking: true,
+      });
+      return;
+    }
+
+    const order = assignedOrders.find(
+      (candidate) => String(candidate.id) === orderId,
+    );
+    if (!order) {
+      setOrderEntryFeedback({
+        status: 'error',
+        message: 'That order is not available for this plant account.',
+      });
+      return;
+    }
+
+    const fullOrderQty = Number(
+      order.allocated_qty ?? order.bulk_order_quantity,
+    );
+    const approvedDate = String(order.approved_date).slice(0, 10);
+    const requiredDate = String(order.buyer_required_date).slice(0, 10);
+    const calculatedWorkingDays = countWorkingDaysInclusive(
+      approvedDate,
+      requiredDate,
+    );
+    const totalWorkingDays = Math.max(
+      1,
+      Math.round(
+        Number(order.total_production_days ?? calculatedWorkingDays ?? 1),
+      ),
+    );
+    const cuttingDays = Math.max(
+      0,
+      Math.min(totalWorkingDays, Math.round(Number(order.cutting_days ?? 0))),
+    );
+    const sewingDays = Math.max(
+      0,
+      Math.min(totalWorkingDays, Math.round(Number(order.sewing_days ?? 0))),
+    );
+    const authoritativeFields: Partial<MonitoringFormData> = {
+      bulk_order_id: String(order.id),
+      style_id: order.style_number,
+      buyer_name: order.buyer_name,
+      allocated_bulk_plant: order.plant_name,
+      plant_location: order.plant_location || 'N/A',
+      full_order_qty: fullOrderQty,
+      bulk_order_approved_date: approvedDate,
+      buyer_required_date: requiredDate,
+      total_working_days: totalWorkingDays,
+      cutting_days: cuttingDays,
+      sewing_days: sewingDays,
+      daily_commitment: Math.min(Number(order.daily_commitment), fullOrderQty),
+    };
+    const next: MonitoringFormData = {
+      ...createCurrentOrderForm(),
+      ...authoritativeFields,
+      production_date: localWorkingIsoDate(),
+      working_day_no: 1,
+    };
+
+    replaceFormData(next);
+    setOrderEntryFeedback({
+      status: 'loading',
+      message: `Loading ${order.style_number} and its plant-specific C3 history...`,
+    });
+    scheduleOrderEntryLookup(next, order.plant_id, authoritativeFields);
+  };
+
   const handleChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value, type } = event.currentTarget;
     const field = name as keyof MonitoringFormData;
@@ -1535,7 +1642,7 @@ export default function MonitoringPage() {
         field === 'plant_daily_output' ||
         field === 'full_order_qty')
     ) {
-      void updateAutomaticCumulative(next);
+      void updateAutomaticCumulative(next, selectedAssignedOrder?.plant_id);
     }
   };
 
@@ -1556,6 +1663,7 @@ export default function MonitoringPage() {
     replaceFormData({ ...scenario.values });
     setRecoveryData({ ...scenario.recoveryValues });
     setFormMode('demo');
+    setSelectedAssignedOrderId('');
     setLoadedOrderSetupRecordId('');
     setOrderEntryBlockMessage('');
     setDraftSessionActive(false);
@@ -1594,6 +1702,7 @@ export default function MonitoringPage() {
     replaceFormData(createCurrentOrderForm());
     setRecoveryData({ ...EMPTY_RECOVERY_FORM });
     setFormMode('current');
+    setSelectedAssignedOrderId('');
     setLoadedOrderSetupRecordId('');
     setOrderEntryBlockMessage('');
     setAvailableDraft(storedDraft);
@@ -1639,9 +1748,17 @@ export default function MonitoringPage() {
     cancelOrderEntryLookup();
     cancelCumulativeLookup();
     const draft = availableDraft;
+    const restoredAssignedOrder = assignedOrders.find(
+      (order) => String(order.id) === draft.form_data.bulk_order_id,
+    );
     replaceFormData({ ...draft.form_data });
     setRecoveryData({ ...draft.recovery_data });
     setFormMode('current');
+    setSelectedAssignedOrderId(
+      isPlantManager && restoredAssignedOrder
+        ? String(restoredAssignedOrder.id)
+        : '',
+    );
     setLoadedOrderSetupRecordId('');
     setOrderEntryBlockMessage('');
     setDraftSessionActive(true);
@@ -1673,7 +1790,10 @@ export default function MonitoringPage() {
         blocking: true,
       });
     } else {
-      void updateAutomaticCumulative(draft.form_data);
+      void updateAutomaticCumulative(
+        draft.form_data,
+        restoredAssignedOrder?.plant_id,
+      );
     }
   };
 
@@ -1687,6 +1807,7 @@ export default function MonitoringPage() {
       storageCleared = false;
     }
     replaceFormData(createCurrentOrderForm());
+    setSelectedAssignedOrderId('');
     setRecoveryData({ ...EMPTY_RECOVERY_FORM });
     setAvailableDraft(null);
     setDraftSessionActive(false);
@@ -1726,6 +1847,16 @@ export default function MonitoringPage() {
 
     if (formMode === 'current' && orderEntryBlockMessage) {
       setError(orderEntryBlockMessage);
+      return;
+    }
+
+    if (
+      formMode === 'current' &&
+      isPlantManager &&
+      (!selectedAssignedOrder ||
+        formData.bulk_order_id !== String(selectedAssignedOrder.id))
+    ) {
+      setError('Select a confirmed bulk order assigned to your plant first.');
       return;
     }
 
@@ -1772,6 +1903,9 @@ export default function MonitoringPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           ...formData,
+          ...(selectedAssignedOrder && formMode === 'current'
+            ? { integrated_plant_id: selectedAssignedOrder.plant_id }
+            : {}),
           recovery_parameters: recoveryParameters(recoveryData),
         }),
       });
@@ -1806,33 +1940,67 @@ export default function MonitoringPage() {
     setDailyRecordError('');
 
     try {
-      const response = await fetch(`${API_BASE_URL}/monitoring-records`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          ...formData,
-          recovery_parameters: recoveryParameters(recoveryData),
-          recorded_by: trackingActor.trim(),
-        }),
-      });
-      const payload: unknown = await response.json();
-      if (!response.ok) {
-        const apiError = payload as { error?: unknown };
-        throw new Error(
-          typeof apiError.error === 'string'
-            ? apiError.error
-            : 'The daily monitoring record could not be saved.',
+      let savedAnalysis: MonitoringResponse;
+      let savedRecordId: string;
+
+      if (isPlantManager && formMode === 'current') {
+        if (
+          !selectedAssignedOrder ||
+          formData.bulk_order_id !== String(selectedAssignedOrder.id)
+        ) {
+          throw new Error(
+            'Select a confirmed bulk order assigned to your plant before saving.',
+          );
+        }
+        const response = await api.post(
+          `/plant/orders/${selectedAssignedOrder.id}/log`,
+          {
+            log_date: formData.production_date,
+            plant_daily_output: formData.plant_daily_output,
+            daily_damage_qty: formData.daily_damage_qty,
+            max_daily_damage_qty: formData.max_daily_damage_qty,
+            machine_breakdown_count: formData.machine_breakdown_count,
+            worker_shortage_count: formData.worker_shortage_count,
+            cumulative_completed_qty: formData.cumulative_completed_qty,
+            recovery_parameters: recoveryParameters(recoveryData),
+          },
         );
+        savedAnalysis = response.data.c3_result as MonitoringResponse;
+        savedRecordId = String(response.data.monitoring_record_id || 'saved');
+      } else {
+        const response = await fetch(`${API_BASE_URL}/monitoring-records`, {
+          method: 'POST',
+          headers: component3AuthHeaders({
+            'Content-Type': 'application/json',
+          }),
+          body: JSON.stringify({
+            ...formData,
+            recovery_parameters: recoveryParameters(recoveryData),
+            recorded_by: trackingActor.trim(),
+          }),
+        });
+        const payload: unknown = await response.json();
+        if (!response.ok) {
+          const apiError = payload as { error?: unknown };
+          throw new Error(
+            typeof apiError.error === 'string'
+              ? apiError.error
+              : 'The daily monitoring record could not be saved.',
+          );
+        }
+
+        const saved = payload as {
+          monitoring_record: {
+            record_id: string;
+            analysis: MonitoringResponse;
+          };
+        };
+        savedAnalysis = saved.monitoring_record.analysis;
+        savedRecordId = saved.monitoring_record.record_id;
       }
 
-      const saved = payload as {
-        monitoring_record: {
-          record_id: string;
-          analysis: MonitoringResponse;
-        };
-      };
-      setResult(saved.monitoring_record.analysis);
-      setSavedDailyRecordId(saved.monitoring_record.record_id);
+      setResult(savedAnalysis);
+      setSavedDailyRecordId(savedRecordId);
       if (formMode === 'current') {
         let draftCleared = true;
         try {
@@ -1851,9 +2019,10 @@ export default function MonitoringPage() {
       }
     } catch (requestError: unknown) {
       setDailyRecordError(
-        requestError instanceof Error
-          ? requestError.message
-          : 'Unable to save this daily monitoring record.',
+        requestErrorMessage(
+          requestError,
+          'Unable to save this daily monitoring record.',
+        ),
       );
     } finally {
       setSavingDailyRecord(false);
@@ -1942,9 +2111,14 @@ export default function MonitoringPage() {
     try {
       const response = await fetch(`${API_BASE_URL}/incidents`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: component3AuthHeaders({
+          'Content-Type': 'application/json',
+        }),
         body: JSON.stringify({
           ...formData,
+          ...(selectedAssignedOrder && formMode === 'current'
+            ? { integrated_plant_id: selectedAssignedOrder.plant_id }
+            : {}),
           recovery_parameters: recoveryParameters(recoveryData),
           created_by: trackingActor.trim(),
         }),
@@ -1981,7 +2155,13 @@ export default function MonitoringPage() {
         field.name === 'cumulative_completed_qty' && formMode === 'current';
       const isOrderEntryHistory =
         field.name === 'bulk_order_id' && formMode === 'current';
-      const readOnly = field.readOnly || isAutomaticCumulative;
+      const isAssignedOrderSelector = isOrderEntryHistory && isPlantManager;
+      const isAssignmentControlled =
+        formMode === 'current' &&
+        isPlantManager &&
+        ASSIGNMENT_CONTROLLED_FIELDS.has(field.name);
+      const readOnly =
+        field.readOnly || isAutomaticCumulative || isAssignmentControlled;
       const disabled = Boolean(orderEntryBlockMessage) && !isOrderEntryHistory;
       let helper = field.helper;
       let helperStatus: CumulativeFeedback['status'] = 'idle';
@@ -1989,8 +2169,19 @@ export default function MonitoringPage() {
         helper = cumulativeFeedback.message;
         helperStatus = cumulativeFeedback.status;
       } else if (isOrderEntryHistory) {
-        helper = orderEntryFeedback.message;
-        helperStatus = orderEntryFeedback.status;
+        helper = assignedOrdersError || orderEntryFeedback.message;
+        helperStatus = assignedOrdersError ? 'error' : orderEntryFeedback.status;
+      } else if (
+        field.name === 'daily_commitment' &&
+        formMode === 'current' &&
+        selectedAssignedOrder
+      ) {
+        const phaseDays = selectedAssignedOrder.planned_phase_days;
+        const capacity = selectedAssignedOrder.daily_capacity;
+        helper =
+          `Assigned-plant target: ${Number(selectedAssignedOrder.daily_commitment).toLocaleString()} pcs/day` +
+          (phaseDays ? ` across ${phaseDays} planned production day(s)` : '') +
+          (capacity ? `; capacity snapshot ${Number(capacity).toLocaleString()} pcs/day.` : '.');
       }
       const helperClass = isAutomaticCumulative || isOrderEntryHistory
         ? helperStatus === 'ready'
@@ -2005,18 +2196,42 @@ export default function MonitoringPage() {
       return (
         <div className={styles.formGroup} key={field.name}>
           <label htmlFor={field.name}>{field.label}</label>
-          <input
-            id={field.name}
-            name={field.name}
-            type={field.type ?? 'text'}
-            value={formData[field.name]}
-            min={field.min}
-            step={field.step}
-            onChange={handleChange}
-            readOnly={readOnly}
-            disabled={disabled}
-            required={!readOnly}
-          />
+          {isAssignedOrderSelector ? (
+            <select
+              id={field.name}
+              name={field.name}
+              value={selectedAssignedOrderId}
+              onChange={handleAssignedOrderChange}
+              disabled={assignedOrdersLoading}
+              required
+            >
+              <option value="">
+                {assignedOrdersLoading
+                  ? 'Loading assigned orders...'
+                  : assignedOrders.length
+                    ? 'Select an assigned bulk order'
+                    : 'No active assigned bulk orders'}
+              </option>
+              {assignedOrders.map((order) => (
+                <option key={`${order.id}:${order.plant_id}`} value={order.id}>
+                  #{order.id} · {order.style_number} · {order.buyer_name}
+                </option>
+              ))}
+            </select>
+          ) : (
+            <input
+              id={field.name}
+              name={field.name}
+              type={field.type ?? 'text'}
+              value={formData[field.name]}
+              min={field.min}
+              step={field.step}
+              onChange={handleChange}
+              readOnly={readOnly}
+              disabled={disabled}
+              required={!readOnly}
+            />
+          )}
           {helper && (
             <span className={helperClass} aria-live="polite">
               {helper}
@@ -2105,46 +2320,48 @@ export default function MonitoringPage() {
         />
       </section>
 
-      <section className={styles.scenarioSection} aria-labelledby="scenario-title">
-        <div className={styles.sectionHeading}>
-          <div>
-            <span className={styles.sectionKicker}>Demo presets</span>
-            <h2 id="scenario-title">Choose a production situation</h2>
-          </div>
-          <div className={styles.scenarioHeadingActions}>
-            <p>
-              Presets use historical example values. Start a current order to
-              enter live factory data.
-            </p>
+      {SHOW_DEMO_PRESETS && (
+        <section className={styles.scenarioSection} aria-labelledby="scenario-title">
+          <div className={styles.sectionHeading}>
             <div>
-              <button type="button" onClick={startCurrentOrder}>
-                + Enter current order
-              </button>
-              {availableDraft && formMode !== 'current' && (
-                <button type="button" onClick={restoreCurrentDraft}>
-                  Restore saved draft
+              <span className={styles.sectionKicker}>Demo presets</span>
+              <h2 id="scenario-title">Choose a production situation</h2>
+            </div>
+            <div className={styles.scenarioHeadingActions}>
+              <p>
+                Presets use historical example values. Start a current order to
+                enter live factory data.
+              </p>
+              <div>
+                <button type="button" onClick={startCurrentOrder}>
+                  + Enter current order
                 </button>
-              )}
-              <Link href="/component3/monitoring-history#historical-import">
-                Prepare demo history
-              </Link>
+                {availableDraft && formMode !== 'current' && (
+                  <button type="button" onClick={restoreCurrentDraft}>
+                    Restore saved draft
+                  </button>
+                )}
+                <Link href="/component3/monitoring-history#historical-import">
+                  Prepare demo history
+                </Link>
+              </div>
             </div>
           </div>
-        </div>
-        <div className={styles.scenarioGrid}>
-          {SCENARIOS.map((scenario) => (
-            <button
-              className={styles.scenarioButton}
-              key={scenario.label}
-              onClick={() => selectScenario(scenario)}
-              type="button"
-            >
-              <strong>{scenario.label}</strong>
-              <span>{scenario.description}</span>
-            </button>
-          ))}
-        </div>
-      </section>
+          <div className={styles.scenarioGrid}>
+            {SCENARIOS.map((scenario) => (
+              <button
+                className={styles.scenarioButton}
+                key={scenario.label}
+                onClick={() => selectScenario(scenario)}
+                type="button"
+              >
+                <strong>{scenario.label}</strong>
+                <span>{scenario.description}</span>
+              </button>
+            ))}
+          </div>
+        </section>
+      )}
 
       <div className={styles.workspace}>
         <section className={styles.formCard}>

@@ -16,7 +16,7 @@ class Component3EarlyWarningValidationTests(unittest.TestCase):
         predicted: tuple[int, int, int],
     ):
         warnings = []
-        for spec, decision in zip(TARGET_SPECS, predicted):
+        for spec, decision in zip(TARGET_SPECS, predicted, strict=True):
             warnings.append(
                 {
                     "target": spec["target"],
@@ -99,13 +99,11 @@ class Component3EarlyWarningValidationTests(unittest.TestCase):
             actual=(0, 0, 0),
             predicted=(0, 0, 0),
         )
-        unavailable["analysis"]["early_warning"]["status"] = (
-            "not_applicable_current_emergency"
-        )
+        unavailable["analysis"]["early_warning"]["status"] = "not_applicable_current_emergency"
 
-        report = build_early_warning_validation_report(
-            [unverified, unavailable]
-        )["independent_validation"]
+        report = build_early_warning_validation_report([unverified, unavailable])[
+            "independent_validation"
+        ]
 
         self.assertEqual(report["ready_warning_rows"], 0)
         self.assertEqual(report["status"], "awaiting_evaluable_rows")
@@ -116,9 +114,7 @@ class Component3EarlyWarningValidationTests(unittest.TestCase):
                 "stored_early_warning_not_available": 1,
             },
         )
-        self.assertTrue(
-            all(target["metrics"] is None for target in report["targets"])
-        )
+        self.assertTrue(all(target["metrics"] is None for target in report["targets"]))
 
 
 if __name__ == "__main__":

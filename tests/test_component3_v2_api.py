@@ -106,12 +106,8 @@ class Component3V2ApiTests(unittest.TestCase):
         )
         self.assertGreaterEqual(result["risk_detection"]["risk_confidence"], 0)
         self.assertLessEqual(result["risk_detection"]["risk_confidence"], 1)
-        self.assertGreaterEqual(
-            result["risk_detection"]["order_risk_probability"], 0
-        )
-        self.assertLessEqual(
-            result["risk_detection"]["order_risk_probability"], 1
-        )
+        self.assertGreaterEqual(result["risk_detection"]["order_risk_probability"], 0)
+        self.assertLessEqual(result["risk_detection"]["order_risk_probability"], 1)
         self.assertEqual(
             result["early_warning"]["status"],
             "not_applicable_current_emergency",
@@ -196,9 +192,7 @@ class Component3V2ApiTests(unittest.TestCase):
                 "cumulative_completed_qty": 2_469,
             }
         )
-        previous_directory = app.config.get(
-            "COMPONENT3_EARLY_WARNING_MODELS_DIR"
-        )
+        previous_directory = app.config.get("COMPONENT3_EARLY_WARNING_MODELS_DIR")
         with tempfile.TemporaryDirectory() as directory:
             app.config["COMPONENT3_EARLY_WARNING_MODELS_DIR"] = directory
             try:
@@ -213,9 +207,7 @@ class Component3V2ApiTests(unittest.TestCase):
                         None,
                     )
                 else:
-                    app.config[
-                        "COMPONENT3_EARLY_WARNING_MODELS_DIR"
-                    ] = previous_directory
+                    app.config["COMPONENT3_EARLY_WARNING_MODELS_DIR"] = previous_directory
 
         self.assertEqual(response.status_code, 200, response.get_json())
         result = response.get_json()
@@ -237,9 +229,7 @@ class Component3V2ApiTests(unittest.TestCase):
         self.assertIn("Worker Shortage", plan["triggered_by"])
         self.assertEqual(plan["recommended_option"]["option_id"], "add_workers")
         self.assertGreater(plan["recommended_option"]["additional_workers"], 0)
-        self.assertTrue(
-            plan["recommended_option"]["feasible_before_deadline"]
-        )
+        self.assertTrue(plan["recommended_option"]["feasible_before_deadline"])
 
     def test_invalid_recovery_parameters_return_bad_request(self):
         payload = self.payload()

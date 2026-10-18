@@ -99,9 +99,7 @@ class Component3RecoveryTests(unittest.TestCase):
         )
 
         repair_option = next(
-            option
-            for option in plan["alternatives"]
-            if option["option_id"] == "repair_machines"
+            option for option in plan["alternatives"] if option["option_id"] == "repair_machines"
         )
         self.assertFalse(repair_option["feasible_before_deadline"])
         self.assertEqual(repair_option["required_working_days"], 5)
@@ -117,27 +115,21 @@ class Component3RecoveryTests(unittest.TestCase):
         )
 
         self.assertTrue(plan["manual_escalation_required"])
-        self.assertEqual(
-            plan["recommended_option"]["option_id"], "manual_escalation"
-        )
+        self.assertEqual(plan["recommended_option"]["option_id"], "manual_escalation")
         self.assertEqual(
             plan["recommended_option"]["external_daily_capacity_required"],
             193.75,
         )
 
     def test_current_plan_is_recommended_when_deadline_is_safe(self):
-        plan = build_recovery_plan(
-            self.data(cumulative_completed_qty=700)
-        )
+        plan = build_recovery_plan(self.data(cumulative_completed_qty=700))
 
         self.assertEqual(plan["status"], "on_track")
         self.assertFalse(plan["manual_escalation_required"])
         self.assertEqual(plan["recommended_option"]["option_id"], "current_plan")
 
     def test_completed_order_requires_no_recovery_action(self):
-        plan = build_recovery_plan(
-            self.data(cumulative_completed_qty=1_000)
-        )
+        plan = build_recovery_plan(self.data(cumulative_completed_qty=1_000))
 
         self.assertEqual(plan["status"], "completed")
         self.assertEqual(plan["remaining_quantity"], 0)

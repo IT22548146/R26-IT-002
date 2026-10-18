@@ -21,7 +21,6 @@ from components.component3_early_warning_data import (
 from components.component3_features import build_feature_values
 from components.component3_tracking import utc_now
 
-
 EXPORT_VERSION = "component3-verified-training-export-v1"
 METADATA_COLUMNS = [
     "Record_ID",
@@ -46,9 +45,7 @@ def _current_features(prediction_input: dict[str, Any]) -> dict[str, int | float
     return build_feature_values(
         daily_commitment=int(prediction_input["daily_commitment"]),
         plant_daily_output=int(prediction_input["plant_daily_output"]),
-        machine_breakdown_count=int(
-            prediction_input["machine_breakdown_count"]
-        ),
+        machine_breakdown_count=int(prediction_input["machine_breakdown_count"]),
         worker_shortage_count=int(prediction_input["worker_shortage_count"]),
         daily_damage_qty=int(prediction_input["daily_damage_qty"]),
         max_daily_damage_qty=int(prediction_input["max_daily_damage_qty"]),
@@ -57,18 +54,14 @@ def _current_features(prediction_input: dict[str, Any]) -> dict[str, int | float
         cutting_days=int(prediction_input["cutting_days"]),
         sewing_days=int(prediction_input["sewing_days"]),
         full_order_qty=int(prediction_input["full_order_qty"]),
-        cumulative_completed_qty=int(
-            prediction_input["cumulative_completed_qty"]
-        ),
+        cumulative_completed_qty=int(prediction_input["cumulative_completed_qty"]),
     )
 
 
 def _days_since_last_actual_emergency(history: list[dict[str, Any]]) -> int:
     earlier = history[:-1]
     emergency_positions = [
-        position
-        for position, record in enumerate(earlier)
-        if bool(record["actual_emergency"])
+        position for position, record in enumerate(earlier) if bool(record["actual_emergency"])
     ]
     if not emergency_positions:
         return len(history)
@@ -80,21 +73,13 @@ def _trailing_features(
 ) -> dict[str, int | float]:
     trailing = history[-3:]
     current_input = history[-1]["prediction_input"]
-    previous_input = (
-        history[-2]["prediction_input"] if len(history) > 1 else current_input
-    )
+    previous_input = history[-2]["prediction_input"] if len(history) > 1 else current_input
     outputs = pd.Series(
-        [
-            float(record["prediction_input"]["plant_daily_output"])
-            for record in trailing
-        ],
+        [float(record["prediction_input"]["plant_daily_output"]) for record in trailing],
         dtype="float64",
     )
     gaps = pd.Series(
-        [
-            float(_current_features(record["prediction_input"])["Gap_Pct"])
-            for record in trailing
-        ],
+        [float(_current_features(record["prediction_input"])["Gap_Pct"]) for record in trailing],
         dtype="float64",
     )
 
@@ -102,31 +87,24 @@ def _trailing_features(
         "History_Days_Available": len(trailing),
         "Previous_Day_Output": float(previous_input["plant_daily_output"]),
         "Output_Change_From_Previous": float(
-            current_input["plant_daily_output"]
-            - previous_input["plant_daily_output"]
+            current_input["plant_daily_output"] - previous_input["plant_daily_output"]
         ),
         "Trailing_3D_Avg_Output": round(float(outputs.mean()), 4),
         "Trailing_3D_Output_Std": round(float(outputs.std(ddof=0)), 4),
         "Trailing_3D_Avg_Gap_Pct": round(float(gaps.mean()), 4),
-        "Trailing_3D_Emergency_Days": sum(
-            bool(record["actual_emergency"]) for record in trailing
-        ),
+        "Trailing_3D_Emergency_Days": sum(bool(record["actual_emergency"]) for record in trailing),
         "Trailing_3D_Worker_Shortage_Days": sum(
-            int(record["prediction_input"]["worker_shortage_count"]) > 0
-            for record in trailing
+            int(record["prediction_input"]["worker_shortage_count"]) > 0 for record in trailing
         ),
         "Trailing_3D_Machine_Breakdown_Days": sum(
-            int(record["prediction_input"]["machine_breakdown_count"]) > 0
-            for record in trailing
+            int(record["prediction_input"]["machine_breakdown_count"]) > 0 for record in trailing
         ),
         "Trailing_3D_Quality_Limit_Days": sum(
             int(record["prediction_input"]["daily_damage_qty"])
             > int(record["prediction_input"]["max_daily_damage_qty"])
             for record in trailing
         ),
-        "Days_Since_Last_Emergency": _days_since_last_actual_emergency(
-            history
-        ),
+        "Days_Since_Last_Emergency": _days_since_last_actual_emergency(history),
     }
 
 
@@ -134,22 +112,12 @@ def _targets(record: dict[str, Any]) -> dict[str, Any]:
     values = {
         "Emergency_Within_1_Day": record["emergency_within_1_day"],
         "Emergency_Within_3_Days": record["emergency_within_3_days"],
-        "First_Emergency_Type_Within_3_Days": record[
-            "first_emergency_type_within_3_days"
-        ],
+        "First_Emergency_Type_Within_3_Days": record["first_emergency_type_within_3_days"],
         "First_Emergency_Lead_Days": record["first_emergency_lead_days"],
-        "Worker_Shortage_Within_3_Days": record[
-            "worker_shortage_within_3_days"
-        ],
-        "Machine_Breakdown_Within_3_Days": record[
-            "machine_breakdown_within_3_days"
-        ],
-        "Quality_Limit_Within_3_Days": record[
-            "quality_limit_within_3_days"
-        ],
-        "Output_Schedule_Risk_Within_3_Days": record[
-            "output_schedule_risk_within_3_days"
-        ],
+        "Worker_Shortage_Within_3_Days": record["worker_shortage_within_3_days"],
+        "Machine_Breakdown_Within_3_Days": record["machine_breakdown_within_3_days"],
+        "Quality_Limit_Within_3_Days": record["quality_limit_within_3_days"],
+        "Output_Schedule_Risk_Within_3_Days": record["output_schedule_risk_within_3_days"],
     }
     required = [
         column
@@ -175,15 +143,11 @@ def _binary_balance(dataset: pd.DataFrame, target: str) -> dict[str, Any]:
         positive_orders = int(dataset.loc[positive, "Bulk_Order_ID"].nunique())
         negative_orders = int(dataset.loc[negative, "Bulk_Order_ID"].nunique())
     rows_sufficient = min(positive_rows, negative_rows) >= MIN_ROWS_PER_CLASS
-    orders_sufficient = (
-        min(positive_orders, negative_orders) >= MIN_ORDERS_PER_CLASS
-    )
+    orders_sufficient = min(positive_orders, negative_orders) >= MIN_ORDERS_PER_CLASS
     return {
         "positive_rows": positive_rows,
         "negative_rows": negative_rows,
-        "positive_rate": (
-            round(positive_rows / len(dataset), 4) if len(dataset) else None
-        ),
+        "positive_rate": (round(positive_rows / len(dataset), 4) if len(dataset) else None),
         "positive_orders": positive_orders,
         "negative_orders": negative_orders,
         "minimum_rows_per_class_required": MIN_ROWS_PER_CLASS,
@@ -202,8 +166,7 @@ def _sequence_quality(
     for order_id, records in records_by_order.items():
         days = [int(record["working_day_no"]) for record in records]
         order_gaps = sum(
-            current - previous != 1
-            for previous, current in zip(days, days[1:])
+            current - previous != 1 for previous, current in zip(days, days[1:], strict=False)
         )
         if order_gaps:
             transitions_with_gaps += order_gaps
@@ -269,9 +232,7 @@ def build_verified_training_dataset(
     """Build source-day features and verified future targets from monitoring."""
     records_by_order: dict[str, list[dict[str, Any]]] = {}
     for record in snapshot:
-        records_by_order.setdefault(str(record["bulk_order_id"]), []).append(
-            record
-        )
+        records_by_order.setdefault(str(record["bulk_order_id"]), []).append(record)
     for records in records_by_order.values():
         records.sort(
             key=lambda item: (
@@ -300,15 +261,11 @@ def build_verified_training_dataset(
 
             source_history = order_records[: position + 1]
             if any(
-                not item.get("independent_validation_eligible", True)
-                for item in source_history
+                not item.get("independent_validation_eligible", True) for item in source_history
             ):
                 exclusion_counts["retrospective_prior_history"] += 1
                 continue
-            if any(
-                item["actual_outcome_status"] != "Verified"
-                for item in source_history
-            ):
+            if any(item["actual_outcome_status"] != "Verified" for item in source_history):
                 exclusion_counts["unverified_prior_history"] += 1
                 continue
 
@@ -321,9 +278,7 @@ def build_verified_training_dataset(
                     "Style_ID": record["style_id"],
                     "Production_Date": record["production_date"],
                 }
-                export_record.update(
-                    {feature: current[feature] for feature in CURRENT_FEATURES}
-                )
+                export_record.update({feature: current[feature] for feature in CURRENT_FEATURES})
                 export_record.update(_trailing_features(source_history))
                 export_record.update(_targets(record))
                 exported.append(export_record)
@@ -337,9 +292,7 @@ def build_verified_training_dataset(
     identity_overlap = sorted(set(EARLY_WARNING_FEATURES) & IDENTITY_COLUMNS)
     leakage_passed = not target_overlap and not identity_overlap
     primary_balance = _binary_balance(dataset, "Emergency_Within_3_Days")
-    exported_record_ids = {
-        str(record_id) for record_id in dataset["Record_ID"].tolist()
-    }
+    exported_record_ids = {str(record_id) for record_id in dataset["Record_ID"].tolist()}
     exported_sequences: dict[str, list[dict[str, Any]]] = {}
     for order_id, records in records_by_order.items():
         exported_positions = [
@@ -348,9 +301,7 @@ def build_verified_training_dataset(
             if str(record["record_id"]) in exported_record_ids
         ]
         if exported_positions:
-            exported_sequences[order_id] = records[
-                : max(exported_positions) + 1
-            ]
+            exported_sequences[order_id] = records[: max(exported_positions) + 1]
     sequence_quality = _sequence_quality(exported_sequences)
     training_ready = (
         leakage_passed
@@ -381,23 +332,18 @@ def build_verified_training_dataset(
                 for record in snapshot
             ),
             "retrospective_records_excluded": sum(
-                not record.get("independent_validation_eligible", True)
-                for record in snapshot
+                not record.get("independent_validation_eligible", True) for record in snapshot
             ),
             "exported_rows": len(dataset),
             "independent_orders": (
-                int(dataset["Bulk_Order_ID"].nunique())
-                if not dataset.empty
-                else 0
+                int(dataset["Bulk_Order_ID"].nunique()) if not dataset.empty else 0
             ),
             "excluded_rows_by_reason": dict(sorted(exclusion_counts.items())),
             "invalid_record_ids": invalid_record_ids,
             "sha256_csv": hashlib.sha256(csv_bytes).hexdigest(),
         },
         "sequence_quality": sequence_quality,
-        "all_monitoring_sequence_quality": _sequence_quality(
-            records_by_order
-        ),
+        "all_monitoring_sequence_quality": _sequence_quality(records_by_order),
         "schema": {
             "metadata_columns": METADATA_COLUMNS,
             "group_validation_column": "Bulk_Order_ID",

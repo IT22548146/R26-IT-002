@@ -72,19 +72,13 @@ class Component3HistoricalValidationTests(unittest.TestCase):
 
         self.assertEqual(len(cases), 2)
         self.assertEqual(cases.iloc[0]["actual_next_workday_output"], 110)
+        self.assertEqual(report["dataset"]["capacity_cases_excluding_final_partial_day"], 1)
         self.assertEqual(
-            report["dataset"]["capacity_cases_excluding_final_partial_day"], 1
-        )
-        self.assertEqual(
-            report["dataset"][
-                "final_partial_day_cases_excluded_from_capacity_metrics"
-            ],
+            report["dataset"]["final_partial_day_cases_excluded_from_capacity_metrics"],
             1,
         )
         self.assertEqual(
-            report["validation"]["current_output_as_next_workday_baseline"][
-                "mae"
-            ],
+            report["validation"]["current_output_as_next_workday_baseline"]["mae"],
             30.0,
         )
         self.assertEqual(report["dataset"]["orders_completed_before_deadline"], 1)

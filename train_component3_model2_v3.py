@@ -11,7 +11,7 @@ import argparse
 import hashlib
 import json
 import platform
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 import joblib
@@ -102,9 +102,7 @@ def evaluate_candidates(
 
         evaluations[name] = {
             "accuracy": float(accuracy_score(real_y, predictions)),
-            "macro_f1": float(
-                f1_score(real_y, predictions, average="macro", zero_division=0)
-            ),
+            "macro_f1": float(f1_score(real_y, predictions, average="macro", zero_division=0)),
             "weighted_f1": float(
                 f1_score(real_y, predictions, average="weighted", zero_division=0)
             ),
@@ -118,9 +116,7 @@ def evaluate_candidates(
             "high_risk_recall": float(
                 recall_score(real_y, predictions, pos_label=1, zero_division=0)
             ),
-            "false_low_risk_rows": int(
-                ((predictions == 0) & (real_y == 1)).sum()
-            ),
+            "false_low_risk_rows": int(((predictions == 0) & (real_y == 1)).sum()),
             "confusion_matrix": confusion_matrix(
                 real_y,
                 predictions,
@@ -164,7 +160,7 @@ def main() -> None:
     )
     metadata = {
         "artifact_version": "3.0.0",
-        "trained_at_utc": datetime.now(timezone.utc).isoformat(),
+        "trained_at_utc": datetime.now(UTC).isoformat(),
         "production_approved": False,
         "approval_note": (
             "Research-only Model 2: independent real Low Risk order coverage "
@@ -177,12 +173,9 @@ def main() -> None:
             "real_orders": int(real["Bulk_Order_ID"].nunique()),
             "real_low_risk_orders": real_low_risk_orders,
             "augmented_training_rows": int(len(augmented)),
-            "augmented_training_orders": int(
-                augmented["Bulk_Order_ID"].nunique()
-            ),
+            "augmented_training_orders": int(augmented["Bulk_Order_ID"].nunique()),
             "augmentation_versions": sorted(
-                str(value)
-                for value in augmented["Augmentation_Version"].dropna().unique()
+                str(value) for value in augmented["Augmentation_Version"].dropna().unique()
             ),
         },
         "features": ORDER_RISK_FEATURES,

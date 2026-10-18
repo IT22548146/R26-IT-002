@@ -48,9 +48,7 @@ class Component3EarlyWarningDataTests(unittest.TestCase):
                     "Max_Daily_Damage_Qty": 3,
                     "Machine_Breakdown_Count": 0,
                     "Worker_Shortage_Count": 1 if is_worker_incident else 0,
-                    "Risk_Type": "Worker Issue"
-                    if is_worker_incident
-                    else "No Issue",
+                    "Risk_Type": "Worker Issue" if is_worker_incident else "No Issue",
                     "System_Recommendation": "Test recommendation",
                     "Cumulative_Completed_Qty": index * 100,
                 }
@@ -61,10 +59,13 @@ class Component3EarlyWarningDataTests(unittest.TestCase):
         labelled, preparation = build_early_warning_dataset(self.sequence())
 
         self.assertEqual(len(labelled), 2)
-        self.assertEqual(labelled["Production_Date"].tolist(), [
-            "2026-08-17",
-            "2026-08-19",
-        ])
+        self.assertEqual(
+            labelled["Production_Date"].tolist(),
+            [
+                "2026-08-17",
+                "2026-08-19",
+            ],
+        )
         self.assertEqual(labelled["Emergency_Within_1_Day"].tolist(), [1, 0])
         self.assertEqual(labelled["Emergency_Within_3_Days"].tolist(), [1, 0])
         self.assertEqual(
@@ -82,9 +83,7 @@ class Component3EarlyWarningDataTests(unittest.TestCase):
         self.assertTrue(bool(emergency_mask(data).iloc[0]))
 
     def test_future_and_identity_fields_are_not_model_features(self):
-        self.assertFalse(
-            set(EARLY_WARNING_FEATURES).intersection(EXCLUDED_FROM_MODEL_FEATURES)
-        )
+        self.assertFalse(set(EARLY_WARNING_FEATURES).intersection(EXCLUDED_FROM_MODEL_FEATURES))
         self.assertNotIn("Risk_Type", EARLY_WARNING_FEATURES)
         self.assertNotIn("Order_Risk_Level", EARLY_WARNING_FEATURES)
 
@@ -92,9 +91,7 @@ class Component3EarlyWarningDataTests(unittest.TestCase):
         report, _ = audit_early_warning_dataset(self.sequence())
 
         self.assertTrue(report["step_5a"]["dataset_preparation_completed"])
-        self.assertFalse(
-            report["step_5a"]["general_early_warning_training_ready"]
-        )
+        self.assertFalse(report["step_5a"]["general_early_warning_training_ready"])
         target = report["label_readiness"]["Emergency_Within_3_Days"]
         self.assertFalse(target["ready_for_grouped_modeling"])
 

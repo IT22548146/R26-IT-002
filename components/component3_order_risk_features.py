@@ -12,7 +12,6 @@ import pandas as pd
 
 from components.component3_features import FEATURES, build_feature_values
 
-
 DEADLINE_FEATURES = [
     "Deadline_Calendar_Days",
     "Available_Working_Days_To_Deadline",
@@ -88,11 +87,7 @@ def build_order_risk_feature_values(
 
     remaining_qty = max(0, full_order_qty - cumulative_completed_qty)
     available_days = available_working_days_to_deadline(current, deadline)
-    required_rate = (
-        remaining_qty / available_days
-        if available_days > 0
-        else float(remaining_qty)
-    )
+    required_rate = remaining_qty / available_days if available_days > 0 else float(remaining_qty)
     commitment_slack = daily_commitment - required_rate
     values.update(
         {

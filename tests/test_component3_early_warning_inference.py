@@ -179,8 +179,7 @@ class Component3EarlyWarningInferenceTests(unittest.TestCase):
                     "horizon_production_days": 3,
                     "production_approved": True,
                 },
-                Path(directory)
-                / "c3_early_warning_machine_breakdown_v2.joblib",
+                Path(directory) / "c3_early_warning_machine_breakdown_v2.joblib",
             )
 
             with self.assertRaisesRegex(

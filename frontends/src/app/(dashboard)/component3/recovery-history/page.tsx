@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import api from '@/lib/api';
 import styles from './recovery-history.module.css';
 
 type WorkflowStatus = 'Pending' | 'Approved' | 'In Progress' | 'Completed';
@@ -94,11 +95,6 @@ interface IncidentListResponse {
   offset: number;
 }
 
-const API_BASE_URL = (
-  process.env.NEXT_PUBLIC_COMPONENT3_API_URL ??
-  'http://127.0.0.1:5001/api/component3'
-).replace(/\/$/, '');
-
 const NUMBER_FORMATTER = new Intl.NumberFormat('en-US', {
   maximumFractionDigits: 2,
 });
@@ -157,23 +153,23 @@ export default function RecoveryHistoryPage() {
 
   const requestJson = useCallback(
     async (path: string, init?: RequestInit) => {
-      const response = await fetch(`${API_BASE_URL}${path}`, {
-        ...init,
-        headers: {
-          'Content-Type': 'application/json',
-          ...init?.headers,
-        },
-      });
-      const payload: unknown = await response.json();
-      if (!response.ok) {
-        const apiError = payload as { error?: unknown };
+      try {
+        const response = await api.request({
+          url: `/api/component3${path}`,
+          method: init?.method ?? 'GET',
+          data: init?.body ? JSON.parse(String(init.body)) : undefined,
+        });
+        return response.data as unknown;
+      } catch (requestError: unknown) {
+        const apiError = requestError as {
+          response?: { data?: { error?: unknown } };
+        };
         throw new Error(
-          typeof apiError.error === 'string'
-            ? apiError.error
+          typeof apiError.response?.data?.error === 'string'
+            ? apiError.response.data.error
             : 'The recovery tracking request failed.',
         );
       }
-      return payload;
     },
     [],
   );

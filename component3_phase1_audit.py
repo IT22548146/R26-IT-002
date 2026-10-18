@@ -22,7 +22,6 @@ from sklearn.model_selection import LeaveOneGroupOut, cross_val_predict, train_t
 from sklearn.pipeline import make_pipeline
 from sklearn.preprocessing import StandardScaler
 
-
 RANDOM_SEED = 42
 RISK_LABELS = [
     "No Issue",
@@ -236,8 +235,7 @@ def audit(data_path: Path) -> dict:
             "real_styles": int(real_df["Style_ID"].nunique()),
             "real_risk_type_counts": {key: int(value) for key, value in risk_counts.items()},
             "real_order_risk_counts": {
-                key: int(value)
-                for key, value in real_df["Order_Risk_Level"].value_counts().items()
+                key: int(value) for key, value in real_df["Order_Risk_Level"].value_counts().items()
             },
             "real_low_risk_order_groups": low_risk_groups,
             "real_high_risk_order_groups": high_risk_groups,

@@ -4,6 +4,7 @@ import unittest
 
 from app import app
 from components import component3
+from middleware.auth_middleware import generate_token
 
 
 class Component3TrackingApiTests(unittest.TestCase):
@@ -18,6 +19,7 @@ class Component3TrackingApiTests(unittest.TestCase):
             "tracking.sqlite3",
         )
         self.client = app.test_client()
+        self.client.environ_base["HTTP_AUTHORIZATION"] = f"Bearer {generate_token(9000, 'Manager')}"
 
     def tearDown(self):
         component3._models.clear()
@@ -100,9 +102,7 @@ class Component3TrackingApiTests(unittest.TestCase):
         self.assertEqual(incident["recommended_option_id"], "add_workers")
         self.assertEqual(incident["analysis"]["model_version"], "v2")
         self.assertEqual(
-            incident["analysis"]["recovery_plan"]["recommended_option"][
-                "additional_workers"
-            ],
+            incident["analysis"]["recovery_plan"]["recommended_option"]["additional_workers"],
             3,
         )
         self.assertEqual(incident["timeline"][0]["event_type"], "Incident Created")
@@ -121,9 +121,7 @@ class Component3TrackingApiTests(unittest.TestCase):
             incident["incident_id"],
         )
 
-        response = self.client.get(
-            "/api/component3/orders/BULK0001/incidents"
-        )
+        response = self.client.get("/api/component3/orders/BULK0001/incidents")
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.get_json()["total"], 1)
 

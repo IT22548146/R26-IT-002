@@ -12,7 +12,6 @@ import math
 from datetime import datetime, timedelta
 from typing import Any
 
-
 RECOVERY_PARAMETER_FIELDS = {
     "planned_worker_count",
     "planned_machine_count",
@@ -31,9 +30,7 @@ def _number(value: Any, field: str, *, integer: bool = False) -> int | float:
     try:
         number = float(value)
     except (TypeError, ValueError) as exc:
-        raise ValueError(
-            f"recovery_parameters.{field} must be numeric"
-        ) from exc
+        raise ValueError(f"recovery_parameters.{field} must be numeric") from exc
     if not math.isfinite(number):
         raise ValueError(f"recovery_parameters.{field} must be finite")
     if integer:
@@ -80,21 +77,11 @@ def normalize_recovery_parameters(
         "planned_worker_count": parsed.get("planned_worker_count"),
         "planned_machine_count": parsed.get("planned_machine_count"),
         "normal_shift_hours": parsed.get("normal_shift_hours", 8.0),
-        "max_overtime_hours_per_day": parsed.get(
-            "max_overtime_hours_per_day", 2.0
-        ),
-        "max_additional_workers": parsed.get(
-            "max_additional_workers", worker_shortage_count
-        ),
-        "available_backup_machines": parsed.get(
-            "available_backup_machines", 0
-        ),
-        "backup_line_daily_capacity": parsed.get(
-            "backup_line_daily_capacity", 0.0
-        ),
-        "expected_machine_repair_hours": parsed.get(
-            "expected_machine_repair_hours"
-        ),
+        "max_overtime_hours_per_day": parsed.get("max_overtime_hours_per_day", 2.0),
+        "max_additional_workers": parsed.get("max_additional_workers", worker_shortage_count),
+        "available_backup_machines": parsed.get("available_backup_machines", 0),
+        "backup_line_daily_capacity": parsed.get("backup_line_daily_capacity", 0.0),
+        "expected_machine_repair_hours": parsed.get("expected_machine_repair_hours"),
     }
 
     for field in (
@@ -120,15 +107,13 @@ def normalize_recovery_parameters(
     planned_workers = config["planned_worker_count"]
     if planned_workers is not None and planned_workers < worker_shortage_count:
         raise ValueError(
-            "recovery_parameters.planned_worker_count cannot be less than "
-            "worker_shortage_count"
+            "recovery_parameters.planned_worker_count cannot be less than worker_shortage_count"
         )
 
     planned_machines = config["planned_machine_count"]
     if planned_machines is not None and planned_machines < machine_breakdown_count:
         raise ValueError(
-            "recovery_parameters.planned_machine_count cannot be less than "
-            "machine_breakdown_count"
+            "recovery_parameters.planned_machine_count cannot be less than machine_breakdown_count"
         )
 
     return config
@@ -183,7 +168,9 @@ def _evaluate_option(
     required_days = (
         required_days_override
         if required_days_override is not None
-        else math.ceil(remaining_qty / capacity) if capacity > 0 else None
+        else math.ceil(remaining_qty / capacity)
+        if capacity > 0
+        else None
     )
     projected = (
         _add_working_days(production_date, required_days).strftime("%Y-%m-%d")
@@ -202,9 +189,7 @@ def _evaluate_option(
         "required_overtime_hours_per_day": _rounded(overtime_hours),
         "additional_workers": additional_workers,
         "repaired_machines": repaired_machines,
-        "expected_machine_repair_hours": _rounded(
-            expected_machine_repair_hours
-        ),
+        "expected_machine_repair_hours": _rounded(expected_machine_repair_hours),
         "backup_machines": backup_machines,
         "backup_line_daily_capacity_used": _rounded(backup_line_capacity),
         "required_working_days": required_days,
@@ -253,16 +238,12 @@ def build_recovery_plan(
     """Build ranked, explainable actions for an at-risk production order."""
     production_date = datetime.strptime(data["production_date"], "%Y-%m-%d")
     deadline = datetime.strptime(data["buyer_required_date"], "%Y-%m-%d")
-    remaining_qty = max(
-        0, int(data["full_order_qty"]) - int(data["cumulative_completed_qty"])
-    )
+    remaining_qty = max(0, int(data["full_order_qty"]) - int(data["cumulative_completed_qty"]))
     current_capacity = float(data["plant_daily_output"])
     daily_commitment = float(data["daily_commitment"])
     worker_shortage = int(data["worker_shortage_count"])
     machine_breakdown = int(data["machine_breakdown_count"])
-    damage_exceeded = int(data["daily_damage_qty"]) > int(
-        data["max_daily_damage_qty"]
-    )
+    damage_exceeded = int(data["daily_damage_qty"]) > int(data["max_daily_damage_qty"])
 
     config = normalize_recovery_parameters(
         data.get("recovery_parameters"),
@@ -289,9 +270,7 @@ def build_recovery_plan(
     if machine_breakdown and config["expected_machine_repair_hours"] is None:
         missing_parameters.append("expected_machine_repair_hours")
 
-    required_daily_rate = (
-        remaining_qty / available_days if available_days > 0 else None
-    )
+    required_daily_rate = remaining_qty / available_days if available_days > 0 else None
     recovery_gap = (
         max(0.0, required_daily_rate - current_capacity)
         if required_daily_rate is not None
@@ -410,17 +389,10 @@ def build_recovery_plan(
 
     planned_machines = config["planned_machine_count"]
     per_machine = (
-        daily_commitment / float(planned_machines)
-        if planned_machines is not None
-        else 0.0
+        daily_commitment / float(planned_machines) if planned_machines is not None else 0.0
     )
     repair_hours = config["expected_machine_repair_hours"]
-    if (
-        gap > 0
-        and machine_breakdown
-        and planned_machines is not None
-        and repair_hours is not None
-    ):
+    if gap > 0 and machine_breakdown and planned_machines is not None and repair_hours is not None:
         needed_machines = math.ceil(gap / per_machine)
         repaired = min(needed_machines, machine_breakdown)
         if repaired > 0:
@@ -480,9 +452,7 @@ def build_recovery_plan(
             _evaluate_option(
                 option_id="backup_line",
                 title="Move part of the order to a backup line",
-                rationale=(
-                    f"Assign {_rounded(line_used)} pieces per day to the backup line."
-                ),
+                rationale=(f"Assign {_rounded(line_used)} pieces per day to the backup line."),
                 capacity=current_capacity + line_used,
                 current_capacity=current_capacity,
                 remaining_qty=remaining_qty,
@@ -537,13 +507,17 @@ def build_recovery_plan(
         "combined_recovery": 5,
     }
     feasible = [option for option in options if option["feasible_before_deadline"]]
-    recommended = min(
-        feasible,
-        key=lambda option: (
-            priority[option["option_id"]],
-            option["daily_capacity_gain"],
-        ),
-    ) if feasible else None
+    recommended = (
+        min(
+            feasible,
+            key=lambda option: (
+                priority[option["option_id"]],
+                option["daily_capacity_gain"],
+            ),
+        )
+        if feasible
+        else None
+    )
 
     manual_escalation = recommended is None
     if manual_escalation:
@@ -562,9 +536,7 @@ def build_recovery_plan(
             ),
         }
 
-    alternatives = [
-        option for option in options if option["option_id"] != recommended["option_id"]
-    ]
+    alternatives = [option for option in options if option["option_id"] != recommended["option_id"]]
     return {
         "engine_version": "v1-rules",
         "status": "on_track" if base["feasible_before_deadline"] else "recovery_required",
@@ -627,9 +599,7 @@ def _build_combined_option(
 
     if capacity < required_daily_rate and planned_machines:
         machines_needed = math.ceil((required_daily_rate - capacity) / per_machine)
-        backups_used = min(
-            machines_needed, int(config["available_backup_machines"])
-        )
+        backups_used = min(machines_needed, int(config["available_backup_machines"]))
         capacity += backups_used * per_machine
 
     if capacity < required_daily_rate:
@@ -648,8 +618,7 @@ def _build_combined_option(
         capacity += overtime_used * hourly_output
 
     used_action_count = sum(
-        value > 0
-        for value in (workers_used, repaired, backups_used, line_used, overtime_used)
+        value > 0 for value in (workers_used, repaired, backups_used, line_used, overtime_used)
     )
     if used_action_count < 2:
         return None

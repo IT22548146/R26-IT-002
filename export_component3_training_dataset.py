@@ -13,15 +13,13 @@ from components.component3_training_export import (
     dataframe_to_xlsx_bytes,
 )
 
-
 BASE_DIR = Path(__file__).resolve().parent
 
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description=(
-            "Export leakage-safe training rows from verified Component 3 "
-            "daily monitoring records."
+            "Export leakage-safe training rows from verified Component 3 daily monitoring records."
         )
     )
     parser.add_argument(
@@ -44,18 +42,14 @@ def _write(path: Path, content: bytes) -> None:
 def main() -> None:
     args = parse_args()
     store = Component3MonitoringStore(str(args.database))
-    dataset, audit = build_verified_training_dataset(
-        store.training_export_snapshot()
-    )
+    dataset, audit = build_verified_training_dataset(store.training_export_snapshot())
     rendered_audit = json.dumps(audit, indent=2, ensure_ascii=False) + "\n"
     print(rendered_audit, end="")
 
     if args.audit:
         _write(args.audit, rendered_audit.encode("utf-8"))
     if dataset.empty and (args.csv or args.xlsx):
-        raise SystemExit(
-            "No verified Ready rows are available for dataset export."
-        )
+        raise SystemExit("No verified Ready rows are available for dataset export.")
     if args.csv:
         _write(args.csv, dataframe_to_csv_bytes(dataset))
     if args.xlsx:

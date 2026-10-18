@@ -9,6 +9,7 @@ from app import app
 from components import component3
 from components.component3_monitoring import Component3MonitoringStore
 from components.component3_tracking import TrackingConflictError
+from middleware.auth_middleware import generate_token
 
 
 class Component3MonitoringStoreTests(unittest.TestCase):
@@ -53,9 +54,7 @@ class Component3MonitoringStoreTests(unittest.TestCase):
             "max_daily_damage_qty": 3,
             "machine_breakdown_count": machine_breakdown,
             "worker_shortage_count": worker_shortage,
-            "cumulative_completed_qty": cumulative
-            if cumulative is not None
-            else day * 100,
+            "cumulative_completed_qty": cumulative if cumulative is not None else day * 100,
             "recovery_parameters": {},
         }
 
@@ -135,9 +134,7 @@ class Component3MonitoringStoreTests(unittest.TestCase):
         source = self.save(self.prediction_input(1, order_id="ORDER_2"))
         records = [source]
         for day in (2, 3, 4):
-            records.append(
-                self.save(self.prediction_input(day, order_id="ORDER_2"))
-            )
+            records.append(self.save(self.prediction_input(day, order_id="ORDER_2")))
         for record in records:
             self.verify(record)
 
@@ -165,9 +162,7 @@ class Component3MonitoringStoreTests(unittest.TestCase):
             [record["working_day_no"] for record in history],
             [1, 2],
         )
-        self.assertTrue(
-            all(record["bulk_order_id"] == "ORDER_HISTORY" for record in history)
-        )
+        self.assertTrue(all(record["bulk_order_id"] == "ORDER_HISTORY" for record in history))
         self.assertTrue(all("prediction_input" in record for record in history))
 
     def test_current_emergency_is_not_an_early_warning_source(self):
@@ -247,9 +242,7 @@ class Component3MonitoringStoreTests(unittest.TestCase):
             day_one["record_id"],
         )
         self.assertEqual(
-            day_two_context["previous_record"][
-                "cumulative_completed_qty"
-            ],
+            day_two_context["previous_record"]["cumulative_completed_qty"],
             120,
         )
 
@@ -309,9 +302,7 @@ class Component3MonitoringStoreTests(unittest.TestCase):
             "STYLE_ORDER_NEXT_ENTRY",
         )
         self.assertEqual(
-            continuation["saved_order_setup"]["order_fields"][
-                "max_daily_damage_qty"
-            ],
+            continuation["saved_order_setup"]["order_fields"]["max_daily_damage_qty"],
             3,
         )
         self.assertTrue(continuation["can_start_next_entry"])
@@ -505,6 +496,7 @@ class Component3MonitoringApiTests(unittest.TestCase):
             "tracking.sqlite3",
         )
         self.client = app.test_client()
+        self.client.environ_base["HTTP_AUTHORIZATION"] = f"Bearer {generate_token(9000, 'Manager')}"
 
     def tearDown(self):
         component3._models.clear()
@@ -570,9 +562,7 @@ class Component3MonitoringApiTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.get_json()["total"], 1)
 
-        response = self.client.get(
-            f"/api/component3/monitoring-records/{record['record_id']}"
-        )
+        response = self.client.get(f"/api/component3/monitoring-records/{record['record_id']}")
         self.assertEqual(response.status_code, 200)
         self.assertEqual(
             response.get_json()["monitoring_record"]["recorded_by"],
@@ -585,9 +575,7 @@ class Component3MonitoringApiTests(unittest.TestCase):
         self.assertEqual(response.get_json()["verified_records"], 0)
         self.assertEqual(response.get_json()["pending_verification_records"], 1)
         self.assertFalse(
-            response.get_json()["three_day_target"][
-                "general_early_warning_training_ready"
-            ]
+            response.get_json()["three_day_target"]["general_early_warning_training_ready"]
         )
 
     def test_duplicate_daily_record_is_rejected(self):
@@ -623,9 +611,7 @@ class Component3MonitoringApiTests(unittest.TestCase):
         )
 
         self.assertEqual(second.status_code, 201, second.get_json())
-        warning = second.get_json()["monitoring_record"]["analysis"][
-            "early_warning"
-        ]
+        warning = second.get_json()["monitoring_record"]["analysis"]["early_warning"]
         self.assertEqual(warning["status"], "available")
         self.assertEqual(warning["history"]["saved_prior_records"], 1)
         self.assertEqual(warning["history"]["status"], "partial")
@@ -636,8 +622,7 @@ class Component3MonitoringApiTests(unittest.TestCase):
 
     def test_cumulative_context_endpoint_supports_safe_auto_calculation(self):
         response = self.client.get(
-            "/api/component3/orders/MONITORING001/cumulative-context"
-            "?working_day_no=1"
+            "/api/component3/orders/MONITORING001/cumulative-context?working_day_no=1"
         )
         self.assertEqual(response.status_code, 200, response.get_json())
         self.assertEqual(response.get_json()["status"], "day_one")
@@ -649,8 +634,7 @@ class Component3MonitoringApiTests(unittest.TestCase):
         self.assertEqual(created.status_code, 201, created.get_json())
 
         response = self.client.get(
-            "/api/component3/orders/MONITORING001/cumulative-context"
-            "?working_day_no=2"
+            "/api/component3/orders/MONITORING001/cumulative-context?working_day_no=2"
         )
         self.assertEqual(response.status_code, 200, response.get_json())
         context = response.get_json()
@@ -663,29 +647,23 @@ class Component3MonitoringApiTests(unittest.TestCase):
         self.assertEqual(context["previous_record"]["plant_daily_output"], 105)
 
         response = self.client.get(
-            "/api/component3/orders/MONITORING001/cumulative-context"
-            "?working_day_no=1"
+            "/api/component3/orders/MONITORING001/cumulative-context?working_day_no=1"
         )
         self.assertEqual(response.status_code, 200, response.get_json())
         self.assertEqual(response.get_json()["status"], "current_day_exists")
         self.assertEqual(
-            response.get_json()["current_record"][
-                "cumulative_completed_qty"
-            ],
+            response.get_json()["current_record"]["cumulative_completed_qty"],
             105,
         )
 
         for suffix in ("", "?working_day_no=0", "?working_day_no=bad"):
             response = self.client.get(
-                "/api/component3/orders/MONITORING001/cumulative-context"
-                + suffix
+                "/api/component3/orders/MONITORING001/cumulative-context" + suffix
             )
             self.assertEqual(response.status_code, 400, response.get_json())
 
     def test_next_entry_context_endpoint_uses_latest_saved_order_day(self):
-        response = self.client.get(
-            "/api/component3/orders/MONITORING001/next-entry-context"
-        )
+        response = self.client.get("/api/component3/orders/MONITORING001/next-entry-context")
         self.assertEqual(response.status_code, 200, response.get_json())
         self.assertEqual(response.get_json()["status"], "new_order")
         self.assertEqual(
@@ -699,9 +677,7 @@ class Component3MonitoringApiTests(unittest.TestCase):
         )
         self.assertEqual(created.status_code, 201, created.get_json())
 
-        response = self.client.get(
-            "/api/component3/orders/MONITORING001/next-entry-context"
-        )
+        response = self.client.get("/api/component3/orders/MONITORING001/next-entry-context")
         self.assertEqual(response.status_code, 200, response.get_json())
         context = response.get_json()
         self.assertEqual(context["status"], "continue_order")
@@ -719,9 +695,7 @@ class Component3MonitoringApiTests(unittest.TestCase):
             14,
         )
         self.assertEqual(
-            context["saved_order_setup"]["recovery_parameters"][
-                "planned_worker_count"
-            ],
+            context["saved_order_setup"]["recovery_parameters"]["planned_worker_count"],
             20,
         )
 
@@ -730,10 +704,7 @@ class Component3MonitoringApiTests(unittest.TestCase):
             "/api/component3/monitoring-records",
             json=self.payload(),
         ).get_json()["monitoring_record"]
-        endpoint = (
-            f"/api/component3/monitoring-records/{created['record_id']}"
-            "/verification"
-        )
+        endpoint = f"/api/component3/monitoring-records/{created['record_id']}/verification"
 
         response = self.client.put(
             endpoint,
@@ -766,9 +737,7 @@ class Component3MonitoringApiTests(unittest.TestCase):
         self.assertEqual(record["label_status"], "Not Eligible")
         self.assertEqual(len(record["verification_history"]), 2)
 
-        readiness = self.client.get(
-            "/api/component3/monitoring-readiness"
-        ).get_json()
+        readiness = self.client.get("/api/component3/monitoring-readiness").get_json()
         self.assertEqual(readiness["verified_records"], 1)
         self.assertEqual(readiness["emergency_records"], 1)
 
@@ -777,10 +746,7 @@ class Component3MonitoringApiTests(unittest.TestCase):
             "/api/component3/monitoring-records",
             json=self.payload(),
         ).get_json()["monitoring_record"]
-        endpoint = (
-            f"/api/component3/monitoring-records/{created['record_id']}"
-            "/verification"
-        )
+        endpoint = f"/api/component3/monitoring-records/{created['record_id']}/verification"
 
         response = self.client.put(
             endpoint,
@@ -803,21 +769,13 @@ class Component3MonitoringApiTests(unittest.TestCase):
         self.assertEqual(response.status_code, 400)
 
     def test_invalid_filters_and_unknown_record_are_rejected(self):
-        response = self.client.get(
-            "/api/component3/monitoring-records?label_status=Unknown"
-        )
+        response = self.client.get("/api/component3/monitoring-records?label_status=Unknown")
         self.assertEqual(response.status_code, 400)
-        response = self.client.get(
-            "/api/component3/monitoring-records?risk_status=Unknown"
-        )
+        response = self.client.get("/api/component3/monitoring-records?risk_status=Unknown")
         self.assertEqual(response.status_code, 400)
-        response = self.client.get(
-            "/api/component3/monitoring-records?verification_status=Unknown"
-        )
+        response = self.client.get("/api/component3/monitoring-records?verification_status=Unknown")
         self.assertEqual(response.status_code, 400)
-        response = self.client.get(
-            "/api/component3/monitoring-records/not-found"
-        )
+        response = self.client.get("/api/component3/monitoring-records/not-found")
         self.assertEqual(response.status_code, 404)
         response = self.client.put(
             "/api/component3/monitoring-records/not-found/verification",

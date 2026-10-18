@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import api from '@/lib/api';
 import styles from './monitoring-history.module.css';
 
 type RiskStatus = 'No Risk' | 'Risk';
@@ -273,6 +274,7 @@ const API_BASE_URL = (
 ).replace(/\/$/, '');
 
 const NUMBER_FORMATTER = new Intl.NumberFormat('en-US');
+const SHOW_RESEARCH_SECTIONS = false;
 
 function formatMetric(value: number | undefined) {
   return value === undefined ? '—' : `${(value * 100).toFixed(1)}%`;
@@ -335,17 +337,19 @@ export default function MonitoringHistoryPage() {
   const [historicalPreviewError, setHistoricalPreviewError] = useState('');
 
   const requestJson = useCallback(async (path: string) => {
-    const response = await fetch(`${API_BASE_URL}${path}`);
-    const payload: unknown = await response.json();
-    if (!response.ok) {
-      const apiError = payload as { error?: unknown };
+    try {
+      const response = await api.get(`/api/component3${path}`);
+      return response.data as unknown;
+    } catch (requestError: unknown) {
+      const apiError = requestError as {
+        response?: { data?: { error?: unknown } };
+      };
       throw new Error(
-        typeof apiError.error === 'string'
-          ? apiError.error
+        typeof apiError.response?.data?.error === 'string'
+          ? apiError.response.data.error
           : 'The daily monitoring request failed.',
       );
     }
-    return payload;
   }, []);
 
   const query = useMemo(() => {
@@ -486,29 +490,16 @@ export default function MonitoringHistoryPage() {
     setSavingVerification(true);
     setVerificationError('');
     try {
-      const response = await fetch(
-        `${API_BASE_URL}/monitoring-records/${selectedRecord.record_id}/verification`,
+      await api.put(
+        `/api/component3/monitoring-records/${selectedRecord.record_id}/verification`,
         {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            actual_emergency: actualEmergency === 'true',
-            actual_emergency_type:
-              actualEmergency === 'true' ? actualEmergencyType : null,
-            verified_by: verifiedBy.trim(),
-            verification_notes: verificationNotes.trim() || null,
-          }),
+          actual_emergency: actualEmergency === 'true',
+          actual_emergency_type:
+            actualEmergency === 'true' ? actualEmergencyType : null,
+          verified_by: verifiedBy.trim(),
+          verification_notes: verificationNotes.trim() || null,
         },
       );
-      const payload: unknown = await response.json();
-      if (!response.ok) {
-        const apiError = payload as { error?: unknown };
-        throw new Error(
-          typeof apiError.error === 'string'
-            ? apiError.error
-            : 'The actual outcome could not be verified.',
-        );
-      }
 
       setSelectedRecord(null);
       setVerificationMessage(
@@ -517,8 +508,13 @@ export default function MonitoringHistoryPage() {
       setLoading(true);
       setRefreshVersion((value) => value + 1);
     } catch (requestError: unknown) {
+      const apiError = requestError as {
+        response?: { data?: { error?: unknown } };
+      };
       setVerificationError(
-        requestError instanceof Error
+        typeof apiError.response?.data?.error === 'string'
+          ? apiError.response.data.error
+          : requestError instanceof Error
           ? requestError.message
           : 'Unable to verify this daily outcome.',
       );
@@ -586,7 +582,6 @@ export default function MonitoringHistoryPage() {
     <div className={styles.container}>
       <section className={styles.hero}>
         <div>
-          <span>Component 3 data collection</span>
           <h1>Daily Monitoring History</h1>
           <p>
             Verify actual factory outcomes, review automatic future labels, and
@@ -627,55 +622,59 @@ export default function MonitoringHistoryPage() {
         </article>
       </section>
 
-      <section
-        className={`${styles.readinessCard} ${
-          target?.general_early_warning_training_ready
-            ? styles.readinessReady
-            : styles.readinessCollecting
-        }`}
-      >
-        <div>
-          <span className={styles.kicker}>General model readiness</span>
-          <h2>
-            {target?.general_early_warning_training_ready
-              ? 'Dataset threshold reached'
-              : 'Continue collecting real daily sequences'}
-          </h2>
-          <p>
-            Training uses supervisor-verified actual outcomes only. Model
-            detections are retained for comparison, but never become their own
-            training labels.
-          </p>
-        </div>
-        <dl>
+      {SHOW_RESEARCH_SECTIONS && (
+        <section
+          className={`${styles.readinessCard} ${
+            target?.general_early_warning_training_ready
+              ? styles.readinessReady
+              : styles.readinessCollecting
+          }`}
+        >
           <div>
-            <dt>Emergency within 3 days</dt>
-            <dd>{target?.positive_rows ?? 0}</dd>
+            <span className={styles.kicker}>General model readiness</span>
+            <h2>
+              {target?.general_early_warning_training_ready
+                ? 'Dataset threshold reached'
+                : 'Continue collecting real daily sequences'}
+            </h2>
+            <p>
+              Training uses supervisor-verified actual outcomes only. Model
+              detections are retained for comparison, but never become their own
+              training labels.
+            </p>
           </div>
-          <div>
-            <dt>No emergency within 3 days</dt>
-            <dd>{target?.negative_rows ?? 0}</dd>
-          </div>
-          <div>
-            <dt>Positive orders</dt>
-            <dd>{target?.positive_orders ?? 0}</dd>
-          </div>
-          <div>
-            <dt>Negative orders</dt>
-            <dd>{target?.negative_orders ?? 0}</dd>
-          </div>
-        </dl>
-      </section>
+          <dl>
+            <div>
+              <dt>Emergency within 3 days</dt>
+              <dd>{target?.positive_rows ?? 0}</dd>
+            </div>
+            <div>
+              <dt>No emergency within 3 days</dt>
+              <dd>{target?.negative_rows ?? 0}</dd>
+            </div>
+            <div>
+              <dt>Positive orders</dt>
+              <dd>{target?.positive_orders ?? 0}</dd>
+            </div>
+            <div>
+              <dt>Negative orders</dt>
+              <dd>{target?.negative_orders ?? 0}</dd>
+            </div>
+          </dl>
+        </section>
+      )}
 
-      <section
-        className={`${styles.exportCard} ${
+      {SHOW_RESEARCH_SECTIONS && (
+        <>
+          <section
+            className={`${styles.exportCard} ${
           !exportAudit
             ? styles.exportCollecting
             : exportAudit.leakage_controls.passed
             ? styles.exportPassed
             : styles.exportBlocked
-        }`}
-      >
+            }`}
+          >
         <div className={styles.exportIntro}>
           <span className={styles.kicker}>Step 5A.3 training export</span>
           <h2>
@@ -737,9 +736,9 @@ export default function MonitoringHistoryPage() {
             </span>
           )}
         </div>
-      </section>
+          </section>
 
-      <section className={styles.importCard} id="historical-import">
+          <section className={styles.importCard} id="historical-import">
         <div className={styles.importHeader}>
           <div>
             <span className={styles.kicker}>Retrospective data loader</span>
@@ -923,9 +922,9 @@ export default function MonitoringHistoryPage() {
             </div>
           )}
         </form>
-      </section>
+          </section>
 
-      <section className={styles.validationCard}>
+          <section className={styles.validationCard}>
         <div className={styles.validationHeader}>
           <div>
             <span className={styles.kicker}>Step 5D.1 validation report</span>
@@ -1086,7 +1085,9 @@ export default function MonitoringHistoryPage() {
           validation requires new unseen orders containing positive and negative
           outcomes for every target.
         </p>
-      </section>
+          </section>
+        </>
+      )}
 
       {selectedRecord && (
         <section className={styles.verificationCard}>

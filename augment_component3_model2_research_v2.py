@@ -25,7 +25,6 @@ from augment_component3_low_risk import (
     severity,
 )
 
-
 SEED = 22904614
 GENERATOR_VERSION = "component3_model2_broad_low_risk_v2"
 PROFILES = (
@@ -64,14 +63,12 @@ def generate_order(
     rng: np.random.Generator,
     start_date: pd.Timestamp,
 ) -> pd.DataFrame:
-    profile, day_options, commitment_options, min_buffer, max_buffer = (
-        PROFILES[(order_number - 1) % len(PROFILES)]
-    )
+    profile, day_options, commitment_options, min_buffer, max_buffer = PROFILES[
+        (order_number - 1) % len(PROFILES)
+    ]
     profile_variant = (order_number - 1) // len(PROFILES)
     total_days = int(day_options[profile_variant % len(day_options)])
-    base_commitment = int(
-        commitment_options[profile_variant % len(commitment_options)]
-    )
+    base_commitment = int(commitment_options[profile_variant % len(commitment_options)])
     production_dates = pd.bdate_range(start=start_date, periods=total_days)
     completion_date = production_dates[-1]
     buyer_required_date = completion_date + pd.Timedelta(
@@ -128,8 +125,7 @@ def generate_order(
         output_gap = commitment - output
         gap_pct = round(output_gap / commitment * 100, 2)
         damage_ratio = round(
-            int(record["Daily_Damage_Qty"])
-            / (int(record["Max_Daily_Damage_Qty"]) + 1),
+            int(record["Daily_Damage_Qty"]) / (int(record["Max_Daily_Damage_Qty"]) + 1),
             4,
         )
         days_remaining = total_days - day_number
@@ -187,9 +183,7 @@ def generate_order(
                 "Plant_Enc": plant_enc,
                 "Buyer_Enc": buyer_enc,
                 "Is_Cutting_Phase": int(day_number <= cutting_days),
-                "Is_Sewing_Phase": int(
-                    cutting_days < day_number <= cutting_days + sewing_days
-                ),
+                "Is_Sewing_Phase": int(cutting_days < day_number <= cutting_days + sewing_days),
                 "Day_Progress_Pct": round(day_number / total_days * 100, 2),
                 "Output_vs_Commit_Ratio": round(output / (commitment + 1), 4),
                 "Cumulative_Gap": cumulative_gap,
@@ -219,21 +213,15 @@ def validate_generated(generated: pd.DataFrame, expected_orders: int) -> None:
         raise AssertionError("Generated version is inconsistent")
     if not generated["Order_Risk_Level"].eq("Low").all():
         raise AssertionError("Generated Model 2 labels must be Low")
-    if not (
-        generated["Buyer_Required_Date"] > generated["Style_Completion_Date"]
-    ).all():
+    if not (generated["Buyer_Required_Date"] > generated["Style_Completion_Date"]).all():
         raise AssertionError("Every generated order must finish before its deadline")
 
     final_rows = (
-        generated.sort_values("Working_Day_No")
-        .groupby("Bulk_Order_ID", sort=False)
-        .tail(1)
+        generated.sort_values("Working_Day_No").groupby("Bulk_Order_ID", sort=False).tail(1)
     )
     if not final_rows["Remaining_Qty"].eq(0).all():
         raise AssertionError("Every generated order must complete")
-    if not final_rows["Cumulative_Completed_Qty"].eq(
-        final_rows["Full_Order_Qty"]
-    ).all():
+    if not final_rows["Cumulative_Completed_Qty"].eq(final_rows["Full_Order_Qty"]).all():
         raise AssertionError("Final cumulative quantity is inconsistent")
 
 

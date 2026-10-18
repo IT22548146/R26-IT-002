@@ -11,10 +11,10 @@ from components.component3_historical_import import (
     load_historical_order,
     prediction_inputs_match,
 )
-
+from middleware.auth_middleware import generate_token
 
 ROOT = Path(__file__).resolve().parents[1]
-COMPONENT3_SOURCE = ROOT / "component3_final_preprossed dataset.xlsx"
+COMPONENT3_SOURCE = ROOT / "data" / "component3_final_preprocessed_dataset.xlsx"
 COMPONENT2_SOURCE = ROOT / "component2_bulk_order_aligned_to.xlsx"
 
 
@@ -31,22 +31,13 @@ class Component3HistoricalImportServiceTests(unittest.TestCase):
         self.assertEqual(preview["summary"]["source_rows"], 598)
         self.assertEqual(preview["summary"]["source_orders"], 11)
         self.assertEqual(preview["summary"]["importable_rows"], 598)
-        self.assertTrue(
-            preview["sources"]["component3_daily"][
-                "already_used_for_model_training"
-            ]
-        )
+        self.assertTrue(preview["sources"]["component3_daily"]["already_used_for_model_training"])
         self.assertEqual(
-            preview["sources"]["component2_master"][
-                "matched_component3_orders"
-            ],
+            preview["sources"]["component2_master"]["matched_component3_orders"],
             11,
         )
         self.assertTrue(
-            any(
-                order["component2_master"]["conflicting_fields"]
-                for order in preview["orders"]
-            )
+            any(order["component2_master"]["conflicting_fields"] for order in preview["orders"])
         )
 
     def test_order_rows_are_canonical_and_chronological(self):
@@ -102,12 +93,8 @@ class Component3HistoricalImportApiTests(unittest.TestCase):
     def setUp(self):
         self.previous_version = os.environ.get("COMPONENT3_MODEL_VERSION")
         self.previous_database = app.config.get("COMPONENT3_TRACKING_DB")
-        self.previous_component3_source = app.config.get(
-            "COMPONENT3_HISTORICAL_IMPORT_SOURCE"
-        )
-        self.previous_component2_source = app.config.get(
-            "COMPONENT3_COMPONENT2_MASTER_SOURCE"
-        )
+        self.previous_component3_source = app.config.get("COMPONENT3_HISTORICAL_IMPORT_SOURCE")
+        self.previous_component2_source = app.config.get("COMPONENT3_COMPONENT2_MASTER_SOURCE")
         os.environ["COMPONENT3_MODEL_VERSION"] = "v2"
         component3._models.clear()
         self.temporary_directory = tempfile.TemporaryDirectory()
@@ -115,13 +102,10 @@ class Component3HistoricalImportApiTests(unittest.TestCase):
             self.temporary_directory.name,
             "historical-import.sqlite3",
         )
-        app.config["COMPONENT3_HISTORICAL_IMPORT_SOURCE"] = str(
-            COMPONENT3_SOURCE
-        )
-        app.config["COMPONENT3_COMPONENT2_MASTER_SOURCE"] = str(
-            COMPONENT2_SOURCE
-        )
+        app.config["COMPONENT3_HISTORICAL_IMPORT_SOURCE"] = str(COMPONENT3_SOURCE)
+        app.config["COMPONENT3_COMPONENT2_MASTER_SOURCE"] = str(COMPONENT2_SOURCE)
         self.client = app.test_client()
+        self.client.environ_base["HTTP_AUTHORIZATION"] = f"Bearer {generate_token(9000, 'Manager')}"
 
     def tearDown(self):
         component3._models.clear()
@@ -147,17 +131,13 @@ class Component3HistoricalImportApiTests(unittest.TestCase):
                 app.config[key] = previous
 
     def test_preview_is_read_only(self):
-        response = self.client.get(
-            "/api/component3/historical-import/preview"
-        )
+        response = self.client.get("/api/component3/historical-import/preview")
 
         self.assertEqual(response.status_code, 200, response.get_json())
         preview = response.get_json()
         self.assertEqual(preview["summary"]["importable_rows"], 598)
         self.assertFalse(preview["independent_validation"])
-        readiness = self.client.get(
-            "/api/component3/monitoring-readiness"
-        ).get_json()
+        readiness = self.client.get("/api/component3/monitoring-readiness").get_json()
         self.assertEqual(readiness["total_records"], 0)
 
     def test_import_requires_explicit_retrospective_confirmation(self):
@@ -201,10 +181,7 @@ class Component3HistoricalImportApiTests(unittest.TestCase):
         ).get_json()
         self.assertEqual(history["total"], 21)
         self.assertTrue(
-            all(
-                item["actual_outcome_status"] == "Verified"
-                for item in history["items"]
-            )
+            all(item["actual_outcome_status"] == "Verified" for item in history["items"])
         )
         self.assertTrue(
             all(
@@ -213,9 +190,7 @@ class Component3HistoricalImportApiTests(unittest.TestCase):
                 for item in history["items"]
             )
         )
-        readiness = self.client.get(
-            "/api/component3/monitoring-readiness"
-        ).get_json()
+        readiness = self.client.get("/api/component3/monitoring-readiness").get_json()
         self.assertEqual(readiness["total_records"], 21)
         self.assertEqual(
             readiness["retrospective_training_reuse_records"],
@@ -223,22 +198,16 @@ class Component3HistoricalImportApiTests(unittest.TestCase):
         )
         self.assertEqual(readiness["three_day_target"]["ready_rows"], 0)
         self.assertGreater(
-            readiness["three_day_target"][
-                "retrospective_ready_rows_excluded"
-            ],
+            readiness["three_day_target"]["retrospective_ready_rows_excluded"],
             0,
         )
-        export_audit = self.client.get(
-            "/api/component3/training-dataset-audit"
-        ).get_json()
+        export_audit = self.client.get("/api/component3/training-dataset-audit").get_json()
         self.assertEqual(export_audit["dataset"]["exported_rows"], 0)
         self.assertEqual(
             export_audit["dataset"]["retrospective_records_excluded"],
             21,
         )
-        validation = self.client.get(
-            "/api/component3/early-warning-validation"
-        )
+        validation = self.client.get("/api/component3/early-warning-validation")
         self.assertEqual(validation.status_code, 200, validation.get_json())
         validation_report = validation.get_json()
         self.assertFalse(validation_report["scope_mixing_detected"])
@@ -246,9 +215,7 @@ class Component3HistoricalImportApiTests(unittest.TestCase):
             validation_report["independent_validation"]["ready_warning_rows"],
             0,
         )
-        retrospective = validation_report[
-            "retrospective_training_reuse"
-        ]
+        retrospective = validation_report["retrospective_training_reuse"]
         self.assertEqual(retrospective["ready_warning_rows"], 5)
         self.assertEqual(
             [target["rows_evaluated"] for target in retrospective["targets"]],
@@ -261,19 +228,10 @@ class Component3HistoricalImportApiTests(unittest.TestCase):
             )
         )
         detail = self.client.get(
-            "/api/component3/monitoring-records/"
-            f"{history['items'][0]['record_id']}"
+            f"/api/component3/monitoring-records/{history['items'][0]['record_id']}"
         ).get_json()["monitoring_record"]
-        self.assertFalse(
-            detail["analysis"]["historical_import"][
-                "independent_validation"
-            ]
-        )
-        self.assertFalse(
-            detail["analysis"]["historical_import"][
-                "outcome_used_during_prediction"
-            ]
-        )
+        self.assertFalse(detail["analysis"]["historical_import"]["independent_validation"])
+        self.assertFalse(detail["analysis"]["historical_import"]["outcome_used_during_prediction"])
 
         second = self.client.post(
             "/api/component3/historical-import",

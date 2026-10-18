@@ -7,7 +7,6 @@ from typing import Any
 
 from sklearn.metrics import accuracy_score, f1_score
 
-
 REPORT_VERSION = "component3-early-warning-validation-v1"
 
 TARGET_SPECS = (
@@ -154,12 +153,8 @@ def _scope_report(
             }
         )
 
-    every_target_has_rows = all(
-        result["rows_evaluated"] > 0 for result in results
-    )
-    every_target_has_both_classes = all(
-        result["class_coverage_complete"] for result in results
-    )
+    every_target_has_rows = all(result["rows_evaluated"] > 0 for result in results)
+    every_target_has_both_classes = all(result["class_coverage_complete"] for result in results)
     if not every_target_has_rows:
         status = "awaiting_evaluable_rows"
     elif not every_target_has_both_classes:
@@ -177,9 +172,7 @@ def _scope_report(
         "excluded_rows_by_reason": dict(sorted(exclusion_counts.items())),
         "targets": results,
         "every_target_has_rows": every_target_has_rows,
-        "every_target_has_both_actual_classes": (
-            every_target_has_both_classes
-        ),
+        "every_target_has_both_actual_classes": (every_target_has_both_classes),
         "production_approval_supported": False,
     }
 
@@ -189,21 +182,15 @@ def build_early_warning_validation_report(
 ) -> dict[str, Any]:
     """Build separated reports without recomputing historical predictions."""
     independent = [
-        record
-        for record in snapshot
-        if record.get("independent_validation_eligible", True)
+        record for record in snapshot if record.get("independent_validation_eligible", True)
     ]
     retrospective = [
-        record
-        for record in snapshot
-        if not record.get("independent_validation_eligible", True)
+        record for record in snapshot if not record.get("independent_validation_eligible", True)
     ]
     return {
         "report_version": REPORT_VERSION,
         "status": "success",
-        "prediction_source": (
-            "Stored early_warning snapshots created before outcome verification"
-        ),
+        "prediction_source": ("Stored early_warning snapshots created before outcome verification"),
         "outcome_source": "Supervisor-verified next-three-production-day labels",
         "scope_mixing_detected": False,
         "production_approved": False,
@@ -215,9 +202,7 @@ def build_early_warning_validation_report(
         "retrospective_training_reuse": _scope_report(
             retrospective,
             scope="retrospective_training_reuse",
-            evidence_type=(
-                "Workflow evidence from data used during model development"
-            ),
+            evidence_type=("Workflow evidence from data used during model development"),
         ),
         "reported_metrics": ["accuracy", "macro_f1", "f1"],
         "limitations": [
