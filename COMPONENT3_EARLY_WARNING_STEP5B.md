@@ -15,7 +15,7 @@ model. Those targets did not pass the Step 5A class-coverage gate.
 ## Real-data boundary
 
 The experiment uses only the 598 original daily records from
-`component3_final_preprossed dataset.xlsx`. No generated, augmented, copied, or
+`data/component3_final_preprocessed_dataset.xlsx`. No generated, augmented, copied, or
 synthetic rows are used. Step 5A produces 174 eligible currently-stable source
 days with a complete three-production-day future window across 11 bulk orders.
 

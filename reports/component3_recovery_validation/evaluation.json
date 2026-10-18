@@ -6,7 +6,7 @@
     "capacity_metric_rule": "A final partial production day is excluded because its output is limited by remaining order quantity, not line capacity."
   },
   "dataset": {
-    "workbook": "component3_final_preprossed dataset.xlsx",
+    "workbook": "data/component3_final_preprocessed_dataset.xlsx",
     "worksheet_count": 11,
     "source_rows": 598,
     "generated_or_augmented_rows_excluded": 0,

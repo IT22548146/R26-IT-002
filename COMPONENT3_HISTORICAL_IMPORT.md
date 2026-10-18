@@ -48,7 +48,7 @@ record.
 The default sources are:
 
 ```text
-component3_final_preprossed dataset.xlsx
+data/component3_final_preprocessed_dataset.xlsx
 component2_bulk_order_aligned_to.xlsx
 ```
 

@@ -4,7 +4,7 @@
   "scope": "Research-only three-production-day subtype early warnings",
   "production_approved": false,
   "source_dataset": {
-    "workbook": "component3_final_preprossed dataset.xlsx",
+    "workbook": "data/component3_final_preprocessed_dataset.xlsx",
     "worksheet_count": 11,
     "source_rows": 598,
     "generated_or_augmented_rows_excluded": 0,
@@ -14,7 +14,7 @@
     "duplicate_order_date_rows": 0,
     "cumulative_output_mismatch_rows": 0,
     "cumulative_over_order_rows": 0,
-    "path": "component3_final_preprossed dataset.xlsx",
+    "path": "data/component3_final_preprocessed_dataset.xlsx",
     "sha256": "1ff07b96598d7509fe936cfc62d7c52ac87e6f27ddb1e3f0a92458233d6e64dd",
     "labelled_rows_sha256": "aa600cb15997f327cf5f95b6c13ec8c19bb87713636e8df19027fb737d4d89f8",
     "synthetic_rows_used": 0

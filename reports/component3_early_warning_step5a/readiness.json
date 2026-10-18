@@ -8,7 +8,7 @@
     "model_training_started": false
   },
   "source_dataset": {
-    "workbook": "component3_final_preprossed dataset.xlsx",
+    "workbook": "data/component3_final_preprocessed_dataset.xlsx",
     "worksheet_count": 11,
     "source_rows": 598,
     "generated_or_augmented_rows_excluded": 0,

@@ -65,7 +65,7 @@ The three approved subtype comparisons are now implemented in Step 5B. See
 
 ```bash
 python3 audit_component3_early_warning.py \
-  --data "component3_final_preprossed dataset.xlsx" \
+  --data "data/component3_final_preprocessed_dataset.xlsx" \
   --json-output reports/component3_early_warning_step5a/readiness.json \
   --csv-output reports/component3_early_warning_step5a/labelled_stable_rows.csv
 ```

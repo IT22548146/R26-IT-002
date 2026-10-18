@@ -46,3 +46,27 @@
 | Machine breakdown — Random Forest | 86.21% | 84.05% | 78.18% |
 | Quality-limit issue — Logistic Regression | 66.67% | 51.18% | 78.68% |
 | Output/schedule risk — Logistic Regression | 79.31% | 63.75% | 40.00% |
+
+## Nested Hyperparameter Optimization and Explicit Ensemble Comparison
+
+The follow-up experiment uses an outer `LeaveOneGroupOut` evaluation by
+`Bulk_Order_ID`. Parameters and soft-voting weights are selected only inside
+each outer training fold using `GridSearchCV` with grouped inner folds. This
+prevents the held-out order from influencing model or parameter selection.
+
+| Early-warning target | Optimized candidate | Accuracy | Macro-F1 | Positive F1 | Nested result |
+|---|---|---:|---:|---:|---|
+| Machine breakdown | Tuned Logistic Regression | 84.48% | 82.47% | 76.52% | Not selected |
+| Machine breakdown | Tuned Random Forest | 85.63% | 82.76% | 75.73% | Not selected |
+| Machine breakdown | **Soft Voting LR + RF** | **86.21%** | **84.20%** | **78.57%** | **Selected** |
+| Quality-limit issue | **Tuned Logistic Regression** | **66.09%** | **59.76%** | **75.72%** | **Selected** |
+| Quality-limit issue | Tuned Random Forest | 73.56% | 48.00% | 84.46% | Not selected |
+| Quality-limit issue | Soft Voting LR + RF | 71.26% | 59.42% | 81.34% | Not selected |
+| Output/schedule risk | **Tuned Logistic Regression** | **73.56%** | **61.99%** | **41.03%** | **Selected in tuning study** |
+| Output/schedule risk | Tuned Random Forest | 81.03% | 44.76% | 0.00% | Not selected |
+| Output/schedule risk | Soft Voting LR + RF | 75.86% | 57.71% | 30.00% | Not selected |
+
+The tuned output/schedule score does not exceed the existing calibrated
+Macro-F1 of 63.75%, so that active artifact is not replaced. The optimization
+study is retained as research evidence rather than automatically changing the
+working application.

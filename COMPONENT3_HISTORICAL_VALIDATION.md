@@ -9,7 +9,7 @@ day. It is an evaluation pipeline, not a new trained model.
 The pipeline uses the original workbook by default:
 
 ```text
-component3_final_preprossed dataset.xlsx
+data/component3_final_preprocessed_dataset.xlsx
 ```
 
 Rows explicitly marked or identified as generated or augmented are excluded.
@@ -22,7 +22,7 @@ From the backend project directory:
 
 ```bash
 python3 validate_component3_recovery.py \
-  --data "component3_final_preprossed dataset.xlsx" \
+  --data "data/component3_final_preprocessed_dataset.xlsx" \
   --json-output reports/component3_recovery_validation/evaluation.json \
   --csv-output reports/component3_recovery_validation/historical_cases.csv
 ```
