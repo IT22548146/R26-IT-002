@@ -2,6 +2,7 @@
 __pycache__/
 *.py[oc]
 build/
+/Build/
 dist/
 wheels/
 *.egg-info
@@ -16,7 +17,11 @@ wheels/
 
 # Local application state
 instance/
+uploads/
 *.db
+*.db-shm
+*.db-wal
+*.db-journal
 *.sqlite
 *.sqlite3
 

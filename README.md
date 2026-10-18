@@ -74,8 +74,8 @@ The backend is organized into four specialized components, each accessible via i
 1. **Create a Virtual Environment**:
    ```powershell
    python -m venv .venv
-   
-   
+
+
    py -3.11 -m venv .venv --clear    -> if you have multiple vertions use this
    ```
 
@@ -91,15 +91,46 @@ The backend is organized into four specialized components, each accessible via i
    .venv\Scripts\python.exe -m pip install -r requirements.txt
    ```
 
-## 🏃 Running the Application
+## 🏃 Running the Integrated Application
 
-Start the Flask server:
+Copy `.env.example` to `.env`, replace the demo secrets, and initialise the
+portal database once on a new machine:
+
 ```bash
-python app.py
+python -m database.seed
 ```
 
-- **Server URL**: `http://localhost:5000`
-- **Health Check**: `GET http://localhost:5000/health`
+Run the integrated Flask backend from the project root:
+
+```bash
+python main.py
+```
+
+- **Backend URL**: `http://localhost:5001`
+- **Health Check**: `GET http://localhost:5001/health`
+- **Component 3 API**: `http://localhost:5001/api/component3`
+
+Run the main FabricFlow portal in a second terminal:
+
+```bash
+cd frontends
+npm install
+npm run dev
+```
+
+The main portal is available at `http://localhost:3000`. Admin, Manager and
+Plant Manager accounts can open Component 3 through **Emergency Monitor**.
+
+Run the separate sub-plant portal only when it is needed:
+
+```bash
+cd subplant-portal
+npm install
+npm run dev
+```
+
+The sub-plant portal is available at `http://localhost:3001` and uses the same
+Flask backend and portal database.
 
 ## 🔌 API Usage Example
 
@@ -137,8 +168,13 @@ python app.py
 
 ## 📂 Project Structure
 
-- `app.py`: Main entry point and blueprint registration.
-- `blueprints/`: Route definitions for the 4 core components.
+- `main.py`: Integrated Flask runtime entry point.
+- `app.py`: Flask application factory and blueprint registration.
+- `components/`: ML prediction engines for Components 1–4.
+- `routes/`: Authentication and role-based portal APIs.
+- `database/`: SQLite schema, migrations and seed workflow.
+- `frontends/`: Main role-based FabricFlow portal, including Component 3.
+- `subplant-portal/`: Separate local sub-plant operations portal.
 - `models/`: Trained `.pkl` machine learning models and encoders.
 - `data/`: Supplementary data files and datasets.
 - `requirements.txt`: Project dependencies.
@@ -147,4 +183,3 @@ python app.py
 
 - **Model Files**: Ensure all `.pkl` files are present in the `models/` directory before running predictions.
 - **Data Validation**: The API enforces strict validation on input fields (e.g., `sample_qty` must be between 1 and 10 for Component 1).
-
