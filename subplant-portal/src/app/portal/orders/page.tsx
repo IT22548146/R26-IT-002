@@ -1,12 +1,11 @@
 "use client";
 import Swal from "@/lib/swal";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect } from "react";
 import api from "@/lib/api";
-import { getApiErrorMessage } from "@/lib/errors";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
-import { Field, Card, Empty, Stat, fmtDate } from "@/components/ui/bits";
+import { Field, Card, Empty, Stat, Pill, fmtDate } from "@/components/ui/bits";
 import { ClipboardList, Plus, Package, Gauge, Clock, Trash2 } from "lucide-react";
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
@@ -16,49 +15,15 @@ import {
 const STATUSES = ["Draft", "Confirmed", "In Progress", "Completed", "Cancelled"];
 const COLORS = ["#94a3b8", "#0ea5e9", "#f59e0b", "#10b981", "#ef4444"];
 
-interface CustomerOption {
-  id: number;
-  customer_name: string;
-}
-
-interface OrderRecord {
-  id: number;
-  order_number: string;
-  customer_name?: string | null;
-  order_quantity: number;
-  dispatched_qty?: number | null;
-  planned_start?: string | null;
-  planned_finish?: string | null;
-  status: string;
-}
-
-interface StatusChartValue {
-  name: string;
-  value: number;
-}
-
-interface OrderTrendValue {
-  month: string;
-  qty: number;
-}
-
-interface OrderStats {
-  orders_this_month: number;
-  planned_quantity: number;
-  avg_daily_commitment: number;
-  on_time_rate: number | null;
-  trend: OrderTrendValue[];
-  by_status: StatusChartValue[];
-}
-
 export default function OrdersPage() {
-  const [rows, setRows] = useState<OrderRecord[]>([]);
-  const [customers, setCustomers] = useState<CustomerOption[]>([]);
-  const [stats, setStats] = useState<OrderStats | null>(null);
+  const [rows, setRows] = useState<any[]>([]);
+  const [customers, setCustomers] = useState<any[]>([]);
+  const [stats, setStats] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
 
   const load = async () => {
+    setLoading(true);
     try {
       const [list, cust, st] = await Promise.all([
         api.get("/subplant/orders"),
@@ -68,30 +33,27 @@ export default function OrdersPage() {
       setRows(list.data); setCustomers(cust.data); setStats(st.data);
     } catch { /* interceptor */ } finally { setLoading(false); }
   };
-  useEffect(() => {
-    const timer = window.setTimeout(() => void load(), 0);
-    return () => window.clearTimeout(timer);
-  }, []);
+  useEffect(() => { load(); }, []);
 
-  const setStatus = async (order: OrderRecord, status: string) => {
+  const setStatus = async (o: any, status: string) => {
     try {
-      await api.put(`/subplant/orders/${order.id}`, { status });
+      await api.put(`/subplant/orders/${o.id}`, { status });
       Swal.fire({ icon: "success", title: `Order ${status}` });
       load();
-    } catch (err: unknown) {
-      Swal.fire({ icon: "error", title: "Error", text: getApiErrorMessage(err, "Update failed.") });
+    } catch (err: any) {
+      Swal.fire({ icon: "error", title: "Error", text: err.response?.data?.error || "Update failed." });
     }
   };
 
-  const remove = async (order: OrderRecord) => {
-    const r = await Swal.fire({ icon: "warning", title: `Delete order ${order.order_number}?`,
+  const remove = async (o: any) => {
+    const r = await Swal.fire({ icon: "warning", title: `Delete order ${o.order_number}?`,
       showCancelButton: true, confirmButtonText: "Delete", confirmButtonColor: "#dc2626" });
     if (!r.isConfirmed) return;
     try {
-      await api.delete(`/subplant/orders/${order.id}`);
+      await api.delete(`/subplant/orders/${o.id}`);
       Swal.fire({ icon: "success", title: "Order deleted" }); load();
-    } catch (err: unknown) {
-      Swal.fire({ icon: "error", title: "Error", text: getApiErrorMessage(err, "Delete failed.") });
+    } catch (err: any) {
+      Swal.fire({ icon: "error", title: "Error", text: err.response?.data?.error || "Delete failed." });
     }
   };
 
@@ -136,9 +98,7 @@ export default function OrdersPage() {
               <ResponsiveContainer width="100%" height={240}>
                 <PieChart>
                   <Pie data={stats.by_status} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={80} label={{ fill: '#475569', fontSize: 12 }}>
-                    {stats.by_status.map((entry, index) => (
-                      <Cell key={entry.name} fill={COLORS[index % COLORS.length]} />
-                    ))}
+                    {stats.by_status.map((_: any, i: number) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
                   </Pie>
                   <Tooltip contentStyle={{ borderRadius: '8px', color: '#0f172a' }} itemStyle={{ color: '#0f172a' }} /><Legend />
                 </PieChart>
@@ -209,7 +169,7 @@ export default function OrdersPage() {
 }
 
 function OrderModal({ customers, onClose, onSaved }: {
-  customers: CustomerOption[]; onClose: () => void; onSaved: () => void;
+  customers: any[]; onClose: () => void; onSaved: () => void;
 }) {
   const today = new Date().toISOString().slice(0, 10);
   const [form, setForm] = useState({
@@ -217,23 +177,6 @@ function OrderModal({ customers, onClose, onSaved }: {
     planned_start: "", planned_finish: "", status: "Draft", notes: "",
   });
   const [saving, setSaving] = useState(false);
-  const minFinishDate = useMemo(() => {
-    const quantity = Number(form.order_quantity);
-    if (!form.planned_start || !Number.isFinite(quantity) || quantity <= 0) {
-      return today;
-    }
-
-    const bufferedQuantity = Math.ceil(quantity * 1.04);
-    const daysRequired = Math.ceil(bufferedQuantity / 500);
-    const finishDate = new Date(`${form.planned_start}T00:00:00Z`);
-    if (Number.isNaN(finishDate.getTime())) {
-      return today;
-    }
-
-    finishDate.setUTCDate(finishDate.getUTCDate() + Math.max(0, daysRequired - 1));
-    const calculatedMinimum = finishDate.toISOString().slice(0, 10);
-    return calculatedMinimum < today ? today : calculatedMinimum;
-  }, [form.order_quantity, form.planned_start, today]);
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -245,21 +188,6 @@ function OrderModal({ customers, onClose, onSaved }: {
       Swal.fire({ icon: "warning", title: "Planned finish cannot be before planned start." });
       return;
     }
-    if (form.order_date < today) {
-      Swal.fire({ icon: "warning", title: "Order date cannot be in the past." });
-      return;
-    }
-    if (form.planned_start && form.planned_start < today) {
-      Swal.fire({ icon: "warning", title: "Planned start cannot be in the past." });
-      return;
-    }
-    if (form.planned_finish && form.planned_finish < minFinishDate) {
-      Swal.fire({
-        icon: "warning",
-        title: `Based on capacity (500/day + 4% defect), finish date must be at least ${minFinishDate}.`,
-      });
-      return;
-    }
     setSaving(true);
     try {
       await api.post("/subplant/orders", {
@@ -269,8 +197,8 @@ function OrderModal({ customers, onClose, onSaved }: {
       });
       Swal.fire({ icon: "success", title: "Order registered" });
       onSaved();
-    } catch (err: unknown) {
-      Swal.fire({ icon: "error", title: "Error", text: getApiErrorMessage(err, "Save failed.") });
+    } catch (err: any) {
+      Swal.fire({ icon: "error", title: "Error", text: err.response?.data?.error || "Save failed." });
     } finally { setSaving(false); }
   };
 
@@ -285,14 +213,14 @@ function OrderModal({ customers, onClose, onSaved }: {
                    onChange={(e) => setForm({ ...form, order_number: e.target.value })} placeholder="LMC-001" />
           </Field>
           <Field label="Customer">
-            <select className="h-10 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm text-slate-900"
+            <select className="h-10 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm"
                     value={form.customer_id} onChange={(e) => setForm({ ...form, customer_id: e.target.value })}>
               <option value="">Select customer…</option>
               {customers.map((c) => <option key={c.id} value={c.id}>{c.customer_name}</option>)}
             </select>
           </Field>
           <Field label="Order Date">
-            <Input type="date" min={today} value={form.order_date}
+            <Input type="date" value={form.order_date}
                    onChange={(e) => setForm({ ...form, order_date: e.target.value })} />
           </Field>
           <Field label="Order Quantity *">
@@ -300,15 +228,15 @@ function OrderModal({ customers, onClose, onSaved }: {
                    onChange={(e) => setForm({ ...form, order_quantity: e.target.value })} placeholder="5000" />
           </Field>
           <Field label="Planned Start">
-            <Input type="date" min={today} value={form.planned_start}
+            <Input type="date" value={form.planned_start}
                    onChange={(e) => setForm({ ...form, planned_start: e.target.value })} />
           </Field>
           <Field label="Planned Finish">
-            <Input type="date" min={minFinishDate} value={form.planned_finish}
+            <Input type="date" value={form.planned_finish}
                    onChange={(e) => setForm({ ...form, planned_finish: e.target.value })} />
           </Field>
           <Field label="Status">
-            <select className="h-10 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm text-slate-900"
+            <select className="h-10 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm"
                     value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value })}>
               {STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
             </select>

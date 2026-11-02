@@ -3,10 +3,10 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "node ./node_modules/next/dist/bin/next dev -p 3001",
-    "build": "node ./node_modules/next/dist/bin/next build --webpack",
-    "start": "node ./node_modules/next/dist/bin/next start -p 3001",
-    "lint": "node ./node_modules/eslint/bin/eslint.js"
+    "dev": "next dev -p 3001",
+    "build": "next build",
+    "start": "next start -p 3001",
+    "lint": "eslint"
   },
   "dependencies": {
     "axios": "^1.18.1",

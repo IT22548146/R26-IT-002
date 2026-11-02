@@ -14,16 +14,9 @@ export interface SubPlantUser {
   org_name?: string;
 }
 
-export interface SubPlant {
-  id?: number;
-  plant_id?: string;
-  name: string;
-  location?: string | null;
-}
-
 interface AuthContextType {
   user: SubPlantUser | null;
-  plant: SubPlant | null;
+  plant: any | null;
   loading: boolean;
   login: (token: string) => Promise<void>;
   logout: () => void;
@@ -36,7 +29,7 @@ const REQUIRED_ROLE = "SubPlant";
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<SubPlantUser | null>(null);
-  const [plant, setPlant] = useState<SubPlant | null>(null);
+  const [plant, setPlant] = useState<any | null>(null);
   const [loading, setLoading] = useState(true);
   const router = useRouter();
   const pathname = usePathname();

@@ -42,11 +42,7 @@ const TONES: Record<string, string> = {
 };
 
 export function Stat({ icon, label, value, sub, tone = "teal" }: {
-  icon: React.ReactNode;
-  label: string;
-  value: React.ReactNode;
-  sub?: string;
-  tone?: string;
+  icon: React.ReactNode; label: string; value: any; sub?: string; tone?: string;
 }) {
   return (
     <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-5">
@@ -84,18 +80,18 @@ export function Pill({ value }: { value: string }) {
 }
 
 /** Dates from the API arrive as HTTP-date strings; normalise for display. */
-export const fmtDate = (s?: string | null) => {
+export const fmtDate = (s?: string) => {
   if (!s) return "—";
   const d = new Date(s);
   return isNaN(d.getTime()) ? String(s) : d.toLocaleDateString();
 };
 
 /** <input type="date"> needs YYYY-MM-DD. */
-export const toDateInput = (s?: string | null) => {
+export const toDateInput = (s?: string) => {
   if (!s) return "";
   const d = new Date(s);
   return isNaN(d.getTime()) ? "" : d.toISOString().slice(0, 10);
 };
 
-export const money = (n: unknown) =>
+export const money = (n: any) =>
   `Rs. ${Number(n || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;

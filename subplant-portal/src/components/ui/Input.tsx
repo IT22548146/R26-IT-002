@@ -2,12 +2,13 @@ import * as React from "react"
 import { cn } from "@/lib/utils"
 import { Eye, EyeOff } from "lucide-react"
 
-export type InputProps = React.InputHTMLAttributes<HTMLInputElement>;
+export interface InputProps
+  extends React.InputHTMLAttributes<HTMLInputElement> {}
 
 const Input = React.forwardRef<HTMLInputElement, InputProps>(
   ({ className, type, ...props }, ref) => {
     const [showPassword, setShowPassword] = React.useState(false);
-
+    
     const isPassword = type === "password";
     const currentType = isPassword ? (showPassword ? "text" : "password") : type;
 

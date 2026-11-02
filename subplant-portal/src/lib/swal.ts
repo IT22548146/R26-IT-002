@@ -22,7 +22,7 @@ interface SwalOptions {
   cancelButtonText?: string;
   confirmButtonColor?: string;
   // Tolerate any other sweetalert2 option that legacy call sites still pass.
-  [key: string]: unknown;
+  [key: string]: any;
 }
 
 interface SwalResult {

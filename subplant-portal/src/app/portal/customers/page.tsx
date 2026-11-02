@@ -3,7 +3,6 @@ import Swal from "@/lib/swal";
 
 import { useState, useEffect } from "react";
 import api from "@/lib/api";
-import { getApiErrorMessage } from "@/lib/errors";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Field, Card, Empty, Stat } from "@/components/ui/bits";
@@ -15,44 +14,15 @@ import {
 
 const COLORS = ["#0d9488", "#0ea5e9", "#6366f1", "#f59e0b", "#ef4444", "#8b5cf6"];
 
-interface Customer {
-  id: number;
-  customer_name: string;
-  customer_code?: string | null;
-  customer_type?: string | null;
-  location?: string | null;
-  contact_no?: string | null;
-  order_count: number;
-  balance: number;
-}
-
-interface ChartValue {
-  name: string;
-  value: number;
-}
-
-interface CustomerTrend {
-  month: string;
-  count: number;
-}
-
-interface CustomerStats {
-  total_customers: number;
-  active_customers: number;
-  new_this_month: number;
-  pending_payment_customers: number;
-  by_type: ChartValue[];
-  over_time: CustomerTrend[];
-}
-
 export default function CustomersPage() {
-  const [rows, setRows] = useState<Customer[]>([]);
-  const [stats, setStats] = useState<CustomerStats | null>(null);
+  const [rows, setRows] = useState<any[]>([]);
+  const [stats, setStats] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [showForm, setShowForm] = useState(false);
 
   const load = async () => {
+    setLoading(true);
     try {
       const [list, st] = await Promise.all([
         api.get("/subplant/customers"),
@@ -67,12 +37,9 @@ export default function CustomersPage() {
     }
   };
 
-  useEffect(() => {
-    const timer = window.setTimeout(() => void load(), 0);
-    return () => window.clearTimeout(timer);
-  }, []);
+  useEffect(() => { load(); }, []);
 
-  const remove = async (c: Customer) => {
+  const remove = async (c: any) => {
     const r = await Swal.fire({
       icon: "warning", title: `Delete ${c.customer_name}?`,
       showCancelButton: true, confirmButtonText: "Delete", confirmButtonColor: "#dc2626",
@@ -82,8 +49,8 @@ export default function CustomersPage() {
       await api.delete(`/subplant/customers/${c.id}`);
       Swal.fire({ icon: "success", title: "Customer deleted" });
       load();
-    } catch (err: unknown) {
-      Swal.fire({ icon: "error", title: "Error", text: getApiErrorMessage(err, "Delete failed.") });
+    } catch (err: any) {
+      Swal.fire({ icon: "error", title: "Error", text: err.response?.data?.error || "Delete failed." });
     }
   };
 
@@ -120,9 +87,7 @@ export default function CustomersPage() {
               <ResponsiveContainer width="100%" height={240}>
                 <PieChart>
                   <Pie data={stats.by_type} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={80} label={{ fill: '#475569', fontSize: 12 }}>
-                    {stats.by_type.map((entry, index) => (
-                      <Cell key={entry.name} fill={COLORS[index % COLORS.length]} />
-                    ))}
+                    {stats.by_type.map((_: any, i: number) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
                   </Pie>
                   <Tooltip contentStyle={{ borderRadius: '8px', color: '#0f172a' }} itemStyle={{ color: '#0f172a' }} /><Legend />
                 </PieChart>
@@ -224,8 +189,8 @@ function CustomerModal({ onClose, onSaved }: { onClose: () => void; onSaved: () 
       await api.post("/subplant/customers", form);
       Swal.fire({ icon: "success", title: "Customer registered" });
       onSaved();
-    } catch (err: unknown) {
-      Swal.fire({ icon: "error", title: "Error", text: getApiErrorMessage(err, "Save failed.") });
+    } catch (err: any) {
+      Swal.fire({ icon: "error", title: "Error", text: err.response?.data?.error || "Save failed." });
     } finally {
       setSaving(false);
     }

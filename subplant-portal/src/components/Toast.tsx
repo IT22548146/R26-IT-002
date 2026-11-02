@@ -1,14 +1,7 @@
 "use client";
 
-import { useSyncExternalStore } from "react";
-import {
-  AlertTriangle,
-  CheckCircle2,
-  Info,
-  X,
-  XCircle,
-  type LucideIcon,
-} from "lucide-react";
+import { useEffect, useState } from "react";
+import { CheckCircle2, XCircle, AlertTriangle, Info, X } from "lucide-react";
 
 type Variant = "success" | "error" | "warning" | "info";
 
@@ -28,19 +21,10 @@ export type ToastRecord = {
 
 let counter = 0;
 let current: ToastRecord[] = [];
-const listeners = new Set<() => void>();
+let listeners: Array<(list: ToastRecord[]) => void> = [];
 
 function emit() {
-  listeners.forEach((listener) => listener());
-}
-
-function subscribe(listener: () => void) {
-  listeners.add(listener);
-  return () => listeners.delete(listener);
-}
-
-function getSnapshot() {
-  return current;
+  listeners.forEach((l) => l(current));
 }
 
 function add(t: Omit<ToastRecord, "id">): number {
@@ -57,10 +41,6 @@ function remove(id: number) {
   const item = current.find((t) => t.id === id);
   // A dismissed confirm resolves to false (treated as cancel).
   if (item?.confirm) item.confirm.resolve(false);
-  removeWithoutResolving(id);
-}
-
-function removeWithoutResolving(id: number) {
   current = current.filter((t) => t.id !== id);
   emit();
 }
@@ -75,7 +55,7 @@ export const toast = {
     new Promise<boolean>((resolve) => {
       let settled = false;
       const done = (v: boolean) => { if (!settled) { settled = true; resolve(v); } };
-      add({
+      const id = add({
         variant: opts.danger ? "warning" : "info",
         title: opts.title,
         message: opts.message || "",
@@ -87,10 +67,12 @@ export const toast = {
           resolve: (v: boolean) => done(v),
         },
       });
+      // store id via closure so buttons can dismiss it
+      (opts as any).__id = id;
     }),
 };
 
-const STYLES: Record<Variant, { icon: LucideIcon; ring: string; iconColor: string; bar: string }> = {
+const STYLES: Record<Variant, { icon: any; ring: string; iconColor: string; bar: string }> = {
   success: { icon: CheckCircle2, ring: "border-green-200", iconColor: "text-green-600", bar: "bg-green-500" },
   error: { icon: XCircle, ring: "border-red-200", iconColor: "text-red-600", bar: "bg-red-500" },
   warning: { icon: AlertTriangle, ring: "border-amber-200", iconColor: "text-amber-600", bar: "bg-amber-500" },
@@ -99,12 +81,20 @@ const STYLES: Record<Variant, { icon: LucideIcon; ring: string; iconColor: strin
 
 /** Mount once (in the root layout). Renders toasts bottom-right. */
 export function Toaster() {
-  const items = useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
+  const [items, setItems] = useState<ToastRecord[]>([]);
+
+  useEffect(() => {
+    const l = (list: ToastRecord[]) => setItems([...list]);
+    listeners.push(l);
+    setItems([...current]);
+    return () => { listeners = listeners.filter((x) => x !== l); };
+  }, []);
 
   const answer = (item: ToastRecord, value: boolean) => {
     if (item.confirm) item.confirm.resolve(value);
     // remove without re-resolving
-    removeWithoutResolving(item.id);
+    current = current.filter((t) => t.id !== item.id);
+    emit();
   };
 
   return (

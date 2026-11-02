@@ -6,17 +6,9 @@ import api from "@/lib/api";
 import { useAuth } from "@/contexts/AuthContext";
 import { Users, ClipboardList, Package, Wallet, ArrowRight, Truck, Receipt } from "lucide-react";
 
-interface DashboardStats {
-  total_customers: number;
-  open_orders: number;
-  output_this_month: number;
-  damage_rate: number;
-  pending_payment: number;
-}
-
 export default function PortalDashboard() {
   const { plant } = useAuth();
-  const [stats, setStats] = useState<DashboardStats | null>(null);
+  const [stats, setStats] = useState<any>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -64,11 +56,7 @@ export default function PortalDashboard() {
 }
 
 function Kpi({ icon, label, value, sub, tone }: {
-  icon: React.ReactNode;
-  label: string;
-  value: React.ReactNode;
-  sub?: string;
-  tone: string;
+  icon: React.ReactNode; label: string; value: any; sub?: string; tone: string;
 }) {
   const tones: Record<string, string> = {
     teal: "bg-teal-50 text-teal-600",

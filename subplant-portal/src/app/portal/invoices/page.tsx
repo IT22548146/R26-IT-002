@@ -3,7 +3,6 @@ import Swal from "@/lib/swal";
 
 import { useState, useEffect } from "react";
 import api from "@/lib/api";
-import { getApiErrorMessage } from "@/lib/errors";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Field, Card, Empty, Stat, Pill, fmtDate, money } from "@/components/ui/bits";
@@ -17,58 +16,16 @@ const STATUS_COLOR: Record<string, string> = {
   Paid: "#10b981", Partial: "#0ea5e9", Pending: "#f59e0b", Overdue: "#ef4444",
 };
 
-interface CustomerOption {
-  id: number;
-  customer_name: string;
-}
-
-interface InvoiceRecord {
-  id: number;
-  invoice_number: string;
-  customer_name?: string | null;
-  invoice_date: string;
-  total_price: number;
-  paid_amount: number;
-  balance: number;
-  payment_status: string;
-}
-
-interface InvoiceDetails extends InvoiceRecord {
-  location?: string | null;
-  description?: string | null;
-  amount: number;
-  discount: number;
-}
-
-interface PaymentStatusValue {
-  name: string;
-  value: number;
-}
-
-interface IncomeTrendValue {
-  month: string;
-  billed: number;
-  collected: number;
-}
-
-interface InvoiceStats {
-  monthly_income: number;
-  yearly_income: number;
-  paid_amount: number;
-  pending_amount: number;
-  by_status: PaymentStatusValue[];
-  income_trend: IncomeTrendValue[];
-}
-
 export default function InvoicesPage() {
-  const [rows, setRows] = useState<InvoiceRecord[]>([]);
-  const [customers, setCustomers] = useState<CustomerOption[]>([]);
-  const [stats, setStats] = useState<InvoiceStats | null>(null);
+  const [rows, setRows] = useState<any[]>([]);
+  const [customers, setCustomers] = useState<any[]>([]);
+  const [stats, setStats] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
-  const [payFor, setPayFor] = useState<InvoiceRecord | null>(null);
+  const [payFor, setPayFor] = useState<any | null>(null);
 
   const load = async () => {
+    setLoading(true);
     try {
       const [inv, cust, st] = await Promise.all([
         api.get("/subplant/invoices"),
@@ -78,15 +35,12 @@ export default function InvoicesPage() {
       setRows(inv.data); setCustomers(cust.data); setStats(st.data);
     } catch { /* interceptor */ } finally { setLoading(false); }
   };
-  useEffect(() => {
-    const timer = window.setTimeout(() => void load(), 0);
-    return () => window.clearTimeout(timer);
-  }, []);
+  useEffect(() => { load(); }, []);
 
-  const printInvoice = async (invoice: InvoiceRecord) => {
+  const printInvoice = async (inv: any) => {
     try {
-      const res = await api.get(`/subplant/invoices/${invoice.id}`);
-      const d = res.data.invoice as InvoiceDetails;
+      const res = await api.get(`/subplant/invoices/${inv.id}`);
+      const d = res.data.invoice;
       const w = window.open("", "_blank", "width=800,height=900");
       if (!w) {
         Swal.fire({ icon: "info", title: "Allow pop-ups to print the invoice." });
@@ -151,9 +105,9 @@ export default function InvoicesPage() {
               <ResponsiveContainer width="100%" height={240}>
                 <PieChart>
                   <Pie data={stats.by_status} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={80}
-                       label={({ name, percent }) => `${name} ${((percent ?? 0) * 100).toFixed(1)}%`}>
-                    {stats.by_status.map((status) => (
-                      <Cell key={status.name} fill={STATUS_COLOR[status.name] || "#94a3b8"} />
+                       label={(e: any) => `${e.name} ${(e.percent * 100).toFixed(1)}%`}>
+                    {stats.by_status.map((s: any, i: number) => (
+                      <Cell key={i} fill={STATUS_COLOR[s.name] || "#94a3b8"} />
                     ))}
                   </Pie>
                   <Tooltip contentStyle={{ borderRadius: '8px', color: '#0f172a' }} itemStyle={{ color: '#0f172a' }} /><Legend />
@@ -243,7 +197,7 @@ export default function InvoicesPage() {
 }
 
 function InvoiceModal({ customers, onClose, onSaved }: {
-  customers: CustomerOption[]; onClose: () => void; onSaved: () => void;
+  customers: any[]; onClose: () => void; onSaved: () => void;
 }) {
   const today = new Date().toISOString().slice(0, 10);
   const [form, setForm] = useState({
@@ -271,8 +225,8 @@ function InvoiceModal({ customers, onClose, onSaved }: {
       });
       Swal.fire({ icon: "success", title: "Invoice created" });
       onSaved();
-    } catch (err: unknown) {
-      Swal.fire({ icon: "error", title: "Error", text: getApiErrorMessage(err, "Save failed.") });
+    } catch (err: any) {
+      Swal.fire({ icon: "error", title: "Error", text: err.response?.data?.error || "Save failed." });
     } finally { setSaving(false); }
   };
 
@@ -335,7 +289,7 @@ function InvoiceModal({ customers, onClose, onSaved }: {
 }
 
 function PaymentModal({ invoice, onClose, onSaved }: {
-  invoice: InvoiceRecord; onClose: () => void; onSaved: () => void;
+  invoice: any; onClose: () => void; onSaved: () => void;
 }) {
   const today = new Date().toISOString().slice(0, 10);
   const [amount, setAmount] = useState(String(invoice.balance || ""));
@@ -356,8 +310,8 @@ function PaymentModal({ invoice, onClose, onSaved }: {
                      { amount: amt, method, payment_date: payDate });
       Swal.fire({ icon: "success", title: "Payment recorded" });
       onSaved();
-    } catch (err: unknown) {
-      Swal.fire({ icon: "error", title: "Error", text: getApiErrorMessage(err, "Save failed.") });
+    } catch (err: any) {
+      Swal.fire({ icon: "error", title: "Error", text: err.response?.data?.error || "Save failed." });
     } finally { setSaving(false); }
   };
 

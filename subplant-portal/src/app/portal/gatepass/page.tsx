@@ -3,7 +3,6 @@ import Swal from "@/lib/swal";
 
 import { useState, useEffect } from "react";
 import api from "@/lib/api";
-import { getApiErrorMessage } from "@/lib/errors";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Field, Pill, fmtDate } from "@/components/ui/bits";
@@ -11,36 +10,15 @@ import { Truck, Plus, Trash2, Info } from "lucide-react";
 
 const DISPATCH = ["Pending", "Dispatched", "Received"];
 
-interface OrderOption {
-  id: number;
-  order_number: string;
-}
-
-interface CustomerOption {
-  id: number;
-  customer_name: string;
-}
-
-interface GatepassRecord {
-  id: number;
-  gatepass_number: string;
-  gatepass_date: string;
-  customer_name?: string | null;
-  style_number?: string | null;
-  good_qty: number;
-  damage_qty: number;
-  total_qty: number;
-  dispatch_status: string;
-}
-
 export default function GatepassPage() {
-  const [rows, setRows] = useState<GatepassRecord[]>([]);
-  const [orders, setOrders] = useState<OrderOption[]>([]);
-  const [customers, setCustomers] = useState<CustomerOption[]>([]);
+  const [rows, setRows] = useState<any[]>([]);
+  const [orders, setOrders] = useState<any[]>([]);
+  const [customers, setCustomers] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
 
   const load = async () => {
+    setLoading(true);
     try {
       const [g, o, c] = await Promise.all([
         api.get("/subplant/gatepasses"),
@@ -50,21 +28,18 @@ export default function GatepassPage() {
       setRows(g.data); setOrders(o.data); setCustomers(c.data);
     } catch { /* interceptor */ } finally { setLoading(false); }
   };
-  useEffect(() => {
-    const timer = window.setTimeout(() => void load(), 0);
-    return () => window.clearTimeout(timer);
-  }, []);
+  useEffect(() => { load(); }, []);
 
-  const remove = async (gatepass: GatepassRecord) => {
-    const r = await Swal.fire({ icon: "warning", title: `Delete gatepass ${gatepass.gatepass_number}?`,
+  const remove = async (g: any) => {
+    const r = await Swal.fire({ icon: "warning", title: `Delete gatepass ${g.gatepass_number}?`,
       text: "The day's production figures will be recalculated.",
       showCancelButton: true, confirmButtonText: "Delete", confirmButtonColor: "#dc2626" });
     if (!r.isConfirmed) return;
     try {
-      await api.delete(`/subplant/gatepasses/${gatepass.id}`);
+      await api.delete(`/subplant/gatepasses/${g.id}`);
       Swal.fire({ icon: "success", title: "Gatepass deleted" }); load();
-    } catch (err: unknown) {
-      Swal.fire({ icon: "error", title: "Error", text: getApiErrorMessage(err, "Delete failed.") });
+    } catch (err: any) {
+      Swal.fire({ icon: "error", title: "Error", text: err.response?.data?.error || "Delete failed." });
     }
   };
 
@@ -134,7 +109,7 @@ export default function GatepassPage() {
                   <td className="px-4 py-3 text-slate-600">{g.style_number || "—"}</td>
                   <td className="px-4 py-3 text-right text-emerald-600 font-medium">{Number(g.good_qty).toLocaleString()}</td>
                   <td className="px-4 py-3 text-right text-red-600">{Number(g.damage_qty).toLocaleString()}</td>
-                  <td className="px-4 py-3 text-right text-slate-900">{Number(g.total_qty).toLocaleString()}</td>
+                  <td className="px-4 py-3 text-right font-semibold">{Number(g.total_qty).toLocaleString()}</td>
                   <td className="px-4 py-3"><Pill value={g.dispatch_status} /></td>
                   <td className="px-4 py-3 text-right">
                     <button onClick={() => remove(g)} className="text-slate-400 hover:text-red-600 p-1" title="Delete">
@@ -168,10 +143,7 @@ function SummaryTile({ label, value, tone, sub }: { label: string; value: string
 }
 
 function GatepassModal({ orders, customers, onClose, onSaved }: {
-  orders: OrderOption[];
-  customers: CustomerOption[];
-  onClose: () => void;
-  onSaved: () => void;
+  orders: any[]; customers: any[]; onClose: () => void; onSaved: () => void;
 }) {
   const today = new Date().toISOString().slice(0, 10);
   const [form, setForm] = useState({
@@ -193,9 +165,6 @@ function GatepassModal({ orders, customers, onClose, onSaved }: {
     if (total <= 0) {
       Swal.fire({ icon: "warning", title: "Enter at least one good or damaged piece." }); return;
     }
-    if (form.gatepass_date < today) {
-      Swal.fire({ icon: "warning", title: "Gatepass date cannot be in the past." }); return;
-    }
     setSaving(true);
     try {
       const res = await api.post("/subplant/gatepasses", {
@@ -209,8 +178,8 @@ function GatepassModal({ orders, customers, onClose, onSaved }: {
         text: `Production for ${res.data.daily_log_updated} sent to FabricFlow.`,
       });
       onSaved();
-    } catch (err: unknown) {
-      Swal.fire({ icon: "error", title: "Error", text: getApiErrorMessage(err, "Save failed.") });
+    } catch (err: any) {
+      Swal.fire({ icon: "error", title: "Error", text: err.response?.data?.error || "Save failed." });
     } finally { setSaving(false); }
   };
 
@@ -225,18 +194,18 @@ function GatepassModal({ orders, customers, onClose, onSaved }: {
                    onChange={(e) => setForm({ ...form, gatepass_number: e.target.value })} placeholder="GP-001" />
           </Field>
           <Field label="Date *">
-            <Input type="date" min={today} required value={form.gatepass_date}
+            <Input type="date" required value={form.gatepass_date}
                    onChange={(e) => setForm({ ...form, gatepass_date: e.target.value })} />
           </Field>
           <Field label="Order">
-            <select className="h-10 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm text-slate-900"
+            <select className="h-10 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm"
                     value={form.order_id} onChange={(e) => setForm({ ...form, order_id: e.target.value })}>
               <option value="">Select order…</option>
               {orders.map((o) => <option key={o.id} value={o.id}>{o.order_number}</option>)}
             </select>
           </Field>
           <Field label="Customer">
-            <select className="h-10 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm text-slate-900"
+            <select className="h-10 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm"
                     value={form.customer_id} onChange={(e) => setForm({ ...form, customer_id: e.target.value })}>
               <option value="">Select customer…</option>
               {customers.map((c) => <option key={c.id} value={c.id}>{c.customer_name}</option>)}
@@ -247,7 +216,7 @@ function GatepassModal({ orders, customers, onClose, onSaved }: {
                    onChange={(e) => setForm({ ...form, style_number: e.target.value })} placeholder="ST-900" />
           </Field>
           <Field label="Dispatch Status">
-            <select className="h-10 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm text-slate-900"
+            <select className="h-10 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm"
                     value={form.dispatch_status}
                     onChange={(e) => setForm({ ...form, dispatch_status: e.target.value })}>
               {DISPATCH.map((s) => <option key={s} value={s}>{s}</option>)}

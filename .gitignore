@@ -1,29 +1,37 @@
-# Python-generated files
-__pycache__/
-*.py[oc]
-build/
-/Build/
-dist/
-wheels/
-*.egg-info
-
-# Virtual environments
+# Dependencies
+node_modules/
+**/node_modules/
 .venv/
+**/__pycache__/
+*.py[cod]
 
-# Local environment variables and secrets
+# Environment and secrets
 .env
 .env.*
 !.env.example
 
-# Local application state
-instance/
-uploads/
+# Builds and cache
+.next/
+dist/
+build/
+*.egg-info/
+.turbo/
+
+# Archives and database
+*.rar
+*.zip
+*.tar.gz
 *.db
+*.sqlite
+*.sqlite3
 *.db-shm
 *.db-wal
 *.db-journal
-*.sqlite
-*.sqlite3
 
-# Operating-system metadata
+# Logs and OS
+*.log
 .DS_Store
+Thumbs.db
+
+*.tsbuildinfo
+backend/uploads/

@@ -6,7 +6,6 @@ import api from "@/lib/api";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Factory } from "lucide-react";
-import { getApiErrorMessage } from "@/lib/errors";
 
 export default function LoginPage() {
   const { login } = useAuth();
@@ -22,8 +21,8 @@ export default function LoginPage() {
     try {
       const res = await api.post("/auth/login", { email, password });
       await login(res.data.token);
-    } catch (err: unknown) {
-      setError(getApiErrorMessage(err, "Sign in failed."));
+    } catch (err: any) {
+      setError(err.response?.data?.error || err.message || "Sign in failed.");
       setLoading(false);
     }
   };
