@@ -1,4 +1,4 @@
-# Garment Production Management System — AI Backend
+# Garment Production Management System 
 
 A robust Flask-based API providing real-time predictive analytics and decision support for garment production. This system leverages Machine Learning models (XGBoost, Random Forest, etc.) to optimize planning, resource allocation, and emergency detection.
 
