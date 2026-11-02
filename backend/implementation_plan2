@@ -1,0 +1,502 @@
+# Garment Production System — Definitive Implementation Plan
+
+## 1. Goal
+
+Transform the existing 4-component ML prediction system into a complete, full-stack **Garment Production Management Portal** with:
+- **Buyer portal** — register, submit requests, track order status
+- **Admin portal** — approve accounts, review ML recommendations, assign orders to plants
+- **Plant Manager portal** — view assigned orders, submit daily logs, mark orders as ready
+- **Email notifications** at every critical lifecycle event
+- **Dynamic capacity** — model outputs change automatically as orders fill up factory capacity
+- **SQLite DB** backing all state, replacing all hardcoded dicts and Excel files
+
+---
+
+## 2. User Roles & Permissions
+
+| Role | Can Do | Cannot Do |
+|:---|:---|:---|
+| **Admin** | Approve/reject buyer accounts, view all orders, review C1/C2 recommendations, assign orders to plants, view C4 plant health scores, trigger manual re-analysis | Add new plants, change plant static KPIs |
+| **Buyer** | Register, submit sample orders, submit bulk orders (after sample approved), view own order status and history | See other buyers' orders, see plant details |
+| **PlantManager** | View assigned orders, submit daily production logs (C3), mark bulk orders as Ready | See other plants' orders, assign orders |
+
+> [!IMPORTANT]
+> Plants are **pre-seeded** from the dataset — no UI to add new ones. Each plant gets one pre-created PlantManager account. Admins cannot add plants.
+
+---
+
+## 3. Email Notification Map (Every Trigger)
+
+| Event | Who Sends | Who Receives | Template |
+|:---|:---|:---|:---|
+| Buyer registers | System | Admin | "New buyer [CompanyName] is awaiting approval" |
+| Admin approves buyer | System | Buyer | "Your account has been approved. You can now log in." |
+| Admin rejects buyer | System | Buyer | "Your account registration was not approved." |
+| Sample order submitted | System | Admin | "New sample order from [Buyer] for style [X] — awaiting C1 analysis & assignment" |
+| Sample order assigned to plant | System | PlantManager | "A new sample order [Style X, Qty Y] has been assigned to your plant." |
+| Bulk order submitted | System | Admin | "New bulk order from [Buyer] for style [X] — awaiting C2 analysis & assignment" |
+| Bulk order assigned to plant | System | PlantManager | "Bulk order [Style X, Qty Y] assigned. Production starts [Date]." |
+| C3 detects **Critical** risk | System | Admin + PlantManager | "URGENT: Critical production risk detected for order [X] at plant [Y]. Action required." |
+| Plant marks order **Ready** | System | **Buyer + Admin** | Buyer: "Your order [Style X] is ready for shipment!" / Admin: "Plant [Y] has marked order [X] as ready — confirm shipment." |
+| Admin confirms shipment | System | Buyer | "Your order [Style X] has been shipped." |
+
+---
+
+## 4. Model & Dataset Compatibility Audit
+
+### Component 1 — Sample Planning
+- **User-provided fields:** `style_number`, `artwork_number`, `sample_qty`, `receive_date`, `buyer_required_date`, `notes`
+- **DB-derived (no longer in request):** buyer DOW from `buyers_config`, live capacity from `plant_capacity_history`
+- **Hardcoded dicts to migrate:** `BUYER_SHIPMENT_SCHEDULE`, `BUYER_DOW`, `PLANT_QUALITY`, `PLANT_LOCATIONS`, `PLANT_ONTIME_RATES`, `PLANT_UTIL_RANGE`
+- **Excel to migrate:** `capacity_full_year_2024.xlsx` + `capacity_full_year_2026.xlsx` → `plant_capacity_history`
+- **Models:** `m3_delay_classifier.pkl`, `le_buyer.pkl`, `le_priority.pkl` — **unchanged**
+
+### Component 2 — Bulk Order Planning
+- **User-provided fields:** `bulk_order_quantity`, `daily_commitment`, `style_priority`, `design_width`, `design_length`, `color_count`, `stitch_count`, `damage_pct`, `shipment_days`
+- **DB-derived (no longer in request):** `monthly_capacity` dict read from `plant_monthly_capacity`, plant quality from `plants` table
+- **Hardcoded dicts to migrate:** `QUALITY_MAP`, `ALLOCATION_GUIDE`, `PRIORITY_ENC`, `BUYER_ENC`
+- **Models:** `c2_model_cutting.pkl`, `c2_model_sewing.pkl`, `c2_model_embroidery.pkl`, `c2_model_allocation.pkl`, `c2_model_deadline.pkl` — **unchanged**
+
+### Component 3 — Daily Emergency Detection
+- **User-provided fields:** `plant_daily_output`, `daily_damage_qty`, `max_daily_damage_qty`, `machine_breakdown_count`, `worker_shortage_count`, `cumulative_completed_qty`
+- **DB-derived:** `bulk_order_id`, `full_order_qty`, `daily_commitment`, `total_working_days`, `working_day_no` (auto-counted from log entries), `production_date`
+- **Models:** `c3_model1_risk_type.pkl`, `c3_model2_order_risk.pkl` — **unchanged**
+- **Trigger:** runs automatically on every daily log submission
+
+### Component 4 — Production Analysis
+- **User-provided fields:** `machine_count`, `active_machine_count`, `employee_count`, `daily_output_avg`, `total_workload`, `urgent_style_flag`, `urgent_handled_count`, `machine_breakdown_days`, `worker_shortage_days`, `damage_rate`, `planned_completion_days`, `actual_completion_days`
+- **DB-derived:** `risk_count_from_component3` (aggregated from `daily_logs` C3 results), `on_time_rate` + `quality_rating` from `plants` table
+- **Hardcoded dicts to migrate:** `PLANT_NAME_TO_ID`, `PLANT_KPI`
+- **Models:** `model_A_perf_regressor.pkl`, `model_B_star_classifier.pkl`, `model_D_best_plant.pkl`, `model_E_multilabel_recommendation.pkl`, `scaler.pkl`, `encoders.pkl` — **unchanged**
+- **Trigger:** Admin or Plant Manager can run C4 analysis for any bulk order (weekly review)
+
+> [!IMPORTANT]
+> **No ML `.pkl` files change.** The DB only replaces hardcoded dicts and Excel files that feed INTO the models. Feature vectors stay identical.
+
+---
+
+## 5. Database Architecture (Final — Full Scope)
+
+```mermaid
+erDiagram
+    ORGANIZATIONS ||--o{ USERS : has
+    ORGANIZATIONS ||--o{ PLANTS : owns
+    ORGANIZATIONS ||--o{ BUYERS_CONFIG : configures
+    USERS ||--o{ SAMPLE_ORDERS : submits
+    USERS ||--o{ BULK_ORDERS : submits
+    USERS ||--o{ NOTIFICATIONS : receives
+    PLANTS ||--o{ PLANT_CAPACITY_HISTORY : has
+    PLANTS ||--o{ PLANT_MONTHLY_CAPACITY : has
+    PLANTS ||--o{ ALLOCATION_GUIDE : preferred_in
+    PLANTS ||--o{ ORDER_PLANT_ALLOCATIONS : assigned_to
+    SAMPLE_ORDERS ||--o{ BULK_ORDERS : leads_to
+    BULK_ORDERS ||--o{ DAILY_LOGS : tracked_by
+    BULK_ORDERS ||--o{ ORDER_PLANT_ALLOCATIONS : split_across
+```
+
+---
+
+## 6. Complete SQL Schema
+
+```sql
+-- ── Organizations ──────────────────────────────────────────────────────────
+-- Covers the Mother Company AND all Buyer companies
+CREATE TABLE organizations (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT UNIQUE NOT NULL,
+    type TEXT NOT NULL CHECK(type IN ('MotherCompany', 'Buyer')),
+    contact_email TEXT,
+    phone TEXT,
+    address TEXT,
+    status TEXT DEFAULT 'Active' CHECK(status IN ('Active', 'Suspended')),
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+-- ── Users ──────────────────────────────────────────────────────────────────
+CREATE TABLE users (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    org_id INTEGER NOT NULL REFERENCES organizations(id),
+    full_name TEXT NOT NULL,
+    email TEXT UNIQUE NOT NULL,
+    password_hash TEXT NOT NULL,
+    role TEXT NOT NULL CHECK(role IN ('Admin', 'Buyer', 'PlantManager')),
+    plant_id TEXT REFERENCES plants(id),    -- only set for PlantManager role
+    status TEXT DEFAULT 'Pending' CHECK(status IN ('Pending', 'Approved', 'Rejected')),
+    approved_by INTEGER REFERENCES users(id),
+    approved_at DATETIME,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+-- ── Plants (pre-seeded, linked to mother company) ─────────────────────────
+CREATE TABLE plants (
+    id TEXT PRIMARY KEY,                    -- PL01..PL06
+    org_id INTEGER REFERENCES organizations(id),
+    name TEXT UNIQUE NOT NULL,
+    location TEXT,
+    quality_rating REAL,                    -- from PLANT_QUALITY / PLANT_KPI
+    historical_on_time_rate REAL,           -- from PLANT_ONTIME_RATES / PLANT_KPI
+    historical_miss_rate REAL,              -- from hist_miss in C2
+    utilization_min REAL,                   -- from PLANT_UTIL_RANGE in C1
+    utilization_max REAL,                   -- from PLANT_UTIL_RANGE in C1
+    total_machines INTEGER,
+    employee_count INTEGER
+);
+
+-- ── Buyer Shipment Config (replaces BUYER_SHIPMENT_SCHEDULE + BUYER_DOW) ──
+CREATE TABLE buyers_config (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    org_id INTEGER REFERENCES organizations(id),
+    buyer_name TEXT UNIQUE NOT NULL,        -- must match ALL_BUYERS in C1/C2
+    shipment_day TEXT NOT NULL,             -- 'Monday', 'Thursday'
+    shipment_dow_index INTEGER NOT NULL     -- 0=Mon, 3=Thu
+);
+
+-- ── Plant Capacity History (replaces both Excel files) ────────────────────
+CREATE TABLE plant_capacity_history (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    plant_id TEXT NOT NULL REFERENCES plants(id),
+    record_date DATE NOT NULL,
+    utilization_pct REAL,
+    free_machine_ratio REAL,
+    styles_can_do INTEGER,
+    total_machines INTEGER
+);
+CREATE UNIQUE INDEX idx_plant_cap_hist ON plant_capacity_history(plant_id, record_date);
+
+-- ── Plant Monthly Capacity (dynamic — decreases as orders are assigned) ───
+CREATE TABLE plant_monthly_capacity (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    plant_id TEXT NOT NULL REFERENCES plants(id),
+    month_year TEXT NOT NULL,               -- 'YYYY-MM'
+    total_capacity INTEGER NOT NULL,
+    used_capacity INTEGER DEFAULT 0         -- incremented on every assignment
+);
+CREATE UNIQUE INDEX idx_plant_monthly ON plant_monthly_capacity(plant_id, month_year);
+
+-- ── Allocation Guide (replaces ALLOCATION_GUIDE dict in C2) ──────────────
+CREATE TABLE allocation_guide (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    priority_level TEXT NOT NULL,           -- 'High', 'Normal', 'Low', 'No Urgency'
+    complexity_level TEXT NOT NULL,         -- 'Hard', 'High', 'Medium', 'Low'
+    plant_id TEXT NOT NULL REFERENCES plants(id),
+    preference_order INTEGER DEFAULT 1      -- 1=first choice, 2=second choice
+);
+
+-- ── Sample Orders (C1 is run here) ───────────────────────────────────────
+CREATE TABLE sample_orders (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    style_number TEXT NOT NULL,
+    artwork_number TEXT,
+    buyer_id INTEGER NOT NULL REFERENCES users(id),
+    sample_qty INTEGER NOT NULL CHECK(sample_qty BETWEEN 1 AND 10),
+    receive_date DATE NOT NULL,
+    buyer_required_date DATE NOT NULL,
+    notes TEXT,
+    status TEXT DEFAULT 'Pending'
+        CHECK(status IN ('Pending','Analyzing','Feasible','Infeasible','Assigned','Completed')),
+    assigned_plant_id TEXT REFERENCES plants(id),
+    assigned_by INTEGER REFERENCES users(id),
+    assigned_at DATETIME,
+    c1_result_json TEXT,                    -- full C1 JSON response stored here
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+-- ── Bulk Orders (C2 is run here) ─────────────────────────────────────────
+CREATE TABLE bulk_orders (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    sample_order_id INTEGER REFERENCES sample_orders(id),
+    style_number TEXT NOT NULL,
+    buyer_id INTEGER NOT NULL REFERENCES users(id),
+    bulk_order_quantity INTEGER NOT NULL,
+    daily_commitment INTEGER NOT NULL,
+    style_priority TEXT NOT NULL CHECK(style_priority IN ('High','Normal','Low','No Urgency')),
+    design_width REAL,
+    design_length REAL,
+    color_count INTEGER,
+    stitch_count INTEGER,
+    approved_date DATE NOT NULL,
+    buyer_required_date DATE NOT NULL,
+    damage_pct REAL DEFAULT 0.0,
+    shipment_days INTEGER DEFAULT 18,
+    status TEXT DEFAULT 'Pending'
+        CHECK(status IN ('Pending','Analyzing','Assigned','In-Production','Ready','Shipped')),
+    assigned_by INTEGER REFERENCES users(id),
+    assigned_at DATETIME,
+    ready_at DATETIME,                      -- when plant marks ready
+    shipped_at DATETIME,                    -- when admin confirms shipment
+    c2_result_json TEXT,                    -- full C2 JSON response stored here
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+-- ── Order-Plant Allocations (supports split orders from C2) ──────────────
+CREATE TABLE order_plant_allocations (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    bulk_order_id INTEGER NOT NULL REFERENCES bulk_orders(id),
+    plant_id TEXT NOT NULL REFERENCES plants(id),
+    allocation_type TEXT DEFAULT 'Primary' CHECK(allocation_type IN ('Primary','Secondary')),
+    allocated_qty INTEGER
+);
+
+-- ── Daily Production Logs (C3 runs on each; C4 aggregates across all) ────
+CREATE TABLE daily_logs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    bulk_order_id INTEGER NOT NULL REFERENCES bulk_orders(id),
+    plant_id TEXT NOT NULL REFERENCES plants(id),
+    log_date DATE NOT NULL,
+    working_day_no INTEGER NOT NULL,        -- auto-derived: COUNT of prior logs + 1
+    plant_daily_output INTEGER NOT NULL,
+    daily_damage_qty INTEGER DEFAULT 0,
+    max_daily_damage_qty INTEGER,
+    machine_breakdown_count INTEGER DEFAULT 0,
+    worker_shortage_count INTEGER DEFAULT 0,
+    cumulative_completed_qty INTEGER NOT NULL,
+    c3_result_json TEXT,                    -- full C3 risk result saved here
+    c4_result_json TEXT,                    -- full C4 analysis result (when run)
+    submitted_by INTEGER REFERENCES users(id),
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+CREATE UNIQUE INDEX idx_daily_log ON daily_logs(bulk_order_id, log_date);
+
+-- ── Notifications (persistent in-portal alerts for all users) ────────────
+CREATE TABLE notifications (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL REFERENCES users(id),
+    title TEXT NOT NULL,
+    message TEXT NOT NULL,
+    type TEXT DEFAULT 'info' CHECK(type IN ('info','success','warning','critical')),
+    is_read INTEGER DEFAULT 0,              -- 0=unread, 1=read
+    related_order_type TEXT,               -- 'sample_order' or 'bulk_order'
+    related_order_id INTEGER,              -- FK to the relevant order
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+```
+
+---
+
+## 7. Seed Data (One-Time Migration Script)
+
+### `organizations` (pre-seed):
+| name | type | note |
+|:---|:---|:---|
+| Sysconex (Mother Company) | MotherCompany | The mother company — update name before running |
+| Tesco | Buyer | Pre-seed known buyers |
+| George | Buyer | |
+| M&S | Buyer | |
+| Hirdaramani | Buyer | |
+
+### `plants` (from combined C1/C2/C4 constants):
+| id | name | location | quality | on_time_rate | miss_rate | util_min | util_max |
+|:---|:---|:---|:---|:---|:---|:---|:---|
+| PL01 | Dinusha Embroidery | Weliweriya | 4.8 | 0.92 | 0.10 | 75.0 | 100.0 |
+| PL02 | MRC Group | Colombo | 4.5 | 0.88 | 0.15 | 33.33 | 100.0 |
+| PL03 | The Bobbin Group | Mount Lavinia | 4.4 | 0.85 | 0.13 | 80.0 | 100.0 |
+| PL04 | Sunrose Lanka (Pvt) Ltd | Katubedda | 4.3 | 0.83 | 0.14 | 33.33 | 100.0 |
+| PL05 | Regal Image International | Maharagama | 4.6 | 0.80 | 0.12 | 33.33 | 100.0 |
+| PL06 | Amsral Lanka Enterprises | Boralesgamuwa | 4.2 | 0.78 | 0.16 | 33.33 | 100.0 |
+
+### `users` (pre-seed plant managers + admin):
+| email | role | plant_id | status |
+|:---|:---|:---|:---|
+| admin@company.com | Admin | NULL | Approved |
+| manager.pl01@dinusha.com | PlantManager | PL01 | Approved |
+| manager.pl02@mrc.com | PlantManager | PL02 | Approved |
+| manager.pl03@bobbin.com | PlantManager | PL03 | Approved |
+| manager.pl04@sunrose.com | PlantManager | PL04 | Approved |
+| manager.pl05@regal.com | PlantManager | PL05 | Approved |
+| manager.pl06@amsral.com | PlantManager | PL06 | Approved |
+
+### `plant_capacity_history`:
+- **Source:** `models/capacity_full_year_2024.xlsx` and `models/capacity_full_year_2026.xlsx`
+- **Action:** Use `pandas.read_excel()` and bulk INSERT all rows
+
+### `buyers_config`:
+| buyer_name | shipment_day | dow_index |
+|:---|:---|:---|
+| Tesco | Monday | 0 |
+| M&S | Monday | 0 |
+| George | Thursday | 3 |
+| Hirdaramani | Thursday | 3 |
+
+### `allocation_guide` (from `ALLOCATION_GUIDE` in C2):
+| priority | complexity | plant | preference |
+|:---|:---|:---|:---|
+| High | Hard | Dinusha Embroidery | 1 |
+| High | Hard | Regal Image International | 2 |
+| High | High | Dinusha Embroidery | 1 |
+| High | High | Regal Image International | 2 |
+| High | Medium | Dinusha Embroidery | 1 |
+| High | Medium | The Bobbin Group | 2 |
+| Normal | High | Dinusha Embroidery | 1 |
+| Normal | High | Regal Image International | 2 |
+| Normal | Medium | The Bobbin Group | 1 |
+| Normal | Medium | Sunrose Lanka (Pvt) Ltd | 2 |
+| Low | Low | MRC Group | 1 |
+| Low | Low | Amsral Lanka Enterprises | 2 |
+| No Urgency | Low | MRC Group | 1 |
+| No Urgency | Low | Amsral Lanka Enterprises | 2 |
+
+---
+
+## 8. API Endpoints (Complete)
+
+### Auth
+| Method | Endpoint | Who | Action |
+|:---|:---|:---|:---|
+| POST | `/auth/register` | Public | Buyer company registers |
+| POST | `/auth/login` | All | Returns JWT token |
+| GET | `/auth/me` | All | Current user profile |
+
+### Admin — User Management
+| Method | Endpoint | Who | Action |
+|:---|:---|:---|:---|
+| GET | `/admin/users/pending` | Admin | List all pending buyer registrations |
+| POST | `/admin/users/<id>/approve` | Admin | Approve buyer → triggers email to buyer |
+| POST | `/admin/users/<id>/reject` | Admin | Reject buyer → triggers email to buyer |
+| GET | `/admin/users` | Admin | All users list |
+
+### Admin — Order Management
+| Method | Endpoint | Who | Action |
+|:---|:---|:---|:---|
+| GET | `/admin/orders/sample` | Admin | All sample orders (any status) |
+| POST | `/admin/orders/sample/<id>/assign` | Admin | Assign plant → deduct capacity → email plant |
+| GET | `/admin/orders/bulk` | Admin | All bulk orders (any status) |
+| POST | `/admin/orders/bulk/<id>/assign` | Admin | Assign plant(s) → deduct capacity → email plant |
+| POST | `/admin/orders/bulk/<id>/confirm-shipment` | Admin | Mark shipped → email buyer |
+| GET | `/admin/orders/bulk/<id>/analysis` | Admin | Run C4 on aggregated daily logs |
+
+### Admin — Capacity & Plant Health
+| Method | Endpoint | Who | Action |
+|:---|:---|:---|:---|
+| GET | `/admin/capacity` | Admin | Current capacity across all plants |
+| GET | `/admin/plants` | Admin | All plants + current utilization |
+| GET | `/admin/plants/<id>/logs` | Admin | Daily logs for a plant |
+
+### Buyer
+| Method | Endpoint | Who | Action |
+|:---|:---|:---|:---|
+| POST | `/buyer/orders/sample` | Buyer | Submit sample order → runs C1 → saves result |
+| GET | `/buyer/orders/sample` | Buyer | Own sample orders |
+| GET | `/buyer/orders/sample/<id>` | Buyer | Single sample order detail + C1 result |
+| POST | `/buyer/orders/bulk` | Buyer | Submit bulk order → runs C2 → saves result |
+| GET | `/buyer/orders/bulk` | Buyer | Own bulk orders |
+| GET | `/buyer/orders/bulk/<id>` | Buyer | Single bulk order detail + C2 result + status |
+| GET | `/buyer/notifications` | Buyer | In-portal notification inbox |
+
+### Plant Manager
+| Method | Endpoint | Who | Action |
+|:---|:---|:---|:---|
+| GET | `/plant/orders` | PlantManager | Orders assigned to my plant |
+| GET | `/plant/orders/<id>` | PlantManager | Order detail |
+| POST | `/plant/orders/<bulk_id>/log` | PlantManager | Submit daily log → runs C3 automatically |
+| GET | `/plant/orders/<bulk_id>/logs` | PlantManager | All daily logs for this order |
+| POST | `/plant/orders/<bulk_id>/ready` | PlantManager | Mark order Ready → email Buyer + Admin |
+| GET | `/plant/notifications` | PlantManager | In-portal notification inbox |
+
+---
+
+## 9. File Structure
+
+```
+garment_new/
+├── app.py                          (update: register new blueprints)
+├── components/                     (EXISTING — no structural changes)
+│   ├── component1.py               (minor refactor: read capacity from DB)
+│   ├── component2.py               (minor refactor: read monthly_cap from DB)
+│   ├── component3.py               (no change needed)
+│   └── component4.py               (minor refactor: read plant KPIs from DB)
+├── database/                       (NEW)
+│   ├── db.py                       → get_db(), init_db(), close_db()
+│   ├── schema.py                   → All CREATE TABLE SQL strings
+│   └── seed.py                     → One-time migration script
+├── routes/                         (NEW)
+│   ├── auth.py                     → /auth/*
+│   ├── admin.py                    → /admin/*
+│   ├── buyer.py                    → /buyer/*
+│   └── plant.py                    → /plant/*
+├── services/                       (NEW)
+│   ├── email_service.py            → send_email(to, subject, body)
+│   ├── notification_service.py     → create_notification(user_id, ...)
+│   └── capacity_service.py         → deduct_capacity(), get_available()
+├── middleware/                     (NEW)
+│   └── auth_middleware.py          → require_role('Admin') decorator
+└── models/                         (EXISTING — ML .pkl files, no changes)
+```
+
+---
+
+## 10. Implementation Steps (Ordered Task List)
+
+### Foundation
+- `[ ]` **1.** Create `database/schema.py` with all CREATE TABLE SQL
+- `[ ]` **2.** Create `database/db.py` with `init_db()`, `get_db()`, `close_db()`
+- `[ ]` **3.** Write and run `database/seed.py` — seeds all static tables + imports both Excel files
+- `[ ]` **4.** Create `middleware/auth_middleware.py` with JWT decode + `require_role()` decorator
+
+### Auth & Users
+- `[ ]` **5.** Build `routes/auth.py` — register, login, /me
+- `[ ]` **6.** On register: create notification for Admin + send email to Admin
+- `[ ]` **7.** Build `/admin/users/pending` + `/admin/users/<id>/approve` + reject
+- `[ ]` **8.** On approve/reject: send email to Buyer + create notification for Buyer
+
+### ML Component Refactoring
+- `[ ]` **9.** Refactor `component1.py` — replace `_load_capacity()` with DB query, replace `BUYER_DOW` lookup with DB query
+- `[ ]` **10.** Refactor `component2.py` — replace `monthly_capacity` dict param with DB read of `plant_monthly_capacity`
+- `[ ]` **11.** Refactor `component4.py` — replace `PLANT_KPI` lookup with DB query on `plants` table
+
+### Sample Order Flow
+- `[ ]` **12.** Build `POST /buyer/orders/sample` — validate buyer, run C1, save to `sample_orders`, create Admin notification + send email to Admin
+- `[ ]` **13.** Build `GET /buyer/orders/sample` + `/sample/<id>` — buyer views own orders
+- `[ ]` **14.** Build `GET /admin/orders/sample` — admin views all pending sample orders
+- `[ ]` **15.** Build `POST /admin/orders/sample/<id>/assign` — admin assigns plant, call `deduct_capacity()`, email PlantManager, create notifications for Plant + Buyer
+
+### Bulk Order Flow
+- `[ ]` **16.** Build `POST /buyer/orders/bulk` — validate, run C2 (reads capacity from DB), save to `bulk_orders`, create Admin notification + send email to Admin
+- `[ ]` **17.** Build `GET /buyer/orders/bulk` + `/bulk/<id>` — buyer views own orders + status
+- `[ ]` **18.** Build `GET /admin/orders/bulk` — admin views all bulk orders
+- `[ ]` **19.** Build `POST /admin/orders/bulk/<id>/assign` — admin assigns plant(s), update `order_plant_allocations`, call `deduct_capacity()`, email PlantManager(s), create notifications
+
+### Production Monitoring Flow
+- `[ ]` **20.** Build `GET /plant/orders` + `/plant/orders/<id>` — plant manager sees assigned orders
+- `[ ]` **21.** Build `POST /plant/orders/<bulk_id>/log` — plant submits daily data → auto-derive `working_day_no` from log count → run C3 → save `c3_result_json` → if C3 severity=Critical: email Admin + PlantManager, create critical notifications
+- `[ ]` **22.** Build `GET /plant/orders/<bulk_id>/logs` — view all daily logs for this order
+- `[ ]` **23.** Build `POST /plant/orders/<bulk_id>/ready` — plant marks ready → update `bulk_orders.status` + `ready_at` → **email Buyer AND Admin** → create notifications for both
+
+### Admin Post-Production
+- `[ ]` **24.** Build `GET /admin/orders/bulk/<id>/analysis` — aggregate all C3 logs → compute `risk_count_from_component3` → run C4 → return performance score + recommendations
+- `[ ]` **25.** Build `POST /admin/orders/bulk/<id>/confirm-shipment` — update status to Shipped + `shipped_at` → email Buyer → create Buyer notification
+
+### Notifications & Dashboard
+- `[ ]` **26.** Build `GET /buyer/notifications` + `/plant/notifications` — unread notification inbox
+- `[ ]` **27.** Build `POST /buyer/notifications/<id>/read` + plant equivalent — mark as read
+- `[ ]` **28.** Build `GET /admin/capacity` — returns `plant_monthly_capacity` with remaining capacity per plant
+- `[ ]` **29.** Build `GET /admin/plants` — all plants with current utilization + C4 star rating history
+
+### Email Service
+- `[ ]` **30.** Build `services/email_service.py` using Gmail SMTP (configurable via `.env`)
+- `[ ]` **31.** Build `services/notification_service.py` — `create_notification(user_id, title, msg, type, order_type, order_id)`
+- `[ ]` **32.** Build `services/capacity_service.py` — `deduct_capacity(plant_id, month_year, qty)` + `get_available_capacity(plant_id, month_year)`
+
+---
+
+## 11. Environment Variables (`.env`)
+
+```env
+SECRET_KEY=your_jwt_secret_key
+DATABASE_PATH=garment.db
+SMTP_HOST=smtp.gmail.com
+SMTP_PORT=587
+SMTP_USER=your_email@gmail.com
+SMTP_PASSWORD=your_app_password
+ADMIN_EMAIL=admin@yourcompany.com
+MOTHER_COMPANY_NAME=YourCompanyName
+```
+
+---
+
+## 12. Open Questions (Final — Need Answers Before Building)
+
+> [!IMPORTANT]
+> 1. **Mother Company Name:** What should be seeded as the mother company name in the `organizations` table?
+> 2. **Email provider:** Gmail SMTP (testing) or a proper service like SendGrid?
+> 3. **Frontend:** Do you want a web portal built now (HTML/JS), or REST APIs only for now?
+> 4. **Known buyers:** Are the 4 buyers (Tesco, George, M&S, Hirdaramani) the only ones who will ever use this system, or can new buyers from outside this list also register?

@@ -1,0 +1,364 @@
+{
+  "artifact_version": "2.0.0",
+  "trained_at_utc": "2026-08-15T07:57:37.860371+00:00",
+  "production_approved": false,
+  "model_approval": {
+    "risk_type": false,
+    "order_risk": false
+  },
+  "approval_notes": [
+    "Model 1 is experimental: every risk class needs at least 20 real rows across at least three real orders.",
+    "Model 2 is experimental: fewer than three real Low Risk orders are available."
+  ],
+  "dataset": {
+    "path": "/Users/vanu/Desktop/Y4S1:S2/Research/research new/Garment_model_backend_latest/data/component3_training_augmented.xlsx",
+    "sha256": "441baa2d20e60419766cb05864365fb95a6875baed0eb05663247e316f20deae",
+    "real_rows": 598,
+    "real_orders": 11,
+    "augmented_training_rows": 479,
+    "augmented_training_orders": 12,
+    "excluded_existing_generated_rows": 885,
+    "real_low_risk_orders": 1,
+    "risk_type_real_rows": {
+      "No Issue": 193,
+      "Minor Delay": 4,
+      "Working Hours Issue": 128,
+      "Worker Issue": 188,
+      "Commitment Too Low": 37,
+      "Machine Breakdown Issue": 44,
+      "Quality Issue": 4
+    },
+    "risk_type_real_orders": {
+      "No Issue": 11,
+      "Minor Delay": 1,
+      "Working Hours Issue": 10,
+      "Worker Issue": 11,
+      "Commitment Too Low": 9,
+      "Machine Breakdown Issue": 11,
+      "Quality Issue": 4
+    }
+  },
+  "features": [
+    "Daily_Commitment",
+    "Plant_Daily_Output",
+    "Output_Gap",
+    "Gap_Pct",
+    "Machine_Breakdown_Count",
+    "Worker_Shortage_Count",
+    "Daily_Damage_Qty",
+    "Max_Daily_Damage_Qty",
+    "Damage_Ratio",
+    "Working_Day_No",
+    "Total_Working_Days",
+    "Days_Remaining",
+    "Day_Progress_Pct",
+    "Output_vs_Commit_Ratio",
+    "Remaining_Qty",
+    "Full_Order_Qty",
+    "Required_Daily_Rate",
+    "Commitment_Gap_Rate",
+    "Cumulative_Completed_Qty",
+    "Is_Machine_Breakdown",
+    "Is_Worker_Shortage",
+    "Is_Quality_Issue",
+    "Is_Cutting_Phase",
+    "Is_Sewing_Phase"
+  ],
+  "feature_engineering": {
+    "output_gap": "Daily_Commitment - Plant_Daily_Output (negative values preserved)",
+    "gap_pct": "Output_Gap / Daily_Commitment * 100"
+  },
+  "risk_type_mapping": {
+    "No Issue": 0,
+    "Minor Delay": 1,
+    "Working Hours Issue": 2,
+    "Worker Issue": 3,
+    "Commitment Too Low": 4,
+    "Machine Breakdown Issue": 5,
+    "Quality Issue": 6
+  },
+  "order_risk_mapping": {
+    "Low": 0,
+    "High": 1
+  },
+  "evaluation": "LeaveOneGroupOut on real Bulk_Order_ID; augmentation used in training folds only",
+  "selected_models": {
+    "risk_type": "random_forest",
+    "order_risk": "logistic_regression"
+  },
+  "selected_metrics": {
+    "risk_type": {
+      "accuracy": 0.8177257525083612,
+      "macro_f1": 0.900825922774709,
+      "weighted_f1": 0.8193330119993991,
+      "confusion_matrix": [
+        [
+          193,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          4,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          91,
+          37,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          72,
+          116,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0,
+          0,
+          37,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0,
+          0,
+          0,
+          44,
+          0
+        ],
+        [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          4
+        ]
+      ],
+      "classification_report": {
+        "No Issue": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "f1-score": 1.0,
+          "support": 193.0
+        },
+        "Minor Delay": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "f1-score": 1.0,
+          "support": 4.0
+        },
+        "Working Hours Issue": {
+          "precision": 0.558282208588957,
+          "recall": 0.7109375,
+          "f1-score": 0.6254295532646048,
+          "support": 128.0
+        },
+        "Worker Issue": {
+          "precision": 0.7581699346405228,
+          "recall": 0.6170212765957447,
+          "f1-score": 0.6803519061583577,
+          "support": 188.0
+        },
+        "Commitment Too Low": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "f1-score": 1.0,
+          "support": 37.0
+        },
+        "Machine Breakdown Issue": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "f1-score": 1.0,
+          "support": 44.0
+        },
+        "Quality Issue": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "f1-score": 1.0,
+          "support": 4.0
+        },
+        "accuracy": 0.8177257525083612,
+        "macro avg": {
+          "precision": 0.9023503061756399,
+          "recall": 0.9039941109422492,
+          "f1-score": 0.900825922774709,
+          "support": 598.0
+        },
+        "weighted avg": {
+          "precision": 0.8294248669093726,
+          "recall": 0.8177257525083612,
+          "f1-score": 0.8193330119993991,
+          "support": 598.0
+        }
+      },
+      "per_order": {
+        "BULK0001": {
+          "rows": 108,
+          "accuracy": 0.8333333333333334
+        },
+        "BULK0002": {
+          "rows": 46,
+          "accuracy": 0.8260869565217391
+        },
+        "BULK0003": {
+          "rows": 78,
+          "accuracy": 0.8076923076923077
+        },
+        "BULK0004": {
+          "rows": 35,
+          "accuracy": 0.7428571428571429
+        },
+        "BULK0005": {
+          "rows": 45,
+          "accuracy": 0.8222222222222222
+        },
+        "BULK0006": {
+          "rows": 53,
+          "accuracy": 0.8301886792452831
+        },
+        "BULK0007": {
+          "rows": 21,
+          "accuracy": 0.8571428571428571
+        },
+        "BULK0008": {
+          "rows": 30,
+          "accuracy": 0.8
+        },
+        "BULK0009": {
+          "rows": 117,
+          "accuracy": 0.7948717948717948
+        },
+        "BULK0010": {
+          "rows": 30,
+          "accuracy": 0.8333333333333334
+        },
+        "BULK0015": {
+          "rows": 35,
+          "accuracy": 0.8857142857142857
+        }
+      }
+    },
+    "order_risk": {
+      "accuracy": 0.9732441471571907,
+      "macro_f1": 0.8997695369788393,
+      "weighted_f1": 0.975540228725264,
+      "roc_auc": 1.0,
+      "low_risk_precision": 0.6862745098039216,
+      "low_risk_recall": 1.0,
+      "high_risk_recall": 0.9715808170515098,
+      "false_low_risk_rows": 16,
+      "confusion_matrix": [
+        [
+          35,
+          0
+        ],
+        [
+          16,
+          547
+        ]
+      ],
+      "classification_report": {
+        "Low Risk": {
+          "precision": 0.6862745098039216,
+          "recall": 1.0,
+          "f1-score": 0.813953488372093,
+          "support": 35.0
+        },
+        "High Risk": {
+          "precision": 1.0,
+          "recall": 0.9715808170515098,
+          "f1-score": 0.9855855855855856,
+          "support": 563.0
+        },
+        "accuracy": 0.9732441471571907,
+        "macro avg": {
+          "precision": 0.8431372549019608,
+          "recall": 0.985790408525755,
+          "f1-score": 0.8997695369788393,
+          "support": 598.0
+        },
+        "weighted avg": {
+          "precision": 0.9816381402059151,
+          "recall": 0.9732441471571907,
+          "f1-score": 0.975540228725264,
+          "support": 598.0
+        }
+      },
+      "per_order": {
+        "BULK0001": {
+          "rows": 108,
+          "accuracy": 1.0
+        },
+        "BULK0002": {
+          "rows": 46,
+          "accuracy": 0.9782608695652174
+        },
+        "BULK0003": {
+          "rows": 78,
+          "accuracy": 1.0
+        },
+        "BULK0004": {
+          "rows": 35,
+          "accuracy": 1.0
+        },
+        "BULK0005": {
+          "rows": 45,
+          "accuracy": 0.7555555555555555
+        },
+        "BULK0006": {
+          "rows": 53,
+          "accuracy": 0.9245283018867925
+        },
+        "BULK0007": {
+          "rows": 21,
+          "accuracy": 1.0
+        },
+        "BULK0008": {
+          "rows": 30,
+          "accuracy": 1.0
+        },
+        "BULK0009": {
+          "rows": 117,
+          "accuracy": 1.0
+        },
+        "BULK0010": {
+          "rows": 30,
+          "accuracy": 1.0
+        },
+        "BULK0015": {
+          "rows": 35,
+          "accuracy": 1.0
+        }
+      }
+    }
+  },
+  "versions": {
+    "python": "3.13.5",
+    "scikit_learn": "1.8.0",
+    "pandas": "3.0.2",
+    "numpy": "2.4.4",
+    "joblib": "1.5.3"
+  }
+}

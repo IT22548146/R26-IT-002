@@ -1,0 +1,79 @@
+/* Design-system styling for react-phone-number-input, scoped to <PhoneField/>.
+   Overrides the library's base style.css so the control matches the app's
+   <Input/> (slate-300 border, rounded-lg, h-10, slate-950 focus ring). */
+
+.phone-field {
+  /* Flag / arrow theming via the library's own CSS variables. */
+  --PhoneInputCountryFlag-height: 1.1em;
+  --PhoneInputCountryFlag-borderColor: rgba(15, 23, 42, 0.15);
+  --PhoneInputCountrySelectArrow-color: rgb(100 116 139); /* slate-500 */
+  --PhoneInputCountrySelectArrow-opacity: 1;
+  --PhoneInput-color--focus: rgb(37 99 235); /* blue-600 */
+
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  height: 2.5rem; /* h-10 */
+  width: 100%;
+  border-radius: 0.5rem; /* rounded-lg */
+  border: 1px solid rgb(203 213 225); /* slate-300 */
+  background-color: #fff;
+  padding: 0 0.75rem; /* px-3 */
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+/* Match the app's <Input/> focus: 2px white offset + 2px slate-950 ring. */
+.phone-field:focus-within {
+  outline: none;
+  box-shadow: 0 0 0 2px #ffffff, 0 0 0 4px rgb(2 6 23); /* slate-950 */
+}
+
+/* Country selector (native <select/> overlay + flag + arrow). */
+.phone-field .PhoneInputCountry {
+  align-self: stretch;
+  margin-right: 0;
+  padding-right: 0.5rem;
+  border-right: 1px solid rgb(226 232 240); /* slate-200 divider */
+}
+
+.phone-field .PhoneInputCountrySelect {
+  color: rgb(15 23 42); /* slate-900 */
+}
+
+.phone-field .PhoneInputCountrySelect option {
+  color: rgb(15 23 42); /* slate-900 */
+  background-color: #fff;
+}
+
+/* The phone number input — borderless, fills the remaining width. */
+.phone-field .PhoneInputInput {
+  height: 100%;
+  border: none;
+  outline: none;
+  background: transparent;
+  font-size: 0.875rem; /* text-sm */
+  line-height: 1.25rem;
+  color: rgb(15 23 42); /* slate-900 */
+}
+
+.phone-field .PhoneInputInput::placeholder {
+  color: rgb(100 116 139); /* slate-500 */
+}
+
+/* Invalid state (red border, red focus ring). */
+.phone-field--error {
+  border-color: rgb(220 38 38); /* red-600 */
+}
+.phone-field--error:focus-within {
+  box-shadow: 0 0 0 2px #ffffff, 0 0 0 4px rgb(220 38 38);
+}
+
+/* Disabled state. */
+.phone-field--disabled {
+  background-color: rgb(248 250 252); /* slate-50 */
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+.phone-field--disabled .PhoneInputCountrySelect {
+  cursor: not-allowed;
+}

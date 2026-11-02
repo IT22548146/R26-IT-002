@@ -1,0 +1,547 @@
+{
+  "report_version": "component3-grouped-hyperparameter-optimization-v1",
+  "generated_at_utc": "2026-10-17T15:15:06.889862+00:00",
+  "scope": "Research-only nested group hyperparameter optimization and explicit soft-voting ensemble comparison",
+  "primary_metric": "Macro-F1",
+  "parameter_search": "GridSearchCV",
+  "outer_validation": "LeaveOneGroupOut by Bulk_Order_ID",
+  "inner_validation": "GroupKFold(n_splits=3)",
+  "leakage_control": "Each outer test order is absent from hyperparameter selection, model fitting, and ensemble-weight selection.",
+  "promotion_policy": "Do not replace active artifacts automatically. Promote only if nested unseen-order evidence improves and integration tests pass.",
+  "parameter_rationale": {
+    "logistic_regression_C": "Controls regularization strength for a stable linear model on the small, imbalanced early-warning dataset.",
+    "random_forest_n_estimators": "Compares ensemble sizes to balance stability and compute cost.",
+    "random_forest_max_depth": "Constrains tree complexity to reduce small-dataset overfitting.",
+    "random_forest_min_samples_leaf": "Prevents decisions from depending on very small leaf samples.",
+    "soft_voting_weights": "Tests whether emphasizing the linear or nonlinear model improves order-held-out Macro-F1."
+  },
+  "search_spaces": {
+    "logistic_regression": {
+      "model__C": [
+        0.05,
+        0.2,
+        1.0,
+        5.0
+      ]
+    },
+    "random_forest": {
+      "model__n_estimators": [
+        200,
+        400
+      ],
+      "model__max_depth": [
+        null,
+        8
+      ],
+      "model__min_samples_leaf": [
+        1,
+        3
+      ],
+      "model__max_features": [
+        "sqrt"
+      ]
+    },
+    "soft_voting_weights": [
+      [
+        1,
+        1
+      ],
+      [
+        2,
+        1
+      ],
+      [
+        1,
+        2
+      ]
+    ]
+  },
+  "targets": {
+    "Machine_Breakdown_Within_3_Days": {
+      "display_name": "Machine breakdown within 3 production days",
+      "class_coverage": {
+        "rows": 174,
+        "orders": 11,
+        "positive_rows": 47,
+        "negative_rows": 127,
+        "positive_orders": 11,
+        "negative_orders": 11
+      },
+      "selected_model": "soft_voting_logistic_random_forest",
+      "selection_rule": "Highest nested unseen-order Macro-F1; ties use positive-class F1, Accuracy, then the simpler candidate.",
+      "candidates": {
+        "tuned_logistic_regression": {
+          "accuracy": 0.844828,
+          "macro_f1": 0.824669,
+          "f1": 0.765217,
+          "outer_fold_parameter_stability": [
+            {
+              "parameters": {
+                "model__C": 0.05
+              },
+              "selected_in_outer_folds": 4
+            },
+            {
+              "parameters": {
+                "model__C": 0.2
+              },
+              "selected_in_outer_folds": 3
+            },
+            {
+              "parameters": {
+                "model__C": 5.0
+              },
+              "selected_in_outer_folds": 3
+            },
+            {
+              "parameters": {
+                "model__C": 1.0
+              },
+              "selected_in_outer_folds": 1
+            }
+          ],
+          "final_full_data_best_parameters": {
+            "model__C": 5.0
+          },
+          "final_full_data_inner_macro_f1": 0.815222,
+          "selected": false
+        },
+        "tuned_random_forest": {
+          "accuracy": 0.856322,
+          "macro_f1": 0.82762,
+          "f1": 0.757282,
+          "outer_fold_parameter_stability": [
+            {
+              "parameters": {
+                "model__max_depth": null,
+                "model__max_features": "sqrt",
+                "model__min_samples_leaf": 3,
+                "model__n_estimators": 400
+              },
+              "selected_in_outer_folds": 5
+            },
+            {
+              "parameters": {
+                "model__max_depth": 8,
+                "model__max_features": "sqrt",
+                "model__min_samples_leaf": 1,
+                "model__n_estimators": 400
+              },
+              "selected_in_outer_folds": 4
+            },
+            {
+              "parameters": {
+                "model__max_depth": null,
+                "model__max_features": "sqrt",
+                "model__min_samples_leaf": 3,
+                "model__n_estimators": 200
+              },
+              "selected_in_outer_folds": 2
+            }
+          ],
+          "final_full_data_best_parameters": {
+            "model__max_depth": null,
+            "model__max_features": "sqrt",
+            "model__min_samples_leaf": 1,
+            "model__n_estimators": 400
+          },
+          "final_full_data_inner_macro_f1": 0.829624,
+          "selected": false
+        },
+        "soft_voting_logistic_random_forest": {
+          "accuracy": 0.862069,
+          "macro_f1": 0.84201,
+          "f1": 0.785714,
+          "outer_fold_parameter_stability": [
+            {
+              "parameters": {
+                "weights": [
+                  1,
+                  1
+                ]
+              },
+              "selected_in_outer_folds": 5
+            },
+            {
+              "parameters": {
+                "weights": [
+                  1,
+                  2
+                ]
+              },
+              "selected_in_outer_folds": 4
+            },
+            {
+              "parameters": {
+                "weights": [
+                  2,
+                  1
+                ]
+              },
+              "selected_in_outer_folds": 2
+            }
+          ],
+          "final_full_data_best_parameters": {
+            "weights": [
+              2,
+              1
+            ]
+          },
+          "final_full_data_inner_macro_f1": 0.815222,
+          "selected": true
+        }
+      },
+      "validation": {
+        "outer_strategy": "LeaveOneGroupOut",
+        "inner_strategy": "GroupKFold(n_splits=3)",
+        "group_column": "Bulk_Order_ID",
+        "outer_fold_count": 11,
+        "held_out_orders": [
+          "BULK0001",
+          "BULK0002",
+          "BULK0003",
+          "BULK0004",
+          "BULK0005",
+          "BULK0006",
+          "BULK0007",
+          "BULK0008",
+          "BULK0009",
+          "BULK0010",
+          "BULK0015"
+        ],
+        "every_row_evaluated_once": true,
+        "train_test_group_overlap_detected": false
+      }
+    },
+    "Quality_Limit_Within_3_Days": {
+      "display_name": "Quality-limit issue within 3 production days",
+      "class_coverage": {
+        "rows": 174,
+        "orders": 11,
+        "positive_rows": 134,
+        "negative_rows": 40,
+        "positive_orders": 11,
+        "negative_orders": 11
+      },
+      "selected_model": "tuned_logistic_regression",
+      "selection_rule": "Highest nested unseen-order Macro-F1; ties use positive-class F1, Accuracy, then the simpler candidate.",
+      "candidates": {
+        "tuned_logistic_regression": {
+          "accuracy": 0.66092,
+          "macro_f1": 0.597648,
+          "f1": 0.757202,
+          "outer_fold_parameter_stability": [
+            {
+              "parameters": {
+                "model__C": 0.05
+              },
+              "selected_in_outer_folds": 10
+            },
+            {
+              "parameters": {
+                "model__C": 1.0
+              },
+              "selected_in_outer_folds": 1
+            }
+          ],
+          "final_full_data_best_parameters": {
+            "model__C": 0.05
+          },
+          "final_full_data_inner_macro_f1": 0.6001,
+          "selected": true
+        },
+        "tuned_random_forest": {
+          "accuracy": 0.735632,
+          "macro_f1": 0.47999,
+          "f1": 0.844595,
+          "outer_fold_parameter_stability": [
+            {
+              "parameters": {
+                "model__max_depth": null,
+                "model__max_features": "sqrt",
+                "model__min_samples_leaf": 3,
+                "model__n_estimators": 200
+              },
+              "selected_in_outer_folds": 4
+            },
+            {
+              "parameters": {
+                "model__max_depth": null,
+                "model__max_features": "sqrt",
+                "model__min_samples_leaf": 3,
+                "model__n_estimators": 400
+              },
+              "selected_in_outer_folds": 4
+            },
+            {
+              "parameters": {
+                "model__max_depth": 8,
+                "model__max_features": "sqrt",
+                "model__min_samples_leaf": 3,
+                "model__n_estimators": 200
+              },
+              "selected_in_outer_folds": 2
+            },
+            {
+              "parameters": {
+                "model__max_depth": null,
+                "model__max_features": "sqrt",
+                "model__min_samples_leaf": 1,
+                "model__n_estimators": 200
+              },
+              "selected_in_outer_folds": 1
+            }
+          ],
+          "final_full_data_best_parameters": {
+            "model__max_depth": null,
+            "model__max_features": "sqrt",
+            "model__min_samples_leaf": 3,
+            "model__n_estimators": 200
+          },
+          "final_full_data_inner_macro_f1": 0.530798,
+          "selected": false
+        },
+        "soft_voting_logistic_random_forest": {
+          "accuracy": 0.712644,
+          "macro_f1": 0.594216,
+          "f1": 0.813433,
+          "outer_fold_parameter_stability": [
+            {
+              "parameters": {
+                "weights": [
+                  2,
+                  1
+                ]
+              },
+              "selected_in_outer_folds": 8
+            },
+            {
+              "parameters": {
+                "weights": [
+                  1,
+                  1
+                ]
+              },
+              "selected_in_outer_folds": 3
+            }
+          ],
+          "final_full_data_best_parameters": {
+            "weights": [
+              2,
+              1
+            ]
+          },
+          "final_full_data_inner_macro_f1": 0.562485,
+          "selected": false
+        }
+      },
+      "validation": {
+        "outer_strategy": "LeaveOneGroupOut",
+        "inner_strategy": "GroupKFold(n_splits=3)",
+        "group_column": "Bulk_Order_ID",
+        "outer_fold_count": 11,
+        "held_out_orders": [
+          "BULK0001",
+          "BULK0002",
+          "BULK0003",
+          "BULK0004",
+          "BULK0005",
+          "BULK0006",
+          "BULK0007",
+          "BULK0008",
+          "BULK0009",
+          "BULK0010",
+          "BULK0015"
+        ],
+        "every_row_evaluated_once": true,
+        "train_test_group_overlap_detected": false
+      }
+    },
+    "Output_Schedule_Risk_Within_3_Days": {
+      "display_name": "Output or schedule risk within 3 production days",
+      "class_coverage": {
+        "rows": 174,
+        "orders": 11,
+        "positive_rows": 25,
+        "negative_rows": 149,
+        "positive_orders": 10,
+        "negative_orders": 11
+      },
+      "selected_model": "tuned_logistic_regression",
+      "selection_rule": "Highest nested unseen-order Macro-F1; ties use positive-class F1, Accuracy, then the simpler candidate.",
+      "candidates": {
+        "tuned_logistic_regression": {
+          "accuracy": 0.735632,
+          "macro_f1": 0.619943,
+          "f1": 0.410256,
+          "outer_fold_parameter_stability": [
+            {
+              "parameters": {
+                "model__C": 0.2
+              },
+              "selected_in_outer_folds": 5
+            },
+            {
+              "parameters": {
+                "model__C": 0.05
+              },
+              "selected_in_outer_folds": 3
+            },
+            {
+              "parameters": {
+                "model__C": 1.0
+              },
+              "selected_in_outer_folds": 2
+            },
+            {
+              "parameters": {
+                "model__C": 5.0
+              },
+              "selected_in_outer_folds": 1
+            }
+          ],
+          "final_full_data_best_parameters": {
+            "model__C": 1.0
+          },
+          "final_full_data_inner_macro_f1": 0.629053,
+          "selected": true
+        },
+        "tuned_random_forest": {
+          "accuracy": 0.810345,
+          "macro_f1": 0.447619,
+          "f1": 0.0,
+          "outer_fold_parameter_stability": [
+            {
+              "parameters": {
+                "model__max_depth": null,
+                "model__max_features": "sqrt",
+                "model__min_samples_leaf": 1,
+                "model__n_estimators": 200
+              },
+              "selected_in_outer_folds": 3
+            },
+            {
+              "parameters": {
+                "model__max_depth": null,
+                "model__max_features": "sqrt",
+                "model__min_samples_leaf": 3,
+                "model__n_estimators": 400
+              },
+              "selected_in_outer_folds": 3
+            },
+            {
+              "parameters": {
+                "model__max_depth": 8,
+                "model__max_features": "sqrt",
+                "model__min_samples_leaf": 3,
+                "model__n_estimators": 400
+              },
+              "selected_in_outer_folds": 2
+            },
+            {
+              "parameters": {
+                "model__max_depth": null,
+                "model__max_features": "sqrt",
+                "model__min_samples_leaf": 3,
+                "model__n_estimators": 200
+              },
+              "selected_in_outer_folds": 2
+            },
+            {
+              "parameters": {
+                "model__max_depth": 8,
+                "model__max_features": "sqrt",
+                "model__min_samples_leaf": 1,
+                "model__n_estimators": 200
+              },
+              "selected_in_outer_folds": 1
+            }
+          ],
+          "final_full_data_best_parameters": {
+            "model__max_depth": null,
+            "model__max_features": "sqrt",
+            "model__min_samples_leaf": 1,
+            "model__n_estimators": 200
+          },
+          "final_full_data_inner_macro_f1": 0.460831,
+          "selected": false
+        },
+        "soft_voting_logistic_random_forest": {
+          "accuracy": 0.758621,
+          "macro_f1": 0.577083,
+          "f1": 0.3,
+          "outer_fold_parameter_stability": [
+            {
+              "parameters": {
+                "weights": [
+                  2,
+                  1
+                ]
+              },
+              "selected_in_outer_folds": 6
+            },
+            {
+              "parameters": {
+                "weights": [
+                  1,
+                  1
+                ]
+              },
+              "selected_in_outer_folds": 3
+            },
+            {
+              "parameters": {
+                "weights": [
+                  1,
+                  2
+                ]
+              },
+              "selected_in_outer_folds": 2
+            }
+          ],
+          "final_full_data_best_parameters": {
+            "weights": [
+              1,
+              1
+            ]
+          },
+          "final_full_data_inner_macro_f1": 0.594974,
+          "selected": false
+        }
+      },
+      "validation": {
+        "outer_strategy": "LeaveOneGroupOut",
+        "inner_strategy": "GroupKFold(n_splits=3)",
+        "group_column": "Bulk_Order_ID",
+        "outer_fold_count": 11,
+        "held_out_orders": [
+          "BULK0001",
+          "BULK0002",
+          "BULK0003",
+          "BULK0004",
+          "BULK0005",
+          "BULK0006",
+          "BULK0007",
+          "BULK0008",
+          "BULK0009",
+          "BULK0010",
+          "BULK0015"
+        ],
+        "every_row_evaluated_once": true,
+        "train_test_group_overlap_detected": false
+      }
+    }
+  },
+  "research_limitations": [
+    "The available real dataset contains a limited number of orders.",
+    "Nested grouped scores are research evidence, not production approval.",
+    "A tuned or ensemble model is retained only when it improves held-out evidence."
+  ],
+  "source_dataset": {
+    "path": "/Users/vanu/Desktop/Y4S1:S2/Research/research new/Garment_model_backend_latest/data/component3_final_preprocessed_dataset.xlsx",
+    "sha256": "1ff07b96598d7509fe936cfc62d7c52ac87e6f27ddb1e3f0a92458233d6e64dd",
+    "eligible_rows": 174,
+    "eligible_orders": 11,
+    "step5a_report_version": "component3-early-warning-step5a-v1"
+  }
+}
