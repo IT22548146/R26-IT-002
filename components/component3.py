@@ -49,10 +49,14 @@ import joblib
 from flask import Blueprint, current_app, g, jsonify, request, send_file
 
 from components.component3_early_warning_inference import (
+    INFERENCE_VERSION as EARLY_WARNING_INFERENCE_VERSION,
+)
+from components.component3_early_warning_inference import (
     MODEL_SPECS as EARLY_WARNING_MODEL_SPECS,
 )
 from components.component3_early_warning_inference import (
     EarlyWarningModelError,
+    early_warning_error_diagnostic,
     predict_early_warnings,
 )
 from components.component3_early_warning_validation import (
@@ -834,9 +838,18 @@ def _attach_early_warning(data: dict, analysis: dict) -> dict:
             models_directory=_early_warning_models_directory(),
         )
     except EarlyWarningModelError as error:
-        current_app.logger.warning("Early-warning unavailable: %s", error)
+        diagnostic = early_warning_error_diagnostic(error)
+        log_component3_event(
+            current_app.logger,
+            "early_warning_unavailable",
+            level=WARNING,
+            bulk_order_id=data["bulk_order_id"],
+            plant_key=data.get("integrated_plant_id") or data["allocated_bulk_plant"],
+            diagnostic_code=diagnostic["code"],
+            internal_error=str(error),
+        )
         early_warning = {
-            "inference_version": "component3-early-warning-inference-v1",
+            "inference_version": EARLY_WARNING_INFERENCE_VERSION,
             "status": "unavailable",
             "production_approved": False,
             "horizon_production_days": 3,
@@ -845,7 +858,8 @@ def _attach_early_warning(data: dict, analysis: dict) -> dict:
             "highest_warning": None,
             "warnings": [],
             "history": None,
-            "message": str(error),
+            "message": diagnostic["message"],
+            "diagnostic": diagnostic,
             "limitations": ["Current-day detection and recovery planning remain available."],
         }
     analysis["early_warning"] = early_warning

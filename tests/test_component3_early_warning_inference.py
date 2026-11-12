@@ -10,6 +10,7 @@ from components.component3_early_warning_inference import (
     EarlyWarningModelError,
     build_inference_feature_row,
     clear_early_warning_artifact_cache,
+    early_warning_error_diagnostic,
     predict_early_warnings,
 )
 from components.component3_model_registry import sha256_file
@@ -171,6 +172,29 @@ class Component3EarlyWarningInferenceTests(unittest.TestCase):
                     history=[],
                     models_directory=directory,
                 )
+
+    def test_internal_artifact_errors_map_to_stable_public_diagnostics(self):
+        cases = (
+            (
+                EarlyWarningModelError("Missing Component 3 model manifest: /private/path"),
+                "model_manifest_unavailable",
+            ),
+            (
+                EarlyWarningModelError("Component 3 model artifact checksum mismatch: model.pkl"),
+                "artifact_integrity_failed",
+            ),
+            (
+                EarlyWarningModelError("Early-warning feature contract mismatch in model.pkl"),
+                "feature_contract_mismatch",
+            ),
+        )
+        for error, expected_code in cases:
+            with self.subTest(expected_code=expected_code):
+                diagnostic = early_warning_error_diagnostic(error)
+                self.assertEqual(diagnostic["code"], expected_code)
+                self.assertNotIn("/private/path", diagnostic["message"])
+                self.assertTrue(diagnostic["current_day_detection_available"])
+                self.assertTrue(diagnostic["recovery_planning_available"])
 
     def test_invalid_artifact_approval_metadata_is_rejected(self):
         with tempfile.TemporaryDirectory() as directory:

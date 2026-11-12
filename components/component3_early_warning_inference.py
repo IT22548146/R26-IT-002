@@ -58,6 +58,37 @@ class EarlyWarningModelError(RuntimeError):
     """Raised when a research artifact cannot safely serve a prediction."""
 
 
+def early_warning_error_diagnostic(error: Exception) -> dict[str, Any]:
+    """Map internal artifact failures to stable, non-sensitive API diagnostics."""
+    internal_message = str(error).lower()
+    if "manifest" in internal_message:
+        code = "model_manifest_unavailable"
+        message = "The early-warning model manifest is unavailable or invalid."
+    elif "checksum mismatch" in internal_message:
+        code = "artifact_integrity_failed"
+        message = "An early-warning model failed its integrity check."
+    elif "missing early-warning model artifact" in internal_message:
+        code = "artifact_missing"
+        message = "A required early-warning model is unavailable."
+    elif "feature contract mismatch" in internal_message:
+        code = "feature_contract_mismatch"
+        message = "An early-warning model does not match the active feature schema."
+    elif "calibration" in internal_message:
+        code = "calibration_metadata_invalid"
+        message = "An early-warning model has invalid calibration evidence."
+    else:
+        code = "early_warning_inference_failed"
+        message = "Experimental early-warning inference is temporarily unavailable."
+    return {
+        "code": code,
+        "message": message,
+        "retryable": False,
+        "affected_scope": "experimental_early_warning_only",
+        "current_day_detection_available": True,
+        "recovery_planning_available": True,
+    }
+
+
 def _current_features(prediction_input: dict[str, Any]) -> dict[str, float]:
     canonical = build_feature_values(
         daily_commitment=int(prediction_input["daily_commitment"]),

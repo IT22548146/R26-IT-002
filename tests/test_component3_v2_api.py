@@ -274,6 +274,11 @@ class Component3V2ApiTests(unittest.TestCase):
         result = response.get_json()
         self.assertEqual(result["early_warning"]["status"], "unavailable")
         self.assertFalse(result["early_warning"]["production_approved"])
+        self.assertEqual(
+            result["early_warning"]["diagnostic"]["code"],
+            "model_manifest_unavailable",
+        )
+        self.assertNotIn(directory, result["early_warning"]["message"])
         self.assertIn("recovery_plan", result)
 
     def test_recovery_parameters_return_an_exact_worker_plan(self):
