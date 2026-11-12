@@ -49,6 +49,11 @@ class Component3V2ApiTests(unittest.TestCase):
         response = self.client.get("/api/component3/health")
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.get_json()["configured_model_version"], "v2")
+        self.assertEqual(response.get_json()["model_integrity"]["status"], "verified")
+        self.assertEqual(
+            response.get_json()["model_integrity"]["verified_artifact_count"],
+            5,
+        )
 
     def test_v2_prediction_uses_canonical_gap(self):
         response = self.client.post("/api/component3/predict", json=self.payload())

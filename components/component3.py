@@ -62,6 +62,12 @@ from components.component3_historical_import import (
     load_historical_order,
     prediction_inputs_match,
 )
+from components.component3_model_registry import (
+    ModelArtifactIntegrityError,
+    audit_model_artifacts,
+    load_model_manifest,
+    verify_model_artifact,
+)
 from components.component3_monitoring import (
     Component3MonitoringStore,
     normalize_monitoring_label_status,
@@ -172,6 +178,11 @@ MODEL_FILES = {
     },
 }
 
+ACTIVE_MODEL_ROLES = {
+    "risk_type": "risk_type_classifier",
+    "order_risk": "order_risk_classifier",
+}
+
 
 def _load_models():
     version = os.environ.get("COMPONENT3_MODEL_VERSION", "v3").strip().lower()
@@ -184,11 +195,19 @@ def _load_models():
         return _models
     _models.clear()
     missing = []
+    active_manifest = load_model_manifest(MODELS_DIR) if version == "v3" else None
     for key, fname in MODEL_FILES[version].items():
         path = os.path.join(MODELS_DIR, fname)
         if not os.path.exists(path):
             missing.append(fname)
         else:
+            if active_manifest is not None:
+                verify_model_artifact(
+                    MODELS_DIR,
+                    ACTIVE_MODEL_ROLES[key],
+                    expected_filename=fname,
+                    manifest=active_manifest,
+                )
             _models[key] = joblib.load(path)
     if missing:
         _models.clear()
@@ -876,11 +895,19 @@ def _pagination_args() -> tuple[int, int]:
 
 @component3_bp.route("/health", methods=["GET"])
 def health():
+    configured_version = os.environ.get("COMPONENT3_MODEL_VERSION", "v3").strip().lower()
+    try:
+        registry = audit_model_artifacts(MODELS_DIR)
+        registry_status = "verified"
+    except ModelArtifactIntegrityError as error:
+        registry = {"status": "failed", "error": str(error)}
+        registry_status = "failed"
     return jsonify(
         {
             "component": "3 — Emergency Situation Detection",
-            "status": "ok",
-            "configured_model_version": os.environ.get("COMPONENT3_MODEL_VERSION", "v3"),
+            "status": "ok" if registry_status == "verified" else "degraded",
+            "configured_model_version": configured_version,
+            "model_integrity": registry,
             "experimental_early_warning_models": len(EARLY_WARNING_MODEL_SPECS),
             "early_warning_production_approved": False,
         }

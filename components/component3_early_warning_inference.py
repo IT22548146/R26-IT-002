@@ -15,6 +15,11 @@ from components.component3_early_warning_data import (
     EARLY_WARNING_FEATURES,
 )
 from components.component3_features import build_feature_values
+from components.component3_model_registry import (
+    ModelArtifactIntegrityError,
+    load_model_manifest,
+    verify_model_artifact,
+)
 
 INFERENCE_VERSION = "component3-early-warning-inference-calibrated-v2"
 
@@ -22,6 +27,7 @@ MODEL_SPECS: dict[str, dict[str, str]] = {
     "Machine_Breakdown_Within_3_Days": {
         "display_name": "Machine breakdown",
         "filename": "c3_early_warning_machine_breakdown_v2.joblib",
+        "registry_role": "early_warning_machine_breakdown",
         "preparation": (
             "Inspect critical machines, confirm maintenance availability, and "
             "reserve feasible backup-machine capacity."
@@ -30,6 +36,7 @@ MODEL_SPECS: dict[str, dict[str, str]] = {
     "Quality_Limit_Within_3_Days": {
         "display_name": "Quality-limit issue",
         "filename": "c3_early_warning_quality_limit_v2.joblib",
+        "registry_role": "early_warning_quality_limit",
         "preparation": (
             "Increase in-line quality checks and review the latest damage trend "
             "before releasing more pieces."
@@ -38,6 +45,7 @@ MODEL_SPECS: dict[str, dict[str, str]] = {
     "Output_Schedule_Risk_Within_3_Days": {
         "display_name": "Output or schedule risk",
         "filename": "c3_early_warning_output_schedule_risk_v2.joblib",
+        "registry_role": "early_warning_output_schedule_risk",
         "preparation": (
             "Review the remaining rate, overtime limit, and backup-line capacity "
             "before the schedule gap grows."
@@ -221,11 +229,24 @@ def load_early_warning_artifacts(
 ) -> dict[str, dict[str, Any]]:
     """Load and validate the three selected research artifacts once."""
     models_path = Path(models_directory)
+    try:
+        manifest = load_model_manifest(models_path)
+    except ModelArtifactIntegrityError as error:
+        raise EarlyWarningModelError(str(error)) from error
     artifacts: dict[str, dict[str, Any]] = {}
     for target, spec in MODEL_SPECS.items():
         path = models_path / spec["filename"]
         if not path.is_file():
             raise EarlyWarningModelError(f"Missing early-warning model artifact: {path.name}")
+        try:
+            verify_model_artifact(
+                models_path,
+                spec["registry_role"],
+                expected_filename=spec["filename"],
+                manifest=manifest,
+            )
+        except ModelArtifactIntegrityError as error:
+            raise EarlyWarningModelError(str(error)) from error
         try:
             artifact = joblib.load(path)
         except Exception as exc:

@@ -1,3 +1,4 @@
+import json
 import tempfile
 import unittest
 from pathlib import Path
@@ -11,6 +12,7 @@ from components.component3_early_warning_inference import (
     clear_early_warning_artifact_cache,
     predict_early_warnings,
 )
+from components.component3_model_registry import sha256_file
 
 
 class Component3EarlyWarningInferenceTests(unittest.TestCase):
@@ -161,7 +163,7 @@ class Component3EarlyWarningInferenceTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             with self.assertRaisesRegex(
                 EarlyWarningModelError,
-                "Missing early-warning model artifact",
+                "Missing Component 3 model manifest",
             ):
                 predict_early_warnings(
                     self.prediction_input(1),
@@ -172,6 +174,7 @@ class Component3EarlyWarningInferenceTests(unittest.TestCase):
 
     def test_invalid_artifact_approval_metadata_is_rejected(self):
         with tempfile.TemporaryDirectory() as directory:
+            artifact_path = Path(directory) / "c3_early_warning_machine_breakdown_v2.joblib"
             joblib.dump(
                 {
                     "target": "Machine_Breakdown_Within_3_Days",
@@ -179,7 +182,26 @@ class Component3EarlyWarningInferenceTests(unittest.TestCase):
                     "horizon_production_days": 3,
                     "production_approved": True,
                 },
-                Path(directory) / "c3_early_warning_machine_breakdown_v2.joblib",
+                artifact_path,
+            )
+            manifest = {
+                "manifest_schema_version": "1.0",
+                "component": "component3",
+                "runtime_model_version": "test",
+                "prediction_contract_version": "test-contract",
+                "feature_schema_versions": {"early_warning": "test-features"},
+                "artifacts": [
+                    {
+                        "role": "early_warning_machine_breakdown",
+                        "filename": artifact_path.name,
+                        "sha256": sha256_file(artifact_path),
+                        "required": True,
+                    }
+                ],
+            }
+            (Path(directory) / "component3_model_manifest.json").write_text(
+                json.dumps(manifest),
+                encoding="utf-8",
             )
 
             with self.assertRaisesRegex(
