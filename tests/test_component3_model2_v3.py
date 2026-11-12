@@ -8,6 +8,7 @@ from components.component3_order_risk_features import (
     available_working_days_to_deadline,
     build_order_risk_feature_values,
 )
+from middleware.auth_middleware import generate_token
 
 
 class Component3Model2V3Tests(unittest.TestCase):
@@ -16,6 +17,9 @@ class Component3Model2V3Tests(unittest.TestCase):
         os.environ["COMPONENT3_MODEL_VERSION"] = "v3"
         component3._models.clear()
         self.client = app.test_client()
+        self.client.environ_base["HTTP_AUTHORIZATION"] = (
+            f"Bearer {generate_token(9000, 'Manager')}"
+        )
 
     def tearDown(self):
         component3._models.clear()
