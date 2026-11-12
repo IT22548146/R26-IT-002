@@ -612,6 +612,23 @@ class Component3MonitoringApiTests(unittest.TestCase):
             response.get_json()["three_day_target"]["general_early_warning_training_ready"]
         )
 
+    def test_operational_history_can_be_exported_as_csv(self):
+        created = self.client.post(
+            "/api/component3/monitoring-records",
+            json=self.payload(),
+        )
+        self.assertEqual(created.status_code, 201, created.get_json())
+
+        response = self.client.get(
+            "/api/component3/monitoring-records/export?risk_status=No%20Risk"
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("text/csv", response.content_type)
+        self.assertEqual(response.headers["X-Component3-Export-Rows"], "1")
+        self.assertIn(b"MONITORING001", response.data)
+        self.assertIn(b"component3_daily_monitoring_history.csv", response.headers["Content-Disposition"].encode())
+
     def test_duplicate_daily_record_is_rejected(self):
         first = self.client.post(
             "/api/component3/monitoring-records",

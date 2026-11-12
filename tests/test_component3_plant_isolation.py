@@ -107,6 +107,11 @@ class Component3PlantIsolationTests(unittest.TestCase):
         self.assertEqual([item["plant_key"] for item in pl01_list["items"]], ["PL01"])
         self.assertEqual([item["plant_key"] for item in pl02_list["items"]], ["PL02"])
 
+        pl01_export = self.pl01.get("/api/component3/monitoring-records/export")
+        self.assertEqual(pl01_export.status_code, 200)
+        self.assertIn(b",PL01,", pl01_export.data)
+        self.assertNotIn(b",PL02,", pl01_export.data)
+
         cross_plant_detail = self.pl01.get(
             f"/api/component3/monitoring-records/{pl02_record['record_id']}"
         )

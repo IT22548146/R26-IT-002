@@ -80,6 +80,7 @@ from components.component3_monitoring import (
     normalize_monitoring_risk_status,
     normalize_monitoring_verification_status,
 )
+from components.component3_monitoring_export import monitoring_records_to_csv_bytes
 from components.component3_observability import (
     log_component3_event,
     request_trace_id,
@@ -1165,6 +1166,46 @@ def list_monitoring_records():
     except ValueError as error:
         return jsonify({"error": str(error)}), 400
     return jsonify(result), 200
+
+
+@component3_bp.route("/monitoring-records/export", methods=["GET"])
+@require_role("Manager", "PlantManager")
+def export_monitoring_records():
+    """Download the authorized plant's filtered operational history as CSV."""
+    try:
+        raw_risk_status = request.args.get("risk_status")
+        raw_label_status = request.args.get("label_status")
+        raw_verification_status = request.args.get("verification_status")
+        result = _monitoring_store().list_records(
+            bulk_order_id=request.args.get("bulk_order_id") or None,
+            plant_key=_authorized_plant_key(),
+            risk_status=(
+                normalize_monitoring_risk_status(raw_risk_status) if raw_risk_status else None
+            ),
+            label_status=(
+                normalize_monitoring_label_status(raw_label_status) if raw_label_status else None
+            ),
+            verification_status=(
+                normalize_monitoring_verification_status(raw_verification_status)
+                if raw_verification_status
+                else None
+            ),
+            limit=100_000,
+            offset=0,
+        )
+    except ValueError as error:
+        return jsonify({"error": str(error)}), 400
+
+    content = monitoring_records_to_csv_bytes(result["items"])
+    response = send_file(
+        BytesIO(content),
+        mimetype="text/csv; charset=utf-8",
+        as_attachment=True,
+        download_name="component3_daily_monitoring_history.csv",
+        max_age=0,
+    )
+    response.headers["X-Component3-Export-Rows"] = str(result["total"])
+    return response
 
 
 @component3_bp.route(
