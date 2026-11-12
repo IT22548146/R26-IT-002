@@ -183,6 +183,13 @@ ACTIVE_MODEL_ROLES = {
     "order_risk": "order_risk_classifier",
 }
 
+PREDICTION_CONTRACT_VERSION = "component3-prediction-v1"
+LEGACY_FEATURE_SCHEMA_VERSIONS = {
+    "risk_type": "canonical-v1",
+    "order_risk": "canonical-v1",
+    "early_warning": "current-plus-trailing-v2",
+}
+
 
 def _load_models():
     version = os.environ.get("COMPONENT3_MODEL_VERSION", "v3").strip().lower()
@@ -214,6 +221,16 @@ def _load_models():
         raise RuntimeError(f"Missing model files: {missing}. Run the Component 3 notebook first.")
     _models["version"] = version
     _models["order_risk_feature_version"] = "deadline_v3" if version == "v3" else "canonical_v1"
+    _models["prediction_contract_version"] = (
+        active_manifest["prediction_contract_version"]
+        if active_manifest is not None
+        else PREDICTION_CONTRACT_VERSION
+    )
+    _models["feature_schema_versions"] = (
+        dict(active_manifest["feature_schema_versions"])
+        if active_manifest is not None
+        else dict(LEGACY_FEATURE_SCHEMA_VERSIONS)
+    )
     return _models
 
 
@@ -578,6 +595,13 @@ def _build_response(data: dict, models: dict) -> dict:
     return {
         "status": "success",
         "model_version": models.get("version", "unknown"),
+        "prediction_contract_version": models.get(
+            "prediction_contract_version",
+            PREDICTION_CONTRACT_VERSION,
+        ),
+        "feature_schema_versions": dict(
+            models.get("feature_schema_versions", LEGACY_FEATURE_SCHEMA_VERSIONS)
+        ),
         "bulk_order_id": bulk_order_id,
         "style_id": style_id,
         "buyer_name": buyer_name,

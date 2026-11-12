@@ -60,6 +60,18 @@ class Component3V2ApiTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200, response.get_json())
         result = response.get_json()
         self.assertEqual(result["model_version"], "v2")
+        self.assertEqual(
+            result["prediction_contract_version"],
+            "component3-prediction-v1",
+        )
+        self.assertEqual(
+            result["feature_schema_versions"],
+            {
+                "risk_type": "canonical-v1",
+                "order_risk": "canonical-v1",
+                "early_warning": "current-plus-trailing-v2",
+            },
+        )
         self.assertEqual(result["daily_production"]["output_gap"], 23)
         self.assertEqual(result["daily_production"]["gap_pct"], 5.35)
 

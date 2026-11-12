@@ -553,6 +553,14 @@ class Component3MonitoringApiTests(unittest.TestCase):
         self.assertEqual(record["actual_outcome_status"], "Pending")
         self.assertEqual(record["label_status"], "Awaiting Verification")
         self.assertEqual(record["analysis"]["model_version"], "v2")
+        self.assertEqual(
+            record["analysis"]["prediction_contract_version"],
+            "component3-prediction-v1",
+        )
+        self.assertEqual(
+            record["analysis"]["feature_schema_versions"]["order_risk"],
+            "canonical-v1",
+        )
 
         response = self.client.get(
             "/api/component3/monitoring-records?risk_status=No%20Risk"
