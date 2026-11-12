@@ -1,6 +1,7 @@
 import os
 import tempfile
 import unittest
+from unittest.mock import patch
 
 from app import app
 from components import component3
@@ -77,9 +78,15 @@ class Component3V2ApiTests(unittest.TestCase):
         self.assertEqual(buyer_response.status_code, 403)
 
     def test_v2_prediction_uses_canonical_gap(self):
-        response = self.client.post("/api/component3/predict", json=self.payload())
+        response = self.client.post(
+            "/api/component3/predict",
+            json=self.payload(),
+            headers={"X-Request-ID": "c3-test-request"},
+        )
         self.assertEqual(response.status_code, 200, response.get_json())
         result = response.get_json()
+        self.assertEqual(result["request_id"], "c3-test-request")
+        self.assertEqual(response.headers["X-Request-ID"], "c3-test-request")
         self.assertEqual(result["model_version"], "v2")
         self.assertEqual(
             result["prediction_contract_version"],
@@ -95,6 +102,22 @@ class Component3V2ApiTests(unittest.TestCase):
         )
         self.assertEqual(result["daily_production"]["output_gap"], 23)
         self.assertEqual(result["daily_production"]["gap_pct"], 5.35)
+
+    def test_internal_prediction_error_is_not_exposed_to_the_client(self):
+        with patch(
+            "components.component3._build_complete_response",
+            side_effect=RuntimeError("sensitive internal path /tmp/private"),
+        ):
+            response = self.client.post(
+                "/api/component3/predict",
+                json=self.payload(),
+                headers={"X-Request-ID": "c3-failure-test"},
+            )
+
+        self.assertEqual(response.status_code, 500)
+        self.assertNotIn("sensitive", response.get_json()["error"])
+        self.assertEqual(response.get_json()["request_id"], "c3-failure-test")
+        self.assertEqual(response.headers["X-Request-ID"], "c3-failure-test")
 
     def test_overproduction_gap_remains_negative(self):
         payload = self.payload()

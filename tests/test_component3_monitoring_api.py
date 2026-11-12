@@ -548,6 +548,10 @@ class Component3MonitoringApiTests(unittest.TestCase):
         )
         self.assertEqual(response.status_code, 201, response.get_json())
         record = response.get_json()["monitoring_record"]
+        self.assertEqual(
+            response.get_json()["request_id"],
+            record["analysis"]["request_id"],
+        )
         self.assertEqual(record["bulk_order_id"], "MONITORING001")
         self.assertEqual(record["risk_status"], "No Risk")
         self.assertEqual(record["actual_outcome_status"], "Pending")

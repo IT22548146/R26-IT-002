@@ -40,8 +40,10 @@ Request body (JSON):
 
 import math
 import os
+import time
 from datetime import datetime, timedelta
 from io import BytesIO
+from logging import ERROR, INFO, WARNING
 
 import joblib
 from flask import Blueprint, current_app, g, jsonify, request, send_file
@@ -73,6 +75,10 @@ from components.component3_monitoring import (
     normalize_monitoring_label_status,
     normalize_monitoring_risk_status,
     normalize_monitoring_verification_status,
+)
+from components.component3_observability import (
+    log_component3_event,
+    request_trace_id,
 )
 from components.component3_order_risk_features import (
     ORDER_RISK_FEATURES,
@@ -952,30 +958,93 @@ def predict():
         plant_daily_output, daily_damage_qty, max_daily_damage_qty,
         machine_breakdown_count, worker_shortage_count, cumulative_completed_qty
     """
+    trace_id = request_trace_id(request.headers.get("X-Request-ID"))
+    started_at = time.perf_counter()
     try:
         data = _validate_prediction_payload(request.get_json(force=True, silent=True))
     except ValueError as e:
-        return jsonify({"error": str(e)}), 400
+        log_component3_event(
+            current_app.logger,
+            "prediction_validation_failed",
+            level=WARNING,
+            request_id=trace_id,
+            error=str(e),
+        )
+        response = jsonify({"error": str(e), "request_id": trace_id})
+        response.headers["X-Request-ID"] = trace_id
+        return response, 400
 
     try:
         models = _load_models()
     except RuntimeError as e:
-        return jsonify({"error": str(e)}), 503
+        log_component3_event(
+            current_app.logger,
+            "prediction_model_unavailable",
+            level=ERROR,
+            request_id=trace_id,
+            model_version=os.environ.get("COMPONENT3_MODEL_VERSION", "v3"),
+            error=str(e),
+        )
+        response = jsonify({"error": str(e), "request_id": trace_id})
+        response.headers["X-Request-ID"] = trace_id
+        return response, 503
 
     try:
         result = _build_complete_response(data, models)
-        return jsonify(result), 200
-    except Exception as e:
-        return jsonify({"error": f"Prediction failed: {str(e)}"}), 500
+        result["request_id"] = trace_id
+        log_component3_event(
+            current_app.logger,
+            "prediction_completed",
+            level=INFO,
+            request_id=trace_id,
+            bulk_order_id=data["bulk_order_id"],
+            plant_key=data.get("integrated_plant_id") or data["allocated_bulk_plant"],
+            model_version=result["model_version"],
+            risk_type=result["risk_detection"]["risk_type"],
+            severity=result["risk_detection"]["severity"],
+            latency_ms=round((time.perf_counter() - started_at) * 1000, 2),
+        )
+        response = jsonify(result)
+        response.headers["X-Request-ID"] = trace_id
+        return response, 200
+    except Exception as error:
+        log_component3_event(
+            current_app.logger,
+            "prediction_failed",
+            level=ERROR,
+            request_id=trace_id,
+            bulk_order_id=data["bulk_order_id"],
+            error_type=type(error).__name__,
+            latency_ms=round((time.perf_counter() - started_at) * 1000, 2),
+        )
+        current_app.logger.exception(
+            "Component 3 prediction failed request_id=%s",
+            trace_id,
+        )
+        response = jsonify(
+            {
+                "error": "Prediction failed. Use request_id to inspect server logs.",
+                "request_id": trace_id,
+            }
+        )
+        response.headers["X-Request-ID"] = trace_id
+        return response, 500
 
 
 @component3_bp.route("/monitoring-records", methods=["POST"])
 @require_role("Manager", "PlantManager")
 def create_monitoring_record():
     """Run and save one canonical daily record, including stable days."""
+    trace_id = request_trace_id(request.headers.get("X-Request-ID"))
+    started_at = time.perf_counter()
     raw_data = request.get_json(force=True, silent=True)
     if not isinstance(raw_data, dict) or not raw_data:
-        return jsonify({"error": "Request body must be valid JSON"}), 400
+        return jsonify(
+            {
+                "error": "Request body must be valid JSON",
+                "request_id": trace_id,
+            }
+        ), 400
 
     raw_data = dict(raw_data)
     try:
@@ -999,6 +1068,7 @@ def create_monitoring_record():
 
     try:
         analysis = _build_complete_response(data, models)
+        analysis["request_id"] = trace_id
         monitoring_record = _monitoring_store().create_record(
             data,
             analysis,
@@ -1007,11 +1077,46 @@ def create_monitoring_record():
     except TrackingConflictError as error:
         return jsonify({"error": str(error)}), 409
     except Exception as error:
-        return jsonify({"error": f"Daily monitoring record creation failed: {error}"}), 500
+        log_component3_event(
+            current_app.logger,
+            "monitoring_record_failed",
+            level=ERROR,
+            request_id=trace_id,
+            bulk_order_id=data["bulk_order_id"],
+            error_type=type(error).__name__,
+            latency_ms=round((time.perf_counter() - started_at) * 1000, 2),
+        )
+        current_app.logger.exception(
+            "Component 3 monitoring record failed request_id=%s",
+            trace_id,
+        )
+        return jsonify(
+            {
+                "error": (
+                    "Daily monitoring record creation failed. "
+                    "Use request_id to inspect server logs."
+                ),
+                "request_id": trace_id,
+            }
+        ), 500
+
+    log_component3_event(
+        current_app.logger,
+        "monitoring_record_created",
+        level=INFO,
+        request_id=trace_id,
+        record_id=monitoring_record["record_id"],
+        bulk_order_id=data["bulk_order_id"],
+        plant_key=data.get("integrated_plant_id") or data["allocated_bulk_plant"],
+        model_version=analysis["model_version"],
+        risk_type=analysis["risk_detection"]["risk_type"],
+        latency_ms=round((time.perf_counter() - started_at) * 1000, 2),
+    )
 
     return jsonify(
         {
             "status": "success",
+            "request_id": trace_id,
             "monitoring_record": monitoring_record,
         }
     ), 201
