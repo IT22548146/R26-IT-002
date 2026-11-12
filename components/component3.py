@@ -1,9 +1,13 @@
 """
 Component 3 — Emergency Situation Detection & Management
 ==========================================================
-Models loaded:
-  c3_model1_risk_type.pkl    — RandomForestClassifier  → Risk Type (7 classes)
-  c3_model2_order_risk.pkl   — GradientBoostingClassifier → High / Low order risk
+Active production models (``COMPONENT3_MODEL_VERSION=v3``):
+  c3_model1_risk_type_v2.pkl    — RandomForestClassifier → Risk Type (7 classes)
+  c3_model2_order_risk_v3.pkl   — RandomForestClassifier → High / Low order risk
+
+Legacy v1/v2 artifacts are kept under ``models/archive/component3`` for
+reproducibility and explicit compatibility testing; they are not loaded by the
+default runtime configuration.
 
 OpenAI removed — response JSON assembled deterministically from model outputs
 using the same business rules that were in the OpenAI system prompt.
@@ -149,12 +153,18 @@ _models = {}
 
 MODEL_FILES = {
     "v1": {
-        "risk_type": "c3_model1_risk_type.pkl",
-        "order_risk": "c3_model2_order_risk.pkl",
+        "risk_type": os.path.join(
+            "archive", "component3", "c3_model1_risk_type.pkl"
+        ),
+        "order_risk": os.path.join(
+            "archive", "component3", "c3_model2_order_risk.pkl"
+        ),
     },
     "v2": {
         "risk_type": "c3_model1_risk_type_v2.pkl",
-        "order_risk": "c3_model2_order_risk_v2.pkl",
+        "order_risk": os.path.join(
+            "archive", "component3", "c3_model2_order_risk_v2.pkl"
+        ),
     },
     "v3": {
         "risk_type": "c3_model1_risk_type_v2.pkl",

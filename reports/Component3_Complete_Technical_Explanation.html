@@ -1,0 +1,392 @@
+<!doctype html>
+<html lang="si">
+<head>
+  <meta charset="utf-8">
+  <title>FabricFlow Component 3 — Complete Technical Explanation</title>
+  <style>
+    @page { size: A4; margin: 18mm 16mm 18mm; }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      color: #172033;
+      font-family: "Sinhala MN", "Sinhala Sangam MN", Arial, sans-serif;
+      font-size: 10.5pt;
+      line-height: 1.55;
+      background: #fff;
+    }
+    h1, h2, h3 { color: #12345b; page-break-after: avoid; }
+    h1 { font-size: 27pt; line-height: 1.18; margin: 0 0 10px; }
+    h2 { font-size: 17pt; margin: 26px 0 9px; padding-bottom: 5px; border-bottom: 2px solid #dbe8f5; }
+    h3 { font-size: 12.5pt; margin: 16px 0 5px; }
+    p { margin: 6px 0 10px; }
+    ul, ol { margin: 6px 0 10px 23px; padding: 0; }
+    li { margin: 3px 0; }
+    code {
+      font-family: Menlo, Consolas, monospace;
+      background: #eef3f8;
+      border-radius: 4px;
+      padding: 1px 4px;
+      font-size: 9pt;
+    }
+    pre {
+      white-space: pre-wrap;
+      font-family: Menlo, Consolas, monospace;
+      font-size: 8.6pt;
+      line-height: 1.45;
+      background: #0e2239;
+      color: #f4f8fc;
+      padding: 12px 14px;
+      border-radius: 8px;
+      page-break-inside: avoid;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 10px 0 15px;
+      font-size: 9.2pt;
+      page-break-inside: avoid;
+    }
+    th { background: #173e68; color: #fff; text-align: left; }
+    th, td { border: 1px solid #cfdae6; padding: 7px 8px; vertical-align: top; }
+    tr:nth-child(even) td { background: #f6f9fc; }
+    .cover {
+      min-height: 245mm;
+      padding: 30mm 10mm 10mm;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      page-break-after: always;
+    }
+    .cover-mark { color: #11a683; font-weight: 700; letter-spacing: 2px; text-transform: uppercase; }
+    .subtitle { color: #51657d; font-size: 15pt; max-width: 145mm; }
+    .hero {
+      margin-top: 22mm;
+      border-radius: 18px;
+      padding: 22px;
+      color: #fff;
+      background: linear-gradient(135deg, #0c3c3b, #185787 62%, #254fa3);
+    }
+    .hero strong { color: #7df0d5; }
+    .meta { color: #63758a; font-size: 9.5pt; border-top: 1px solid #d8e2ec; padding-top: 12px; }
+    .toc { page-break-after: always; }
+    .toc ol { columns: 2; column-gap: 35px; }
+    .toc li { break-inside: avoid; margin: 7px 0; }
+    .summary {
+      background: #edf8f5;
+      border-left: 5px solid #0d9f7d;
+      padding: 12px 14px;
+      border-radius: 6px;
+      page-break-inside: avoid;
+    }
+    .flow {
+      text-align: center;
+      background: #f4f8fc;
+      border: 1px solid #d2dfeb;
+      padding: 12px;
+      border-radius: 10px;
+      margin: 12px 0;
+      font-weight: 700;
+      page-break-inside: avoid;
+    }
+    .arrow { color: #0d9f7d; font-size: 15pt; padding: 1px 0; }
+    .tag { display: inline-block; padding: 2px 8px; border-radius: 999px; background: #e4f3ff; color: #155283; font-size: 8.5pt; font-weight: 700; }
+    .note { background: #fff8e7; border-left: 4px solid #e8a20a; padding: 9px 12px; border-radius: 5px; }
+    .qa { page-break-inside: avoid; margin: 10px 0 14px; }
+    .qa strong { color: #0b6c5b; }
+    .page-break { page-break-before: always; }
+    .footer-note { color: #6a798b; font-size: 8.5pt; margin-top: 24px; }
+  </style>
+</head>
+<body>
+  <section class="cover">
+    <div>
+      <div class="cover-mark">FabricFlow Research Project</div>
+      <h1>Component 3<br>Complete Technical Explanation</h1>
+      <div class="subtitle">Emergency Detection, Production Risk Prediction and Recovery Management</div>
+      <div class="hero">
+        <strong>Component 3</strong> දෛනික නිෂ්පාදන දත්ත monitor කර current risk, overall order risk සහ ඉදිරි දින තුනේ early warnings හඳුනාගෙන, explainable recovery plan එකක් ලබාදෙන hybrid intelligent component එකකි.
+      </div>
+    </div>
+    <div class="meta">
+      Project: FabricFlow Garment Production Management System<br>
+      Component: C3 — Emergency Detection &amp; Production Risk Management<br>
+      Document date: 21 October 2026
+    </div>
+  </section>
+
+  <section class="toc">
+    <h2>Contents</h2>
+    <ol>
+      <li>Component 3 overview</li>
+      <li>End-to-end workflow</li>
+      <li>C2 to C3 integration</li>
+      <li>Daily input data</li>
+      <li>Analysis pipeline</li>
+      <li>Feature engineering</li>
+      <li>Active ML models</li>
+      <li>Early-warning mechanism</li>
+      <li>Hybrid rules and severity</li>
+      <li>Recovery planning</li>
+      <li>Outputs</li>
+      <li>Saving and next working day</li>
+      <li>Database design</li>
+      <li>Monitoring and verification</li>
+      <li>Recovery history</li>
+      <li>C3 to C4 integration</li>
+      <li>Training and evaluation</li>
+      <li>Security and plant isolation</li>
+      <li>Limitations</li>
+      <li>Panel questions and answers</li>
+    </ol>
+  </section>
+
+  <h2>1. Component 3 overview</h2>
+  <div class="summary">
+    <strong>Component 3 — Emergency Detection and Production Risk Management</strong><br>
+    Confirmed bulk order එකක් දෛනිකව monitor කර production emergency සහ schedule risk කලින් හඳුනාගෙන, managerට ක්‍රියාත්මක කළ හැකි recovery recommendation ලබාදීම මෙහි අරමුණයි.
+  </div>
+  <p>Component 3 මඟින් සිදු කරන ප්‍රධාන කාර්යයන්:</p>
+  <ul>
+    <li>අද දවසේ production risk type එක හඳුනාගැනීම.</li>
+    <li>සම්පූර්ණ order එක deadline risk එකකදැයි තක්සේරු කිරීම.</li>
+    <li>ඉදිරි production days තුනේ machine, quality සහ schedule emergencies predict කිරීම.</li>
+    <li>Risk severity සහ alert routing තීරණය කිරීම.</li>
+    <li>Workers, machines සහ overtime සීමාවන්ට ගැළපෙන recovery plan එකක් සෑදීම.</li>
+    <li>Daily monitoring, verified outcomes සහ recovery history save කිරීම.</li>
+    <li>Completed order එකේ aggregated risk data Component 4 වෙත ලබාදීම.</li>
+  </ul>
+
+  <h2>2. End-to-end workflow</h2>
+  <div class="flow">
+    C2 bulk order confirmation<br><span class="arrow">↓</span><br>
+    Admin assigns the order to a plant<br><span class="arrow">↓</span><br>
+    Plant Manager selects an assigned order<br><span class="arrow">↓</span><br>
+    C2/order details auto-fill in C3<br><span class="arrow">↓</span><br>
+    Daily live production data is entered<br><span class="arrow">↓</span><br>
+    Five ML artifacts + deterministic rules run<br><span class="arrow">↓</span><br>
+    Risk, early warnings and recovery plan are produced<br><span class="arrow">↓</span><br>
+    Official daily record and recovery history are saved<br><span class="arrow">↓</span><br>
+    Completed-order data is aggregated and passed to C4
+  </div>
+
+  <h2>3. C2 to C3 integration</h2>
+  <p>C2 bulk-production plan එක <code>bulk_orders.c2_result_json</code> තුළ save වෙනවා. Admin order එක factory එකකට assign කළ විට plant, allocated quantity, daily commitment සහ capacity snapshot <code>order_plant_allocations</code> table එකේ save වෙනවා.</p>
+  <p>Plant Manager login වූ පසු <code>GET /plant/orders</code> endpoint එක JWT token එකේ plant ID අනුව orders filter කරනවා. ඒ නිසා එක් manager කෙනෙකුට තමන්ගේ plant එකට assigned orders පමණක් පෙනෙනවා.</p>
+  <p>Order එක select කළ විට auto-fill වන fields:</p>
+  <ul>
+    <li>Bulk Order ID, Style ID සහ Buyer name</li>
+    <li>Assigned plant සහ plant location</li>
+    <li>Allocated quantity සහ capacity-based daily commitment</li>
+    <li>Approved date සහ buyer-required date</li>
+    <li>Total production, cutting සහ sewing days</li>
+  </ul>
+
+  <h2>4. Plant Manager enters daily live data</h2>
+  <table>
+    <thead><tr><th>Input</th><th>Purpose</th></tr></thead>
+    <tbody>
+      <tr><td>Actual daily output</td><td>අද නිෂ්පාදනය කළ actual quantity එක.</td></tr>
+      <tr><td>Cumulative completed quantity</td><td>Order එකෙන් මේ දක්වා complete කළ මුළු quantity එක.</td></tr>
+      <tr><td>Daily damage quantity</td><td>අද damage/quality loss quantity එක.</td></tr>
+      <tr><td>Maximum allowed damage</td><td>Accept කළ හැකි daily quality limit එක.</td></tr>
+      <tr><td>Machine breakdown count</td><td>අද unavailable/failed machines ගණන.</td></tr>
+      <tr><td>Worker-shortage count</td><td>Plan එකට සාපේක්ෂව අඩු workers ගණන.</td></tr>
+      <tr><td>Recovery capacity</td><td>Add කළ හැකි workers, backup machines සහ overtime limits.</td></tr>
+    </tbody>
+  </table>
+
+  <h2>5. Analyse Risk &amp; Build Recovery Plan</h2>
+  <p>Frontend එක <code>POST /api/component3/predict</code> call කරනවා. Backend pipeline එක:</p>
+  <pre>Input validation
+  → Feature engineering
+  → Current-risk prediction
+  → Overall-order-risk prediction
+  → Next-three-day early warnings
+  → Deadline and severity rules
+  → Capacity-aware recovery calculation
+  → Final structured JSON response</pre>
+  <div class="note"><strong>Important:</strong> Analyse button එක preview result එක ලබාදෙනවා. Official database record එක සෑදෙන්නේ <strong>Save Daily Record</strong> කළ පසු පමණයි.</div>
+
+  <h2>6. Validation and feature engineering</h2>
+  <p>Model call කිරීමට පෙර dates, quantities, ranges සහ cumulative totals validate කරනවා. Raw inputs වලින් model-ready features හදනවා:</p>
+  <ul>
+    <li>Output gap සහ gap percentage</li>
+    <li>Damage ratio සහ output-to-commitment ratio</li>
+    <li>Remaining quantity සහ remaining working days</li>
+    <li>Day progress සහ required daily rate</li>
+    <li>Cutting/sewing phase flags</li>
+    <li>Deadline calendar days සහ available working days</li>
+    <li>Commitment slack සහ slack percentage</li>
+  </ul>
+  <pre>Daily commitment = 500
+Actual output    = 400
+Output gap       = 500 - 400 = 100
+Gap percentage  = 100 / 500 × 100 = 20%</pre>
+  <p>Training සහ runtime inference දෙකම එකම shared feature-building code භාවිත කරන නිසා training-serving mismatch අවම වෙනවා.</p>
+
+  <h2>7. Active machine-learning models</h2>
+  <table>
+    <thead><tr><th>Artifact</th><th>Algorithm</th><th>Responsibility</th></tr></thead>
+    <tbody>
+      <tr><td><code>c3_model1_risk_type_v2.pkl</code></td><td>Random Forest</td><td>Current production risk type සහ confidence.</td></tr>
+      <tr><td><code>c3_model2_order_risk_v3.pkl</code></td><td>Random Forest</td><td>Deadline-aware overall order-risk probability.</td></tr>
+      <tr><td><code>c3_early_warning_machine_breakdown_v2.joblib</code></td><td>Random Forest</td><td>ඉදිරි දින තුනේ machine-breakdown warning.</td></tr>
+      <tr><td><code>c3_early_warning_quality_limit_v2.joblib</code></td><td>Logistic Regression</td><td>ඉදිරි දින තුනේ quality-limit warning.</td></tr>
+      <tr><td><code>c3_early_warning_output_schedule_risk_v2.joblib</code></td><td>Logistic Regression</td><td>ඉදිරි දින තුනේ output/schedule warning.</td></tr>
+    </tbody>
+  </table>
+  <p>Runtime request එකකදී models retrain වෙන්නේ නැහැ. කලින් train කළ artifacts <code>joblib.load()</code> මඟින් memory එකට load කර <code>predict()</code> සහ <code>predict_proba()</code> භාවිත කරනවා.</p>
+
+  <h3>Current-risk categories</h3>
+  <p><span class="tag">No Issue</span> <span class="tag">Machine Breakdown</span> <span class="tag">Worker Shortage</span> <span class="tag">Quality Issue</span> <span class="tag">Commitment Too Low</span> <span class="tag">Minor Delay</span> <span class="tag">Production Failure</span></p>
+
+  <h2>8. Early-warning mechanism</h2>
+  <p>Early-warning inference එක current day එක සමඟ previous daily monitoring history එකත් භාවිත කරනවා. එමඟින් ඉදිරි production days තුන තුළ subtype emergency ඇතිවීමේ probability එක ලබාදෙනවා.</p>
+  <p>Logistic Regression model එක feature weights එකතු කර sigmoid function එකෙන් probability එකක් ලබාදෙනවා:</p>
+  <pre>z = intercept + feature₁×weight₁ + feature₂×weight₂ + ...
+Probability = 1 / (1 + e⁻ᶻ)</pre>
+  <p>Universal 50% threshold එකක් assume කරන්නේ නැහැ. Order-grouped validation මත Macro-F1 උපරිම වන target-specific calibrated thresholds භාවිත කරනවා.</p>
+
+  <h2>9. Hybrid ML and deterministic rules</h2>
+  <p>C3 pure ML system එකක් නොව hybrid system එකක්:</p>
+  <table>
+    <thead><tr><th>ML responsibilities</th><th>Rule-based responsibilities</th></tr></thead>
+    <tbody>
+      <tr><td>Risk type සහ confidence</td><td>Output-gap severity</td></tr>
+      <tr><td>Overall order-risk probability</td><td>Damage-limit validation</td></tr>
+      <tr><td>Future-warning probabilities</td><td>Deadline exposure සහ completion checks</td></tr>
+      <tr><td>Historical pattern recognition</td><td>Alert routing සහ safe recovery constraints</td></tr>
+    </tbody>
+  </table>
+  <p>Severity levels: <strong>No Risk, Minor, Moderate, High, Critical</strong>. Output gap, incident type, damage, remaining quantity සහ deadline margin එකට එකතු කර severity එක හදනවා.</p>
+
+  <h2>10. Recovery planning</h2>
+  <p>Recovery plan වෙනම ML model එකක් නොව explainable deterministic capacity engine එකකි. එය remaining quantity, available days, required rate, workers, machines සහ overtime limit සලකා බලනවා.</p>
+  <p>Possible recommendations:</p>
+  <ul>
+    <li>Continue the current production plan.</li>
+    <li>Increase working hours within the declared overtime limit.</li>
+    <li>Reassign available workers.</li>
+    <li>Activate feasible backup machines.</li>
+    <li>Improve daily production efficiency.</li>
+    <li>Escalate or reallocate when the deadline cannot be recovered locally.</li>
+  </ul>
+  <p>මෙය rule-based කිරීමෙන් recommendation එක explainable, capacity-safe සහ physically executable වෙනවා.</p>
+
+  <h2>11. Component 3 output</h2>
+  <p>Final structured output එකේ sections:</p>
+  <ul>
+    <li>Order summary සහ daily production position</li>
+    <li>Current risk type, confidence සහ severity</li>
+    <li>Overall order-risk level සහ probability</li>
+    <li>Next-three-day early warnings</li>
+    <li>Schedule forecast සහ order progress</li>
+    <li>Alert recipients සහ recommended action</li>
+    <li>Capacity-aware recovery plan සහ assumptions</li>
+  </ul>
+  <pre>Current risk: Worker Shortage
+Severity: Moderate
+Overall order risk: High
+Order-risk probability: 74%
+Schedule status: Behind target
+Recommendation: Add workers and use controlled overtime</pre>
+
+  <h2>12. Saving an official daily record</h2>
+  <p><code>POST /plant/orders/&lt;order_id&gt;/log</code> endpoint එක order assignment verify කර, next working day calculate කර, C2 data සහ live inputs combine කර C3 analysis officially run කරනවා.</p>
+  <pre>Analyse Risk = preview only
+Save Daily Record = analysis + official database persistence</pre>
+  <p>Next working day calculation:</p>
+  <pre>Next working day = MAX(saved working_day_no) + 1</pre>
+  <p>Future production date එකක් save කිරීමට system එක ඉඩ දෙන්නේ නැහැ.</p>
+
+  <h2>13. Database design</h2>
+  <h3>Main operational database — <code>garment.db</code></h3>
+  <p><code>daily_logs</code> table එකේ order ID, plant ID, production date, daily inputs සහ full C3 result එක <code>c3_result_json</code> ලෙස save වෙනවා. මෙම copy එක integrated workflow සහ C4 aggregation සඳහා භාවිත කරනවා.</p>
+  <h3>C3 audit database — <code>instance/component3_tracking.db</code></h3>
+  <p>Canonical monitoring records, prediction input/output, supervisor verification, incidents, decisions සහ recovery outcomes මෙහි save වෙනවා.</p>
+  <p>Databases දෙක <code>bulk_order_id</code>, plant key සහ production date මඟින් සම්බන්ධ වෙනවා. Form draft එක browser local storage එකේ තිබිය හැකි නමුත් එය official record එකක් නොවේ.</p>
+
+  <h2>14. Monitoring history and supervisor ground truth</h2>
+  <p>Monitoring History page එකෙන් daily records, predicted risk, early warning, verification status සහ recorded user බලන්න පුළුවන්. Model prediction එක ground truth ලෙස භාවිත කරන්නේ නැහැ.</p>
+  <pre>Model prediction ≠ Ground truth
+Supervisor-verified actual outcome = Ground truth</pre>
+  <p>Supervisor actual emergency occurred ද, actual type එක, verified-by user සහ evidence notes save කරනවා. මෙය future retraining එකේ self-label feedback loop එක වැළැක්වීමට වැදගත්.</p>
+
+  <h2>15. Recovery History</h2>
+  <p>Recovery History එකේ order, plant, incident type, severity, selected decision, responsible person, incident status, recovery outcome සහ notes track කරනවා. එමඟින් recommendation එක ක්‍රියාත්මක කළාද සහ successful වුණාද audit කරන්න පුළුවන්.</p>
+
+  <h2>16. C3 to C4 integration</h2>
+  <div class="flow">
+    C3 daily records in <code>daily_logs.c3_result_json</code><br><span class="arrow">↓</span><br>
+    Aggregate by Bulk Order ID + Plant ID<br><span class="arrow">↓</span><br>
+    Risk days, critical days, recovery days, breakdowns, shortages, output and damage<br><span class="arrow">↓</span><br>
+    <code>POST /api/component4/predict</code><br><span class="arrow">↓</span><br>
+    Performance score, star rating, plant category and recommendations
+  </div>
+  <p>C4ට ලැබෙන ප්‍රධාන C3 feature එක <code>risk_count_from_component3</code> ය. C3 raw daily prediction එකක් direct යවන්නේ නැහැ; completed order එකේ සියලු daily records aggregate කරනවා.</p>
+
+  <h2>17. Training, splitting and evaluation</h2>
+  <p>Models offline training scripts වලින් train කරනවා. Daily API request එකකදී retraining සිදු නොවේ.</p>
+  <table>
+    <thead><tr><th>Evaluation element</th><th>Implementation</th></tr></thead>
+    <tbody>
+      <tr><td>Grouping boundary</td><td><code>Bulk_Order_ID</code></td></tr>
+      <tr><td>Outer evaluation</td><td>Leave-One-Group-Out</td></tr>
+      <tr><td>Inner tuning</td><td>GroupKFold + GridSearchCV</td></tr>
+      <tr><td>Primary selection metric</td><td>Macro-F1</td></tr>
+      <tr><td>Reason</td><td>Emergency targets are imbalanced; Accuracy alone can hide minority-class failure.</td></tr>
+    </tbody>
+  </table>
+  <p>එකම order එකේ daily rows train සහ test දෙකටම නොවැටෙන නිසා order-level data leakage වැළකෙනවා.</p>
+  <table>
+    <thead><tr><th>Active output</th><th>Model</th><th>Accuracy</th><th>Macro-F1</th></tr></thead>
+    <tbody>
+      <tr><td>Current risk type</td><td>Random Forest</td><td>81.77%</td><td>90.08%</td></tr>
+      <tr><td>Overall order risk V3</td><td>Random Forest</td><td>99.83%</td><td>99.25%</td></tr>
+      <tr><td>Machine warning</td><td>Random Forest</td><td>86.21%</td><td>84.05%</td></tr>
+      <tr><td>Quality warning</td><td>Logistic Regression</td><td>66.67%</td><td>51.18%</td></tr>
+      <tr><td>Output/schedule warning</td><td>Logistic Regression</td><td>79.31%</td><td>63.75%</td></tr>
+    </tbody>
+  </table>
+
+  <h2>18. Security and plant-wise isolation</h2>
+  <ul>
+    <li>JWT token එකෙන් user ID, role සහ plant ID ගන්නවා.</li>
+    <li>Plant Managerට තමන්ගේ plant එකට assigned orders පමණක් ලැබෙනවා.</li>
+    <li>Order assignment database එකෙන් නැවත verify කර daily log save කරනවා.</li>
+    <li>Monitoring records සහ incidents plant scope එකට filter කරනවා.</li>
+    <li>Buyerට internal C3 operational records access නැහැ.</li>
+  </ul>
+
+  <h2>19. Limitations</h2>
+  <ul>
+    <li>Prediction quality එක daily input accuracy මත රඳා පවතී.</li>
+    <li>Manual data entry මඟින් errors සහ delays ඇතිවිය හැකියි.</li>
+    <li>Rare emergencies සඳහා independent real-world examples සීමිතයි.</li>
+    <li>Early-warning models තවත් unseen plants/orders මත validate කළ යුතුයි.</li>
+    <li>Worker/machine availability update නොවුණොත් recovery plan practical නොවිය හැකියි.</li>
+    <li>මෙය decision-support system එකක්; human managerගේ final decision එක replace නොකරයි.</li>
+  </ul>
+
+  <div class="page-break"></div>
+  <h2>20. Likely panel questions and concise answers</h2>
+  <div class="qa"><strong>Q: What is Component 3?</strong><br>A: Component 3 is the daily emergency-detection and production-risk-management component. It predicts current and future risks and generates an explainable recovery plan.</div>
+  <div class="qa"><strong>Q: How does C2 connect to C3?</strong><br>A: C2 planning results and plant allocations are stored in the shared database. The authenticated plant manager selects an assigned order, and its dates, quantity, commitment and production-day details automatically populate C3.</div>
+  <div class="qa"><strong>Q: How many active ML artifacts are used?</strong><br>A: Five: two main risk models and three next-three-day early-warning models.</div>
+  <div class="qa"><strong>Q: Why use Random Forest?</strong><br>A: It captured nonlinear interactions among output, damage, resources and schedule features and achieved the strongest grouped Macro-F1 for current and overall risk.</div>
+  <div class="qa"><strong>Q: Why use Logistic Regression?</strong><br>A: The regularised linear model generalised better for selected small and imbalanced early-warning targets and provides stable probabilities.</div>
+  <div class="qa"><strong>Q: Why is Macro-F1 important?</strong><br>A: Accuracy can appear high when one class dominates. Macro-F1 gives emergency and non-emergency classes equal importance.</div>
+  <div class="qa"><strong>Q: How was leakage prevented?</strong><br>A: Complete bulk orders were kept together using Bulk Order ID as the grouping boundary. An outer test order could not influence training, tuning or threshold selection.</div>
+  <div class="qa"><strong>Q: Is the recovery plan generated by ML?</strong><br>A: No. ML detects risk; the recovery engine uses deterministic, capacity-aware calculations so the recommendation remains explainable and executable.</div>
+  <div class="qa"><strong>Q: How does C3 connect to C4?</strong><br>A: Saved C3 daily records are aggregated by order and plant after completion. Risk counts and operational KPIs are then sent to C4 for performance scoring.</div>
+  <div class="qa"><strong>Q: Does saving a daily record retrain the model?</strong><br>A: No. Runtime saves operational evidence. Retraining is a separate controlled offline process using verified outcomes.</div>
+  <div class="qa"><strong>Q: Why are there two databases?</strong><br>A: The main database supports the integrated operational workflow, while the C3 tracking database preserves research-grade monitoring, verification and recovery audit history.</div>
+
+  <h2>One-minute presentation answer</h2>
+  <div class="summary">
+    “My Component 3 is a hybrid production-risk monitoring and emergency-management module. Component 2 assigns a confirmed bulk order to a plant and provides its production plan, dates and daily commitment. The plant manager records actual daily output, damage, breakdowns and worker shortages. Five active ML artifacts predict the current risk type, overall deadline risk and three categories of early warnings. These predictions are combined with deterministic deadline and capacity rules to determine severity and generate an explainable recovery plan. Official daily records, verified outcomes and recovery actions are stored by order and plant. After completion, aggregated Component 3 risk data is passed to Component 4 for plant-performance analysis.”
+  </div>
+
+  <p class="footer-note">Generated from the integrated FabricFlow Component 3 implementation and project documentation.</p>
+</body>
+</html>
