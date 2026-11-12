@@ -455,6 +455,42 @@ class Component3MonitoringStore:
 
         return self.get_record(record_id)
 
+    def delete_pending_record(self, record_id: str) -> dict[str, Any]:
+        """Compensate a failed integrated save without deleting verified evidence."""
+        with self._connection() as connection:
+            row = connection.execute(
+                """SELECT * FROM component3_daily_monitoring
+                   WHERE record_id = ?""",
+                (record_id,),
+            ).fetchone()
+            if row is None:
+                raise TrackingNotFoundError("Daily monitoring record was not found")
+            if row["actual_outcome_status"] != "Pending":
+                raise TrackingConflictError(
+                    "Verified Component 3 monitoring records cannot be removed"
+                )
+            verification_count = connection.execute(
+                """SELECT COUNT(*) FROM component3_monitoring_verifications
+                   WHERE record_id = ?""",
+                (record_id,),
+            ).fetchone()[0]
+            if verification_count:
+                raise TrackingConflictError(
+                    "A Component 3 monitoring record with verification history cannot be removed"
+                )
+            summary = self._summary(row)
+            connection.execute(
+                "DELETE FROM component3_daily_monitoring WHERE record_id = ?",
+                (record_id,),
+            )
+            self._refresh_labels(
+                connection,
+                str(row["bulk_order_id"]),
+                str(row["plant_key"]),
+                updated_at=utc_now(),
+            )
+        return summary
+
     def verify_record(
         self,
         record_id: str,

@@ -8,7 +8,7 @@ from datetime import date, timedelta
 from app import app
 from components import component3
 from components.component3_monitoring import Component3MonitoringStore
-from components.component3_tracking import TrackingConflictError
+from components.component3_tracking import TrackingConflictError, TrackingNotFoundError
 from middleware.auth_middleware import generate_token
 
 
@@ -216,6 +216,28 @@ class Component3MonitoringStoreTests(unittest.TestCase):
         inconsistent["production_date"] = payload["production_date"]
         with self.assertRaisesRegex(TrackingConflictError, "production_date"):
             self.save(inconsistent)
+
+    def test_pending_record_can_be_removed_for_integrated_save_compensation(self):
+        saved = self.save(self.prediction_input(1, order_id="ORDER_COMPENSATE"))
+
+        removed = self.store.delete_pending_record(saved["record_id"])
+
+        self.assertEqual(removed["record_id"], saved["record_id"])
+        with self.assertRaisesRegex(TrackingNotFoundError, "not found"):
+            self.store.get_record(saved["record_id"])
+        self.assertEqual(self.store.readiness_summary()["total_records"], 0)
+
+    def test_verified_record_is_protected_from_compensation_delete(self):
+        saved = self.save(self.prediction_input(1, order_id="ORDER_PROTECTED"))
+        self.verify(saved)
+
+        with self.assertRaisesRegex(TrackingConflictError, "cannot be removed"):
+            self.store.delete_pending_record(saved["record_id"])
+
+        self.assertEqual(
+            self.store.get_record(saved["record_id"])["record_id"],
+            saved["record_id"],
+        )
 
     def test_cumulative_context_requires_the_exact_previous_day(self):
         day_one_context = self.store.cumulative_context(

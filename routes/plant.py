@@ -10,10 +10,12 @@ Plant Manager portal endpoints:
 import json
 import os
 from datetime import datetime, timedelta
+from pathlib import Path
 from zoneinfo import ZoneInfo
 
 from flask import Blueprint, current_app, g, jsonify, request
 
+from components.component3_monitoring import Component3MonitoringStore
 from database.db import get_db
 from middleware.auth_middleware import require_role
 from services.capacity_service import calculate_assignment_daily_commitment
@@ -28,6 +30,7 @@ plant_bp = Blueprint("plant", __name__)
 
 ADMIN_EMAIL = os.environ.get("ADMIN_EMAIL", "admin@fabricflow.com")
 APP_TIMEZONE = ZoneInfo(os.environ.get("APP_TIMEZONE", "Asia/Colombo"))
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
 PRODUCTION_STAGES = [
     "Pending",
@@ -48,6 +51,14 @@ def _local_today():
 def _get_admin():
     db = get_db()
     return db.execute("SELECT id, email FROM users WHERE role='Admin' LIMIT 1").fetchone()
+
+
+def _component3_monitoring_store() -> Component3MonitoringStore:
+    database_path = current_app.config.get("COMPONENT3_TRACKING_DB") or os.environ.get(
+        "COMPONENT3_TRACKING_DB",
+        PROJECT_ROOT / "instance" / "component3_tracking.db",
+    )
+    return Component3MonitoringStore(str(database_path))
 
 
 def _ensure_allocation_daily_commitment(db, order_row):
@@ -510,31 +521,53 @@ def submit_daily_log(order_id):
     if not c3_result:
         return jsonify({"error": "Component 3 returned an invalid monitoring response"}), 502
 
-    # Save log
-    db.execute(
-        """INSERT OR REPLACE INTO daily_logs
-           (bulk_order_id, plant_id, log_date, working_day_no, plant_daily_output,
-            daily_damage_qty, max_daily_damage_qty, machine_breakdown_count,
-            worker_shortage_count, cumulative_completed_qty, c3_result_json, submitted_by)
-           VALUES (?,?,?,?,?,?,?,?,?,?,?,?)""",
-        (
-            order_id,
-            plant_id,
-            today,
-            working_day_no,
-            int(data["plant_daily_output"]),
-            int(data.get("daily_damage_qty", 0)),
-            int(data.get("max_daily_damage_qty", 20)),
-            int(data.get("machine_breakdown_count", 0)),
-            int(data.get("worker_shortage_count", 0)),
-            int(data["cumulative_completed_qty"]),
-            json.dumps(c3_result),
-            g.user_id,
-        ),
-    )
-
-    # Logging keeps the order in Processing (assignment already set it there).
-    db.commit()
+    # Save the operational log. If this second database write fails, remove
+    # only the still-pending C3 row created above so the two stores do not
+    # silently diverge. Verified evidence is protected by the store guard.
+    try:
+        db.execute(
+            """INSERT OR REPLACE INTO daily_logs
+               (bulk_order_id, plant_id, log_date, working_day_no, plant_daily_output,
+                daily_damage_qty, max_daily_damage_qty, machine_breakdown_count,
+                worker_shortage_count, cumulative_completed_qty, c3_result_json, submitted_by)
+               VALUES (?,?,?,?,?,?,?,?,?,?,?,?)""",
+            (
+                order_id,
+                plant_id,
+                today,
+                working_day_no,
+                int(data["plant_daily_output"]),
+                int(data.get("daily_damage_qty", 0)),
+                int(data.get("max_daily_damage_qty", 20)),
+                int(data.get("machine_breakdown_count", 0)),
+                int(data.get("worker_shortage_count", 0)),
+                int(data["cumulative_completed_qty"]),
+                json.dumps(c3_result),
+                g.user_id,
+            ),
+        )
+        # Logging keeps the order in Processing (assignment already set it there).
+        db.commit()
+    except Exception:
+        db.rollback()
+        record_id = str(monitoring_record.get("record_id") or "")
+        compensation_error = None
+        if record_id:
+            try:
+                _component3_monitoring_store().delete_pending_record(record_id)
+            except Exception as cleanup_error:
+                compensation_error = cleanup_error
+        current_app.logger.exception(
+            "Integrated C3 daily-log save failed record_id=%s compensation_failed=%s",
+            record_id,
+            compensation_error is not None,
+        )
+        return jsonify(
+            {
+                "error": "Daily production log could not be saved; Component 3 save was rolled back",
+                "request_id": c3_payload_response.get("request_id"),
+            }
+        ), 500
 
     # ── Critical risk alert ───────────────────────────────────────────────
     # C3 nests these under "risk_detection" — reading them at the top level
