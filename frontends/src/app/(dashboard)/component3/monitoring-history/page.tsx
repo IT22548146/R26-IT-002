@@ -276,6 +276,22 @@ const API_BASE_URL = (
 const NUMBER_FORMATTER = new Intl.NumberFormat('en-US');
 const SHOW_RESEARCH_SECTIONS = false;
 
+function apiErrorMessage(error: unknown, fallback: string) {
+  const apiError = error as {
+    response?: { data?: { error?: unknown; request_id?: unknown } };
+  };
+  const message =
+    typeof apiError.response?.data?.error === 'string'
+      ? apiError.response.data.error
+      : error instanceof Error
+        ? error.message
+        : fallback;
+  const requestId = apiError.response?.data?.request_id;
+  return typeof requestId === 'string'
+    ? `${message} Request ID: ${requestId}`
+    : message;
+}
+
 function formatMetric(value: number | undefined) {
   return value === undefined ? '—' : `${(value * 100).toFixed(1)}%`;
 }
@@ -311,6 +327,8 @@ export default function MonitoringHistoryPage() {
   const [verificationFilter, setVerificationFilter] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [exportingHistory, setExportingHistory] = useState(false);
+  const [historyExportError, setHistoryExportError] = useState('');
   const [refreshVersion, setRefreshVersion] = useState(0);
   const [selectedRecord, setSelectedRecord] = useState<MonitoringRecord | null>(
     null,
@@ -341,13 +359,8 @@ export default function MonitoringHistoryPage() {
       const response = await api.get(`/api/component3${path}`);
       return response.data as unknown;
     } catch (requestError: unknown) {
-      const apiError = requestError as {
-        response?: { data?: { error?: unknown } };
-      };
       throw new Error(
-        typeof apiError.response?.data?.error === 'string'
-          ? apiError.response.data.error
-          : 'The daily monitoring request failed.',
+        apiErrorMessage(requestError, 'The daily monitoring request failed.'),
       );
     }
   }, []);
@@ -492,6 +505,38 @@ export default function MonitoringHistoryPage() {
     setVerificationError('');
   };
 
+  const handleHistoryExport = async () => {
+    setExportingHistory(true);
+    setHistoryExportError('');
+    try {
+      const response = await api.get(
+        `/api/component3/monitoring-records/export?${query}`,
+        { responseType: 'blob' },
+      );
+      const disposition = String(response.headers['content-disposition'] ?? '');
+      const filenameMatch = disposition.match(/filename="?([^";]+)"?/i);
+      const filename =
+        filenameMatch?.[1] ?? 'component3_daily_monitoring_history.csv';
+      const downloadUrl = window.URL.createObjectURL(response.data as Blob);
+      const link = document.createElement('a');
+      link.href = downloadUrl;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(downloadUrl);
+    } catch (requestError: unknown) {
+      setHistoryExportError(
+        apiErrorMessage(
+          requestError,
+          'Unable to export the filtered monitoring history.',
+        ),
+      );
+    } finally {
+      setExportingHistory(false);
+    }
+  };
+
   const handleVerification = async (
     event: React.FormEvent<HTMLFormElement>,
   ) => {
@@ -519,15 +564,8 @@ export default function MonitoringHistoryPage() {
       setLoading(true);
       setRefreshVersion((value) => value + 1);
     } catch (requestError: unknown) {
-      const apiError = requestError as {
-        response?: { data?: { error?: unknown } };
-      };
       setVerificationError(
-        typeof apiError.response?.data?.error === 'string'
-          ? apiError.response.data.error
-          : requestError instanceof Error
-          ? requestError.message
-          : 'Unable to verify this daily outcome.',
+        apiErrorMessage(requestError, 'Unable to verify this daily outcome.'),
       );
     } finally {
       setSavingVerification(false);
@@ -1217,15 +1255,24 @@ export default function MonitoringHistoryPage() {
             <span className={styles.kicker}>Saved observations</span>
             <h2>{total} matching record{total === 1 ? '' : 's'}</h2>
           </div>
-          <button
-            type="button"
-            onClick={() => {
-              setLoading(true);
-              setRefreshVersion((value) => value + 1);
-            }}
-          >
-            Refresh
-          </button>
+          <div className={styles.headerActions}>
+            <button
+              type="button"
+              disabled={exportingHistory}
+              onClick={handleHistoryExport}
+            >
+              {exportingHistory ? 'Exporting...' : 'Download CSV'}
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setLoading(true);
+                setRefreshVersion((value) => value + 1);
+              }}
+            >
+              Refresh
+            </button>
+          </div>
         </div>
 
         {verificationMessage && (
@@ -1285,6 +1332,11 @@ export default function MonitoringHistoryPage() {
         </div>
 
         {error && <div className={styles.error} role="alert">{error}</div>}
+        {historyExportError && (
+          <div className={styles.error} role="alert">
+            {historyExportError}
+          </div>
+        )}
 
         {loading ? (
           <div className={styles.empty}>Loading daily monitoring records...</div>

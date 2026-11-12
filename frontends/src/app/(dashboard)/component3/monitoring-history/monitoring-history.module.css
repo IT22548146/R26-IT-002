@@ -65,6 +65,18 @@
   font-weight: 800;
 }
 
+.headerActions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 0.55rem;
+}
+
+.headerActions button:disabled {
+  cursor: wait;
+  opacity: 0.65;
+}
+
 .hero > a {
   color: #134e4a;
   background: #ccfbf1;
