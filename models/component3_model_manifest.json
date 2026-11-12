@@ -1,0 +1,43 @@
+{
+  "manifest_schema_version": "1.0",
+  "component": "component3",
+  "runtime_model_version": "v3",
+  "prediction_contract_version": "component3-prediction-v1",
+  "feature_schema_versions": {
+    "risk_type": "canonical-v1",
+    "order_risk": "deadline-v3",
+    "early_warning": "current-plus-trailing-v2"
+  },
+  "artifacts": [
+    {
+      "role": "risk_type_classifier",
+      "filename": "c3_model1_risk_type_v2.pkl",
+      "sha256": "290e8a9e2bd38759bc15a80e071f763af82c0f61d8b09a3d2a79e8c304b6ba71",
+      "required": true
+    },
+    {
+      "role": "order_risk_classifier",
+      "filename": "c3_model2_order_risk_v3.pkl",
+      "sha256": "c970002062577d391f194e4cffb2364411dbc8ce7d19e73243871b58aff87d61",
+      "required": true
+    },
+    {
+      "role": "early_warning_machine_breakdown",
+      "filename": "c3_early_warning_machine_breakdown_v2.joblib",
+      "sha256": "5a061999c78bcea196b2ca421483142cc3b373c61c834da37b836ca4d46fd448",
+      "required": true
+    },
+    {
+      "role": "early_warning_quality_limit",
+      "filename": "c3_early_warning_quality_limit_v2.joblib",
+      "sha256": "2eeec34eaed0744d8aace5110e0fbd563b4d846209667a5605b1e70c20f57a7c",
+      "required": true
+    },
+    {
+      "role": "early_warning_output_schedule_risk",
+      "filename": "c3_early_warning_output_schedule_risk_v2.joblib",
+      "sha256": "d86149294ead96e9f1abe36b786794ba00a90e7b7dbef379c57804501d16c633",
+      "required": true
+    }
+  ]
+}
