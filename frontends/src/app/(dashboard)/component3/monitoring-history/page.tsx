@@ -365,28 +365,35 @@ export default function MonitoringHistoryPage() {
 
   useEffect(() => {
     let cancelled = false;
-    const historicalPreviewRequest = requestJson('/historical-import/preview')
-      .then((payload) => ({ payload, error: '' }))
-      .catch((previewError: unknown) => ({
-        payload: null,
-        error:
-          previewError instanceof Error
-            ? previewError.message
-            : 'Historical import preview is unavailable.',
-      }));
-    const validationReportRequest = requestJson('/early-warning-validation')
-      .then((payload) => ({ payload, error: '' }))
-      .catch((validationError: unknown) => ({
-        payload: null,
-        error:
-          validationError instanceof Error
-            ? validationError.message
-            : 'Early-warning validation report is unavailable.',
-      }));
+    const historicalPreviewRequest = SHOW_RESEARCH_SECTIONS
+      ? requestJson('/historical-import/preview')
+          .then((payload) => ({ payload, error: '' }))
+          .catch((previewError: unknown) => ({
+            payload: null,
+            error:
+              previewError instanceof Error
+                ? previewError.message
+                : 'Historical import preview is unavailable.',
+          }))
+      : Promise.resolve({ payload: null, error: '' });
+    const validationReportRequest = SHOW_RESEARCH_SECTIONS
+      ? requestJson('/early-warning-validation')
+          .then((payload) => ({ payload, error: '' }))
+          .catch((validationError: unknown) => ({
+            payload: null,
+            error:
+              validationError instanceof Error
+                ? validationError.message
+                : 'Early-warning validation report is unavailable.',
+          }))
+      : Promise.resolve({ payload: null, error: '' });
+    const exportAuditRequest = SHOW_RESEARCH_SECTIONS
+      ? requestJson('/training-dataset-audit')
+      : Promise.resolve(null);
     Promise.all([
       requestJson(`/monitoring-records?${query}`),
       requestJson('/monitoring-readiness'),
-      requestJson('/training-dataset-audit'),
+      exportAuditRequest,
       historicalPreviewRequest,
       validationReportRequest,
     ])
@@ -403,7 +410,11 @@ export default function MonitoringHistoryPage() {
           setRecords(list.items);
           setTotal(list.total);
           setReadiness(readinessPayload as ReadinessResponse);
-          setExportAudit(exportAuditPayload as TrainingExportAudit);
+          setExportAudit(
+            exportAuditPayload
+              ? (exportAuditPayload as TrainingExportAudit)
+              : null,
+          );
           setValidationReportError(validationReportResult.error);
           setValidationReport(
             validationReportResult.payload

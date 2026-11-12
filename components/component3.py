@@ -939,6 +939,7 @@ def health():
 
 
 @component3_bp.route("/predict", methods=["POST"])
+@require_role("Admin", "Manager", "PlantManager")
 def predict():
     """
     Daily production monitoring endpoint.
@@ -1174,6 +1175,7 @@ def verify_monitoring_record(record_id: str):
 
 
 @component3_bp.route("/historical-import/preview", methods=["GET"])
+@require_role("Admin", "Manager")
 def historical_import_preview():
     """Audit the bundled retrospective sources without changing the DB."""
     try:
@@ -1188,6 +1190,7 @@ def historical_import_preview():
 
 
 @component3_bp.route("/historical-import", methods=["POST"])
+@require_role("Admin", "Manager")
 def import_historical_order():
     """Import one historical order after explicit retrospective consent."""
     raw_data = request.get_json(force=True, silent=True)
@@ -1362,6 +1365,7 @@ def import_historical_order():
 
 
 @component3_bp.route("/early-warning-validation", methods=["GET"])
+@require_role("Admin", "Manager")
 def early_warning_validation():
     """Compare saved warnings with later verified outcomes by data scope."""
     report = build_early_warning_validation_report(_monitoring_store().training_export_snapshot())
@@ -1373,6 +1377,7 @@ def _verified_training_export():
 
 
 @component3_bp.route("/training-dataset-audit", methods=["GET"])
+@require_role("Admin", "Manager")
 def training_dataset_audit():
     """Return leakage and class-balance evidence for the current export."""
     _, audit = _verified_training_export()
@@ -1380,6 +1385,7 @@ def training_dataset_audit():
 
 
 @component3_bp.route("/training-dataset", methods=["GET"])
+@require_role("Admin", "Manager")
 def download_training_dataset():
     """Download verified Ready rows as CSV or an audited Excel workbook."""
     export_format = request.args.get("format", "csv").strip().lower()

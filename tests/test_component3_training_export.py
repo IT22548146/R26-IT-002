@@ -22,6 +22,7 @@ from components.component3_training_export import (
     dataframe_to_csv_bytes,
     dataframe_to_xlsx_bytes,
 )
+from middleware.auth_middleware import generate_token
 
 
 class TrainingExportFixture:
@@ -295,6 +296,9 @@ class Component3TrainingExportApiTests(unittest.TestCase, TrainingExportFixture)
         app.config["COMPONENT3_TRACKING_DB"] = self.database_path
         self.store = Component3MonitoringStore(self.database_path)
         self.client = app.test_client()
+        self.client.environ_base["HTTP_AUTHORIZATION"] = (
+            f"Bearer {generate_token(9000, 'Manager')}"
+        )
 
     def tearDown(self):
         self.temporary_directory.cleanup()

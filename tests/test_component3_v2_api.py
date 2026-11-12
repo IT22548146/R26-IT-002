@@ -4,6 +4,7 @@ import unittest
 
 from app import app
 from components import component3
+from middleware.auth_middleware import generate_token
 
 
 class Component3V2ApiTests(unittest.TestCase):
@@ -12,6 +13,9 @@ class Component3V2ApiTests(unittest.TestCase):
         os.environ["COMPONENT3_MODEL_VERSION"] = "v2"
         component3._models.clear()
         self.client = app.test_client()
+        self.client.environ_base["HTTP_AUTHORIZATION"] = (
+            f"Bearer {generate_token(9000, 'Manager')}"
+        )
 
     def tearDown(self):
         component3._models.clear()
@@ -54,6 +58,23 @@ class Component3V2ApiTests(unittest.TestCase):
             response.get_json()["model_integrity"]["verified_artifact_count"],
             5,
         )
+
+    def test_prediction_requires_an_authorized_operational_role(self):
+        anonymous_response = app.test_client().post(
+            "/api/component3/predict",
+            json=self.payload(),
+        )
+        self.assertEqual(anonymous_response.status_code, 401)
+
+        buyer_client = app.test_client()
+        buyer_client.environ_base["HTTP_AUTHORIZATION"] = (
+            f"Bearer {generate_token(9001, 'Buyer')}"
+        )
+        buyer_response = buyer_client.post(
+            "/api/component3/predict",
+            json=self.payload(),
+        )
+        self.assertEqual(buyer_response.status_code, 403)
 
     def test_v2_prediction_uses_canonical_gap(self):
         response = self.client.post("/api/component3/predict", json=self.payload())
