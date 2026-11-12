@@ -1,5 +1,6 @@
 """Input normalization and validation for Component 3 predictions."""
 
+import math
 from datetime import datetime
 
 from components.component3_recovery import normalize_recovery_parameters
@@ -42,6 +43,41 @@ PREDICTION_INTEGER_FIELDS = (
     "sewing_days",
 )
 
+PREDICTION_TEXT_FIELDS = (
+    "bulk_order_id",
+    "style_id",
+    "buyer_name",
+    "allocated_bulk_plant",
+    "plant_location",
+)
+
+
+def _normalize_integer(value: object, field: str) -> int:
+    """Accept real integer values without silently truncating decimals."""
+    if isinstance(value, bool):
+        raise ValueError(f"{field} must be an integer")
+    if isinstance(value, int):
+        return value
+    if isinstance(value, float):
+        if not math.isfinite(value) or not value.is_integer():
+            raise ValueError(f"{field} must be an integer")
+        return int(value)
+    if isinstance(value, str):
+        normalized = value.strip()
+        if not normalized or not normalized.lstrip("+-").isdigit():
+            raise ValueError(f"{field} must be an integer")
+        return int(normalized)
+    raise ValueError(f"{field} must be an integer")
+
+
+def _normalize_text(value: object, field: str, *, maximum_length: int = 200) -> str:
+    if not isinstance(value, str) or not value.strip():
+        raise ValueError(f"{field} must be a non-empty string")
+    normalized = value.strip()
+    if len(normalized) > maximum_length:
+        raise ValueError(f"{field} must be {maximum_length} characters or fewer")
+    return normalized
+
 
 def validate_prediction_payload(raw_data: object) -> dict:
     """Return a normalized prediction payload or raise a user-facing error."""
@@ -54,8 +90,10 @@ def validate_prediction_payload(raw_data: object) -> dict:
         raise ValueError(f"Missing required fields: {missing}")
 
     try:
+        for field in PREDICTION_TEXT_FIELDS:
+            data[field] = _normalize_text(data[field], field)
         for field in PREDICTION_INTEGER_FIELDS:
-            data[field] = int(data[field])
+            data[field] = _normalize_integer(data[field], field)
         production_date = datetime.strptime(data["production_date"], "%Y-%m-%d").date()
         buyer_required_date = datetime.strptime(data["buyer_required_date"], "%Y-%m-%d").date()
         bulk_order_approved_date = datetime.strptime(
@@ -80,6 +118,10 @@ def validate_prediction_payload(raw_data: object) -> dict:
         raise ValueError("production_date must be a Monday-Friday working day")
     if data["cumulative_completed_qty"] > data["full_order_qty"]:
         raise ValueError("cumulative_completed_qty cannot exceed full_order_qty")
+    if data["daily_damage_qty"] > data["plant_daily_output"]:
+        raise ValueError("daily_damage_qty cannot exceed plant_daily_output")
+    if data["plant_daily_output"] > data["cumulative_completed_qty"]:
+        raise ValueError("plant_daily_output cannot exceed cumulative_completed_qty")
 
     non_negative_fields = (
         "plant_daily_output",

@@ -281,6 +281,41 @@ class Component3V2ApiTests(unittest.TestCase):
         self.assertEqual(response.status_code, 400)
         self.assertIn("Invalid field value", response.get_json()["error"])
 
+    def test_fractional_and_boolean_integer_values_are_rejected(self):
+        for invalid_value in (10.5, "10.5", True):
+            with self.subTest(invalid_value=invalid_value):
+                payload = self.payload()
+                payload["plant_daily_output"] = invalid_value
+                response = self.client.post("/api/component3/predict", json=payload)
+                self.assertEqual(response.status_code, 400)
+                self.assertIn("plant_daily_output must be an integer", response.get_json()["error"])
+
+    def test_blank_order_identity_is_rejected(self):
+        payload = self.payload()
+        payload["bulk_order_id"] = "   "
+        response = self.client.post("/api/component3/predict", json=payload)
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("bulk_order_id must be a non-empty string", response.get_json()["error"])
+
+    def test_inconsistent_daily_quantities_are_rejected(self):
+        cases = (
+            (
+                {"daily_damage_qty": 408},
+                "daily_damage_qty cannot exceed plant_daily_output",
+            ),
+            (
+                {"plant_daily_output": 846},
+                "plant_daily_output cannot exceed cumulative_completed_qty",
+            ),
+        )
+        for changes, expected_error in cases:
+            with self.subTest(changes=changes):
+                payload = self.payload()
+                payload.update(changes)
+                response = self.client.post("/api/component3/predict", json=payload)
+                self.assertEqual(response.status_code, 400)
+                self.assertIn(expected_error, response.get_json()["error"])
+
     def test_invalid_date_is_rejected(self):
         payload = self.payload()
         payload["production_date"] = "02-07-2024"
